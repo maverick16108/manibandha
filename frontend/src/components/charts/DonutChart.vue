@@ -7,7 +7,9 @@ const props = defineProps({
   size: { type: Number, default: 180 },
   thickness: { type: Number, default: 22 },
   centerLabel: { type: String, default: '' },
+  clickable: { type: Boolean, default: false },
 })
+const emit = defineEmits(['select'])
 
 const total = computed(() => props.data.reduce((s, d) => s + d.value, 0))
 const r = computed(() => (props.size - props.thickness) / 2)
@@ -41,6 +43,7 @@ const segments = computed(() => {
           :stroke-dasharray="s.dash" :stroke-dashoffset="s.offset" stroke-linecap="butt"
           class="cursor-pointer transition-[stroke-width]"
           @mouseenter="hover = s.i" @mouseleave="hover = -1"
+          @click="clickable && emit('select', s)"
         >
           <title>{{ s.label }}: {{ s.value }} ({{ s.pct }}%)</title>
         </circle>
@@ -54,8 +57,9 @@ const segments = computed(() => {
     <ul class="w-full space-y-2">
       <li v-for="s in segments" :key="s.i"
           class="flex items-center gap-2.5 rounded-md px-2 py-1 text-sm transition-colors"
-          :class="hover === s.i && 'bg-parchment-100'"
-          @mouseenter="hover = s.i" @mouseleave="hover = -1">
+          :class="[hover === s.i && 'bg-parchment-100', clickable && 'cursor-pointer']"
+          @mouseenter="hover = s.i" @mouseleave="hover = -1"
+          @click="clickable && emit('select', s)">
         <span class="h-3 w-3 shrink-0 rounded-sm" :style="{ background: s.color }"></span>
         <span class="flex-1 truncate text-ink-700">{{ s.label }}</span>
         <span class="font-medium text-ink-900">{{ s.value }}</span>

@@ -49,11 +49,13 @@ for _path in _FONT_CANDIDATES:
             continue
 
 
-def _apply_filters(q, status_, country, city, temple_id, mentor_id, ready, search):
+def _apply_filters(q, status_, country, city, temple_id, mentor_id, ready, search, region=None):
     if status_:
         q = q.filter(Disciple.initiation_status == status_)
     if country:
         q = q.filter(Disciple.country.ilike(country))
+    if region:
+        q = q.filter(Disciple.region.ilike(region))
     if city:
         q = q.filter(Disciple.city.ilike(city))
     if temple_id:
@@ -68,11 +70,11 @@ def _apply_filters(q, status_, country, city, temple_id, mentor_id, ready, searc
     return q
 
 
-def _filtered_query(db, user, status_, country, city, temple_id, mentor_id, ready, search):
+def _filtered_query(db, user, status_, country, city, temple_id, mentor_id, ready, search, region=None):
     q = scope_disciple_query(
         db.query(Disciple).options(joinedload(Disciple.temple), joinedload(Disciple.mentor)), user
     )
-    return _apply_filters(q, status_, country, city, temple_id, mentor_id, ready, search)
+    return _apply_filters(q, status_, country, city, temple_id, mentor_id, ready, search, region)
 
 
 # group_by dimension -> (column, label resolver)
@@ -83,6 +85,8 @@ def _group_dimension(db, key: str):
         return Disciple.initiation_status, lambda v: STATUS_LABELS.get(v, str(v) if v else "—")
     if key == "country":
         return Disciple.country, lambda v: v or "—"
+    if key == "region":
+        return Disciple.region, lambda v: v or "—"
     if key == "city":
         return Disciple.city, lambda v: v or "—"
     if key == "mentor":
@@ -133,9 +137,10 @@ def summary(db: Session = Depends(get_db), user: User = Depends(get_current_user
 def group(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
-    group_by: str = Query("status", description="status|country|city|temple|mentor"),
+    group_by: str = Query("status", description="status|country|region|city|temple|mentor"),
     status_: InitiationStatus | None = Query(None, alias="status"),
     country: str | None = None,
+    region: str | None = None,
     city: str | None = None,
     temple_id: int | None = None,
     mentor_id: int | None = None,
@@ -144,7 +149,7 @@ def group(
 ):
     col, label = _group_dimension(db, group_by)
     query = scope_disciple_query(db.query(col, func.count()), user)
-    query = _apply_filters(query, status_, country, city, temple_id, mentor_id, ready, q)
+    query = _apply_filters(query, status_, country, city, temple_id, mentor_id, ready, q, region)
     rows = query.group_by(col).order_by(func.count().desc()).all()
     return [CountByKey(key=label(v), count=n) for v, n in rows]
 
@@ -154,6 +159,7 @@ _COLUMNS = [
     ("Мирское имя", lambda d: d.material_name or ""),
     ("Статус", lambda d: STATUS_LABELS.get(d.initiation_status, "")),
     ("Страна", lambda d: d.country or ""),
+    ("Область", lambda d: d.region or ""),
     ("Город", lambda d: d.city or ""),
     ("Храм", lambda d: d.temple.name if d.temple else ""),
     ("Наставник", lambda d: d.mentor.full_name if d.mentor else ""),
@@ -168,6 +174,7 @@ def export_xlsx(
     user: User = Depends(get_current_user),
     status_: InitiationStatus | None = Query(None, alias="status"),
     country: str | None = None,
+    region: str | None = None,
     city: str | None = None,
     temple_id: int | None = None,
     mentor_id: int | None = None,
@@ -175,7 +182,7 @@ def export_xlsx(
     q: str | None = None,
 ):
     rows = (
-        _filtered_query(db, user, status_, country, city, temple_id, mentor_id, ready, q)
+        _filtered_query(db, user, status_, country, city, temple_id, mentor_id, ready, q, region)
         .order_by(Disciple.material_name)
         .all()
     )
@@ -206,6 +213,7 @@ def export_pdf(
     user: User = Depends(get_current_user),
     status_: InitiationStatus | None = Query(None, alias="status"),
     country: str | None = None,
+    region: str | None = None,
     city: str | None = None,
     temple_id: int | None = None,
     mentor_id: int | None = None,
@@ -213,7 +221,7 @@ def export_pdf(
     q: str | None = None,
 ):
     rows = (
-        _filtered_query(db, user, status_, country, city, temple_id, mentor_id, ready, q)
+        _filtered_query(db, user, status_, country, city, temple_id, mentor_id, ready, q, region)
         .order_by(Disciple.material_name)
         .all()
     )

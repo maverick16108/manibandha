@@ -15,15 +15,27 @@ const isEdit = computed(() => !!id.value)
 
 const temples = ref([])
 const mentors = ref([])
+const cities = ref([])
+const regions = ref([])
+const countries = ref([])
 const templeOptions = computed(() => [{ value: '', label: '—' }, ...temples.value.map((t) => ({ value: t.id, label: t.name }))])
 const mentorOptions = computed(() => [{ value: '', label: '—' }, ...mentors.value.map((m) => ({ value: m.id, label: m.full_name }))])
+// keep the disciple's existing value even if not yet in the dictionary
+function dictOptions(list, current) {
+  const names = list.map((x) => x.name)
+  if (current && !names.includes(current)) names.unshift(current)
+  return [{ value: '', label: '—' }, ...names.map((n) => ({ value: n, label: n }))]
+}
+const cityOptions = computed(() => dictOptions(cities.value, form.city))
+const regionOptions = computed(() => dictOptions(regions.value, form.region))
+const countryOptions = computed(() => dictOptions(countries.value, form.country))
 const error = ref('')
 const saving = ref(false)
 
 const form = reactive({
   material_name: '', spiritual_name: '', photo_url: '',
   phone: '', email: '', messenger: '',
-  country: '', city: '', temple_id: '',
+  country: '', region: '', city: '', temple_id: '',
   marital_status: '', date_of_birth: '',
   initiation_status: 'aspirant', harinama_date: '', harinama_name: '', brahman_date: '',
   seva: '', current_activity: '',
@@ -57,9 +69,15 @@ async function save() {
 }
 
 onMounted(async () => {
-  const [t, m] = await Promise.all([client.get('/temples'), client.get('/users/mentors')])
+  const [t, m, c, r, co] = await Promise.all([
+    client.get('/temples'), client.get('/users/mentors'), client.get('/cities'),
+    client.get('/regions'), client.get('/countries'),
+  ])
   temples.value = t.data
   mentors.value = m.data
+  cities.value = c.data
+  regions.value = r.data
+  countries.value = co.data
   if (isEdit.value) {
     const { data } = await client.get(`/disciples/${id.value}`)
     for (const k of Object.keys(form)) {
@@ -96,8 +114,9 @@ onMounted(async () => {
           <div><label class="label">Семейное положение</label>
             <AppSelect v-model="form.marital_status" :options="maritalOptions" placeholder="—" />
           </div>
-          <div><label class="label">Страна</label><input v-model="form.country" class="input" /></div>
-          <div><label class="label">Город</label><input v-model="form.city" class="input" /></div>
+          <div><label class="label">Страна</label><AppSelect v-model="form.country" :options="countryOptions" placeholder="—" /></div>
+          <div><label class="label">Область</label><AppSelect v-model="form.region" :options="regionOptions" placeholder="—" /></div>
+          <div><label class="label">Город</label><AppSelect v-model="form.city" :options="cityOptions" placeholder="—" /></div>
           <div><label class="label">Храм / община</label>
             <AppSelect v-model="form.temple_id" :options="templeOptions" placeholder="—" />
           </div>
@@ -131,9 +150,9 @@ onMounted(async () => {
               <input type="checkbox" v-model="form.ready_for_initiation" /> Готов(а) к инициации
             </label>
           </div>
-          <div class="sm:col-span-2"><label class="label">Севы (служение)</label><textarea v-model="form.seva" rows="2" class="input"></textarea></div>
-          <div class="sm:col-span-2"><label class="label">Текущая деятельность</label><textarea v-model="form.current_activity" rows="2" class="input"></textarea></div>
-          <div class="sm:col-span-2"><label class="label">Примечания</label><textarea v-model="form.notes" rows="3" class="input"></textarea></div>
+          <div class="sm:col-span-2"><label class="label">Севы (служение)</label><textarea v-model="form.seva" rows="4" class="input resize-y min-h-[6rem]"></textarea></div>
+          <div class="sm:col-span-2"><label class="label">Текущая деятельность</label><textarea v-model="form.current_activity" rows="4" class="input resize-y min-h-[6rem]"></textarea></div>
+          <div class="sm:col-span-2"><label class="label">Примечания</label><textarea v-model="form.notes" rows="6" class="input resize-y min-h-[8rem]"></textarea></div>
         </div>
       </section>
 

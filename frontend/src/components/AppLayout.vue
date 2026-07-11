@@ -13,6 +13,7 @@ const nav = [
   { name: 'dashboard', label: 'Обзор', icon: 'overview' },
   { name: 'disciples', label: 'Ученики', icon: 'disciples' },
   { name: 'temples', label: 'Храмы', icon: 'temple' },
+  { name: 'dictionaries', label: 'Справочники', icon: 'pin' },
   { name: 'reports', label: 'Отчёты', icon: 'reports' },
   { name: 'users', label: 'Пользователи', icon: 'users', guruOnly: true },
 ]

@@ -31,6 +31,7 @@ def list_disciples(
     q: str | None = Query(None, description="Поиск по имени (духовное/мирское)"),
     status_: InitiationStatus | None = Query(None, alias="status"),
     country: str | None = None,
+    region: str | None = None,
     temple_id: int | None = None,
     mentor_id: int | None = None,
     ready: bool | None = None,
@@ -47,6 +48,8 @@ def list_disciples(
         query = query.filter(Disciple.initiation_status == status_)
     if country:
         query = query.filter(Disciple.country.ilike(country))
+    if region:
+        query = query.filter(Disciple.region.ilike(region))
     if temple_id:
         query = query.filter(Disciple.temple_id == temple_id)
     if mentor_id:

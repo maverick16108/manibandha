@@ -1,6 +1,6 @@
 <script setup>
 import { ref, reactive, onMounted, watch, computed } from 'vue'
-import { RouterLink } from 'vue-router'
+import { RouterLink, useRoute } from 'vue-router'
 import client from '../api/client'
 import { useAuthStore } from '../stores/auth'
 import AppSelect from '../components/AppSelect.vue'
@@ -9,17 +9,22 @@ import AppSkeleton from '../components/AppSkeleton.vue'
 import { STATUS_LABELS, STATUS_ORDER, STATUS_BADGE } from '../lib/format'
 
 const auth = useAuthStore()
+const route = useRoute()
 const items = ref([])
 const total = ref(0)
 const loading = ref(true)
 const temples = ref([])
 const mentors = ref([])
+const regions = ref([])
+const cities = ref([])
 
-const filters = reactive({ q: '', status: '', country: '', temple_id: '', mentor_id: '', ready: '' })
+const filters = reactive({ q: '', status: '', region: '', city: '', temple_id: '', mentor_id: '', ready: '' })
 
 const statusOptions = [{ value: '', label: 'Все статусы' }, ...STATUS_ORDER.map((s) => ({ value: s, label: STATUS_LABELS[s] }))]
 const templeOptions = computed(() => [{ value: '', label: 'Все храмы' }, ...temples.value.map((t) => ({ value: t.id, label: t.name }))])
 const mentorOptions = computed(() => [{ value: '', label: 'Все наставники' }, ...mentors.value.map((m) => ({ value: m.id, label: m.full_name }))])
+const regionOptions = computed(() => [{ value: '', label: 'Все области' }, ...regions.value.map((r) => ({ value: r.name, label: r.name }))])
+const cityOptions = computed(() => [{ value: '', label: 'Все города' }, ...cities.value.map((c) => ({ value: c.name, label: c.name }))])
 
 let debounce
 watch(filters, () => {
@@ -59,9 +64,15 @@ function reset() {
 }
 
 onMounted(async () => {
-  const [t, m] = await Promise.all([client.get('/temples'), client.get('/users/mentors')])
+  // seed filters from URL query (deep links from the dashboard)
+  for (const k of Object.keys(filters)) if (route.query[k] != null) filters[k] = String(route.query[k])
+  const [t, m, r, c] = await Promise.all([
+    client.get('/temples'), client.get('/users/mentors'), client.get('/regions'), client.get('/cities'),
+  ])
   temples.value = t.data
   mentors.value = m.data
+  regions.value = r.data
+  cities.value = c.data
   await load()
 })
 </script>
@@ -88,7 +99,8 @@ onMounted(async () => {
           <input v-model="filters.q" class="input pl-9" placeholder="Поиск по имени…" />
         </div>
         <AppSelect v-model="filters.status" :options="statusOptions" placeholder="Все статусы" />
-        <input v-model="filters.country" class="input" placeholder="Страна" />
+        <AppSelect v-model="filters.region" :options="regionOptions" placeholder="Все области" />
+        <AppSelect v-model="filters.city" :options="cityOptions" placeholder="Все города" />
         <AppSelect v-model="filters.temple_id" :options="templeOptions" placeholder="Все храмы" />
         <AppSelect v-model="filters.mentor_id" :options="mentorOptions" placeholder="Все наставники" />
         <label class="flex items-center gap-2 px-1 text-sm text-ink-700">

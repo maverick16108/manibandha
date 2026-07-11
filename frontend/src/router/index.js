@@ -16,6 +16,7 @@ const routes = [
       { path: 'disciples/:id', name: 'disciple', component: () => import('../views/DiscipleDetailView.vue') },
       { path: 'disciples/:id/edit', name: 'disciple-edit', component: () => import('../views/DiscipleFormView.vue') },
       { path: 'temples', name: 'temples', component: () => import('../views/TemplesView.vue') },
+      { path: 'dictionaries', name: 'dictionaries', component: () => import('../views/DictionariesView.vue') },
       { path: 'reports', name: 'reports', component: () => import('../views/ReportsView.vue') },
       { path: 'users', name: 'users', component: () => import('../views/UsersView.vue'), meta: { guruOnly: true } },
     ],

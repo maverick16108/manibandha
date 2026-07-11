@@ -18,6 +18,7 @@ class DiscipleBase(BaseModel):
     messenger: str | None = None
 
     country: str | None = None
+    region: str | None = None
     city: str | None = None
     temple_id: int | None = None
 
@@ -52,6 +53,7 @@ class DiscipleUpdate(BaseModel):
     email: str | None = None
     messenger: str | None = None
     country: str | None = None
+    region: str | None = None
     city: str | None = None
     temple_id: int | None = None
     marital_status: MaritalStatus | None = None
@@ -77,6 +79,7 @@ class DiscipleListItem(BaseModel):
     material_name: str
     photo_url: str | None
     country: str | None
+    region: str | None
     city: str | None
     initiation_status: InitiationStatus
     temple: TempleOut | None = None

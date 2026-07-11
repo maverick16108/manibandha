@@ -24,6 +24,7 @@ class Disciple(Base):
 
     # Location / community
     country: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    region: Mapped[str | None] = mapped_column(String(160), nullable=True, index=True)
     city: Mapped[str | None] = mapped_column(String(120), nullable=True)
     temple_id: Mapped[int | None] = mapped_column(ForeignKey("temples.id", ondelete="SET NULL"), nullable=True)
 

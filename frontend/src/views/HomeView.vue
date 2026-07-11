@@ -1,4 +1,5 @@
 <script setup>
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { RouterLink } from 'vue-router'
 import AppIcon from '../components/AppIcon.vue'
 
@@ -6,6 +7,27 @@ import AppIcon from '../components/AppIcon.vue'
 const hero = '/guru/hero.jpg' // splash — atmospheric profile
 const portrait = '/guru/1.jpg' // clear portrait — About & login
 const gallery = Array.from({ length: 12 }, (_, i) => `/guru/gallery/${String(i + 1).padStart(2, '0')}.jpg`)
+
+// Filmstrip scrolling
+const strip = ref(null)
+function scrollStrip(dir) {
+  strip.value?.scrollBy({ left: dir * strip.value.clientWidth * 0.85, behavior: 'smooth' })
+}
+
+// Lightbox
+const lightbox = ref(-1)
+function openLb(i) { lightbox.value = i; document.body.style.overflow = 'hidden' }
+function closeLb() { lightbox.value = -1; document.body.style.overflow = '' }
+function lbPrev() { lightbox.value = (lightbox.value - 1 + gallery.length) % gallery.length }
+function lbNext() { lightbox.value = (lightbox.value + 1) % gallery.length }
+function onKey(e) {
+  if (lightbox.value < 0) return
+  if (e.key === 'Escape') closeLb()
+  else if (e.key === 'ArrowLeft') lbPrev()
+  else if (e.key === 'ArrowRight') lbNext()
+}
+onMounted(() => document.addEventListener('keydown', onKey))
+onBeforeUnmount(() => { document.removeEventListener('keydown', onKey); document.body.style.overflow = '' })
 
 const holyPlaces = ['Вриндаван', 'Маяпур', 'Джаганнатха Пури', 'Говардхан', 'Курукшетра', 'Ахобилам', 'Калькутта']
 
@@ -98,15 +120,52 @@ const service = [
       </div>
     </section>
 
-    <!-- Gallery -->
-    <section class="mx-auto max-w-6xl px-6 py-20">
-      <h2 class="mb-10 text-center font-display text-4xl font-semibold text-ink-900">Галерея</h2>
-      <div class="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-        <div v-for="(src, i) in gallery" :key="i" class="group overflow-hidden rounded-xl border border-parchment-300 shadow-sm">
-          <img :src="src" alt="Манибандха Прабху" loading="lazy" class="photo-bw aspect-[3/4] w-full object-cover transition duration-500 group-hover:scale-105" />
+    <!-- Gallery — swipeable filmstrip + lightbox -->
+    <section class="py-20">
+      <div class="mx-auto mb-8 flex max-w-6xl items-center justify-between px-6">
+        <h2 class="font-display text-4xl font-semibold text-ink-900">Галерея</h2>
+        <div class="hidden gap-2 sm:flex">
+          <button class="flex h-10 w-10 items-center justify-center rounded-full border border-parchment-300 text-ink-700 transition hover:bg-parchment-200" @click="scrollStrip(-1)">
+            <AppIcon name="chevron" :size="20" class="rotate-90" />
+          </button>
+          <button class="flex h-10 w-10 items-center justify-center rounded-full border border-parchment-300 text-ink-700 transition hover:bg-parchment-200" @click="scrollStrip(1)">
+            <AppIcon name="chevron" :size="20" class="-rotate-90" />
+          </button>
         </div>
       </div>
+      <div ref="strip" class="flex snap-x snap-mandatory gap-4 overflow-x-auto scroll-smooth px-6 pb-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <button
+          v-for="(src, i) in gallery" :key="i"
+          class="group relative aspect-[3/4] w-56 shrink-0 snap-start overflow-hidden rounded-xl border border-parchment-300 shadow-sm sm:w-64"
+          @click="openLb(i)"
+        >
+          <img :src="src" alt="Манибандха Прабху" loading="lazy" class="photo-bw h-full w-full object-cover transition duration-500 group-hover:scale-105" />
+          <span class="absolute inset-0 flex items-center justify-center bg-ink-900/0 transition group-hover:bg-ink-900/25">
+            <AppIcon name="expand" :size="26" class="text-white opacity-0 transition group-hover:opacity-100" />
+          </span>
+        </button>
+      </div>
+      <p class="mt-2 text-center text-sm text-ink-700/50 sm:hidden">Листайте вбок · нажмите, чтобы увеличить</p>
     </section>
+
+    <!-- Lightbox -->
+    <teleport to="body">
+      <transition enter-active-class="transition duration-150" enter-from-class="opacity-0" leave-active-class="transition duration-150" leave-to-class="opacity-0">
+        <div v-if="lightbox >= 0" class="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/95 p-4" @click.self="closeLb">
+          <button class="absolute right-5 top-5 flex h-11 w-11 items-center justify-center rounded-full text-white/80 hover:bg-white/10 hover:text-white" @click="closeLb">
+            <AppIcon name="close" :size="24" />
+          </button>
+          <button class="absolute left-3 flex h-12 w-12 items-center justify-center rounded-full text-white/80 hover:bg-white/10 hover:text-white sm:left-6" @click="lbPrev">
+            <AppIcon name="chevron" :size="28" class="rotate-90" />
+          </button>
+          <img :src="gallery[lightbox]" alt="Манибандха Прабху" class="photo-bw max-h-[88vh] max-w-[92vw] rounded-lg object-contain shadow-2xl" />
+          <button class="absolute right-3 flex h-12 w-12 items-center justify-center rounded-full text-white/80 hover:bg-white/10 hover:text-white sm:right-6" @click="lbNext">
+            <AppIcon name="chevron" :size="28" class="-rotate-90" />
+          </button>
+          <div class="absolute bottom-5 text-sm text-white/60">{{ lightbox + 1 }} / {{ gallery.length }}</div>
+        </div>
+      </transition>
+    </teleport>
 
     <!-- Quote -->
     <section class="bg-parchment-200">

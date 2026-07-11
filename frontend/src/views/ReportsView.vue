@@ -9,17 +9,21 @@ import { STATUS_LABELS, STATUS_ORDER, STATUS_BADGE } from '../lib/format'
 
 const temples = ref([])
 const mentors = ref([])
+const regionsOpt = ref([])
+const citiesOpt = ref([])
+const countriesOpt = ref([])
 const groups = ref([])
 const rows = ref([])
 const total = ref(0)
 const loading = ref(true)
 
-const filters = reactive({ q: '', status: '', country: '', city: '', temple_id: '', mentor_id: '', ready: '' })
+const filters = reactive({ q: '', status: '', country: '', region: '', city: '', temple_id: '', mentor_id: '', ready: '' })
 const groupBy = ref('status')
 
 const statusOptions = [{ value: '', label: 'Все статусы' }, ...STATUS_ORDER.map((s) => ({ value: s, label: STATUS_LABELS[s] }))]
 const groupOptions = [
   { value: 'status', label: 'По статусу инициации' },
+  { value: 'region', label: 'По области' },
   { value: 'city', label: 'По городу' },
   { value: 'country', label: 'По стране' },
   { value: 'temple', label: 'По храму' },
@@ -70,15 +74,20 @@ function reset() {
 const maxCount = () => Math.max(1, ...groups.value.map((g) => g.count))
 
 onMounted(async () => {
-  const [t, m] = await Promise.all([client.get('/temples'), client.get('/users/mentors')])
+  const [t, m, r, c, co] = await Promise.all([
+    client.get('/temples'), client.get('/users/mentors'), client.get('/regions'), client.get('/cities'), client.get('/countries'),
+  ])
   temples.value = [{ value: '', label: 'Все храмы' }, ...t.data.map((x) => ({ value: x.id, label: x.name }))]
   mentors.value = [{ value: '', label: 'Все наставники' }, ...m.data.map((x) => ({ value: x.id, label: x.full_name }))]
+  regionsOpt.value = [{ value: '', label: 'Все области' }, ...r.data.map((x) => ({ value: x.name, label: x.name }))]
+  citiesOpt.value = [{ value: '', label: 'Все города' }, ...c.data.map((x) => ({ value: x.name, label: x.name }))]
+  countriesOpt.value = [{ value: '', label: 'Все страны' }, ...co.data.map((x) => ({ value: x.name, label: x.name }))]
   await load()
 })
 </script>
 
 <template>
-  <div class="mx-auto max-w-5xl">
+  <div>
     <div class="mb-6 flex flex-wrap items-center justify-between gap-3">
       <div>
         <h1 class="font-display text-3xl font-semibold text-ink-900">Отчёты</h1>
@@ -99,8 +108,9 @@ onMounted(async () => {
         </div>
         <AppSelect v-model="filters.status" :options="statusOptions" placeholder="Все статусы" />
         <AppSelect v-model="filters.temple_id" :options="temples" placeholder="Все храмы" />
-        <input v-model="filters.country" class="input" placeholder="Страна" />
-        <input v-model="filters.city" class="input" placeholder="Город" />
+        <AppSelect v-model="filters.region" :options="regionsOpt" placeholder="Все области" />
+        <AppSelect v-model="filters.city" :options="citiesOpt" placeholder="Все города" />
+        <AppSelect v-model="filters.country" :options="countriesOpt" placeholder="Все страны" />
         <AppSelect v-model="filters.mentor_id" :options="mentors" placeholder="Все наставники" />
       </div>
       <div class="mt-3 flex flex-wrap items-center gap-4">

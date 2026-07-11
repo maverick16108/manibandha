@@ -55,6 +55,22 @@ defineProps({
       <path d="M12 6.6V19.7" />
     </template>
 
+    <!-- expand / maximize -->
+    <template v-else-if="name === 'expand'">
+      <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3m8 0h3a2 2 0 0 0 2-2v-3" />
+    </template>
+
+    <!-- close -->
+    <template v-else-if="name === 'close'">
+      <path d="M6 6 18 18M18 6 6 18" />
+    </template>
+
+    <!-- city / pin -->
+    <template v-else-if="name === 'pin'">
+      <path d="M12 21s6-5.3 6-10a6 6 0 1 0-12 0c0 4.7 6 10 6 10Z" />
+      <circle cx="12" cy="11" r="2.3" />
+    </template>
+
     <!-- chevron (dropdown) -->
     <template v-else-if="name === 'chevron'">
       <path d="m6 9 6 6 6-6" />

@@ -13,7 +13,7 @@ WorkingDirectory=/var/www/manibandha.prema.su/backend
 Environment=PYTHONUNBUFFERED=1
 EnvironmentFile=/var/www/manibandha.prema.su/backend/.env
 ExecStart=/var/www/manibandha.prema.su/backend/.venv/bin/gunicorn app.main:app \
-    --workers 3 \
+    --workers 1 \
     --worker-class uvicorn.workers.UvicornWorker \
     --bind 127.0.0.1:8010 \
     --timeout 120 \

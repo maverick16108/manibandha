@@ -1,12 +1,13 @@
 <script setup>
-import { ref } from 'vue'
-import { RouterLink, RouterView, useRouter } from 'vue-router'
+import { ref, computed } from 'vue'
+import { RouterLink, RouterView, useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { ROLE_LABELS } from '../lib/format'
 import AppIcon from './AppIcon.vue'
 
 const auth = useAuthStore()
 const router = useRouter()
+const route = useRoute()
 const sidebarOpen = ref(false)
 
 const nav = [
@@ -15,9 +16,16 @@ const nav = [
   { name: 'questions', label: 'Вопросы', icon: 'chat', roles: ['guru', 'student'] },
   { name: 'service-reports', label: 'Отчёты', icon: 'reports', roles: ['guru', 'curator', 'student'] },
   { name: 'dictionaries', label: 'Справочники', icon: 'pin' },
-  { name: 'reports', label: 'Статистика', icon: 'chart' },
   { name: 'users', label: 'Пользователи', icon: 'users', roles: ['guru', 'secretary'] },
 ]
+
+// top-level sections (nav) — everything else is a sub-page, so show a back button
+const topLevel = new Set(nav.map((n) => n.name))
+const showBack = computed(() => route.name && !topLevel.has(route.name))
+function goBack() {
+  if (window.history.length > 1) router.back()
+  else router.push({ name: 'dashboard' })
+}
 
 function canShow(item) {
   if (item.guruOnly && !auth.isGuru) return false
@@ -67,6 +75,9 @@ function logout() {
       <header class="sticky top-0 z-10 flex h-16 items-center justify-between border-b border-parchment-200 bg-parchment-50/90 px-4 backdrop-blur sm:px-6">
         <button class="-ml-1 rounded-lg p-2 text-ink-800 hover:bg-parchment-200 lg:hidden" @click="sidebarOpen = true">
           <AppIcon name="menu" :size="28" :stroke="2" />
+        </button>
+        <button v-if="showBack" class="btn-outline" @click="goBack">
+          <AppIcon name="chevron" :size="16" class="rotate-90" /> Назад
         </button>
         <div class="flex-1"></div>
         <div class="flex items-center gap-3">

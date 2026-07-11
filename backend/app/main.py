@@ -24,6 +24,11 @@ for r in (auth.router, users.router, temples.router, cities.router, countries.ro
           disciples.router, pipeline.router, reports.router, uploads.router, mentors.router, threads.router):
     app.include_router(r, prefix=settings.API_PREFIX)
 
+# WebSocket for interactive chat (typing + instant delivery)
+from app.api import ws as ws_module  # noqa: E402
+
+app.include_router(ws_module.router, prefix=settings.API_PREFIX)
+
 # Serve uploaded images (dev; in prod nginx also serves /uploads directly).
 os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=settings.UPLOAD_DIR), name="uploads")

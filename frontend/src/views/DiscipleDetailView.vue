@@ -70,9 +70,6 @@ onMounted(async () => {
     </div>
   </div>
   <div v-else-if="d" class="mx-auto max-w-6xl">
-    <RouterLink :to="{ name: 'disciples' }" class="btn-outline mb-4">
-      <AppIcon name="chevron" :size="16" class="rotate-90" /> К списку учеников
-    </RouterLink>
 
     <!-- Header -->
     <div class="card mb-6 p-6">

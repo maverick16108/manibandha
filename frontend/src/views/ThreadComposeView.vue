@@ -53,9 +53,6 @@ onMounted(async () => {
 
 <template>
   <div class="mx-auto max-w-6xl">
-    <RouterLink :to="backTo" class="btn-outline mb-4">
-      <AppIcon name="chevron" :size="16" class="rotate-90" /> Назад
-    </RouterLink>
     <h1 class="mb-6 font-display text-3xl font-semibold text-ink-900">{{ isReport ? 'Новый отчёт о служении' : 'Новый вопрос гуру' }}</h1>
 
     <form class="card space-y-4 p-6" @submit.prevent="submit">

@@ -31,6 +31,7 @@ export default {
         display: ['"Cormorant Garamond"', 'Georgia', 'serif'],
         serif: ['"PT Serif"', 'Georgia', 'serif'],
         sans: ['Inter', 'system-ui', 'sans-serif'],
+        script: ['Caveat', 'cursive'],
       },
     },
   },

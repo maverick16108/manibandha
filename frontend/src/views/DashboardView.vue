@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue'
 import { RouterLink } from 'vue-router'
 import client from '../api/client'
+import AppSkeleton from '../components/AppSkeleton.vue'
 
 const summary = ref(null)
 const loading = ref(true)
@@ -21,7 +22,17 @@ onMounted(async () => {
     <h1 class="mb-1 font-display text-3xl font-semibold text-ink-900">Обзор</h1>
     <p class="mb-8 text-ink-700/60">Сводка по ученикам</p>
 
-    <div v-if="loading" class="text-ink-700/60">Загрузка…</div>
+    <div v-if="loading" class="space-y-8">
+      <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div v-for="i in 4" :key="i" class="card space-y-3 p-5"><AppSkeleton w="w-28" h="h-3" /><AppSkeleton w="w-16" h="h-9" /></div>
+      </div>
+      <div class="grid gap-6 lg:grid-cols-3">
+        <div v-for="i in 3" :key="i" class="card space-y-3 p-6">
+          <AppSkeleton w="w-32" h="h-5" />
+          <AppSkeleton v-for="j in 4" :key="j" h="h-4" />
+        </div>
+      </div>
+    </div>
 
     <div v-else-if="summary" class="space-y-8">
       <!-- Top stats -->

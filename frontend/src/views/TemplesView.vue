@@ -2,16 +2,23 @@
 import { ref, reactive, onMounted } from 'vue'
 import client from '../api/client'
 import { useAuthStore } from '../stores/auth'
+import AppSkeleton from '../components/AppSkeleton.vue'
 
 const auth = useAuthStore()
 const temples = ref([])
+const loading = ref(true)
 const editing = ref(null)
 const form = reactive({ name: '', city: '', country: '', president_name: '', notes: '' })
 const showForm = ref(false)
 
 async function load() {
-  const { data } = await client.get('/temples')
-  temples.value = data
+  loading.value = true
+  try {
+    const { data } = await client.get('/temples')
+    temples.value = data
+  } finally {
+    loading.value = false
+  }
 }
 
 function startNew() {
@@ -51,7 +58,12 @@ onMounted(load)
     </div>
 
     <div class="card divide-y divide-parchment-100">
-      <div v-for="t in temples" :key="t.id" class="flex items-center justify-between p-4">
+      <template v-if="loading">
+        <div v-for="i in 4" :key="'s' + i" class="flex items-center justify-between p-4">
+          <div class="space-y-2"><AppSkeleton w="w-40" /><AppSkeleton w="w-56" h="h-3" /></div>
+        </div>
+      </template>
+      <div v-for="t in temples" :key="t.id" v-show="!loading" class="flex items-center justify-between p-4">
         <div>
           <div class="font-medium text-ink-900">{{ t.name }}</div>
           <div class="text-sm text-ink-700/60">

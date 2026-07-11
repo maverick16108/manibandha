@@ -3,7 +3,11 @@ import { ref, reactive, onMounted, computed } from 'vue'
 import { useRoute, useRouter, RouterLink } from 'vue-router'
 import client from '../api/client'
 import { useAuthStore } from '../stores/auth'
+import AppSelect from '../components/AppSelect.vue'
+import AppSkeleton from '../components/AppSkeleton.vue'
 import { STATUS_LABELS, STATUS_ORDER, STATUS_BADGE, MARITAL_LABELS, formatDate } from '../lib/format'
+
+const statusOptions = STATUS_ORDER.map((s) => ({ value: s, label: STATUS_LABELS[s] }))
 
 const route = useRoute()
 const router = useRouter()
@@ -48,7 +52,16 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div v-if="loading" class="text-ink-700/60">Загрузка…</div>
+  <div v-if="loading" class="mx-auto max-w-4xl space-y-6">
+    <div class="card flex gap-6 p-6">
+      <AppSkeleton w="w-28" h="h-28" rounded="rounded-xl" />
+      <div class="flex-1 space-y-3"><AppSkeleton w="w-56" h="h-8" /><AppSkeleton w="w-32" /><AppSkeleton w="w-24" h="h-5" rounded="rounded-full" /></div>
+    </div>
+    <div class="grid gap-6 lg:grid-cols-2">
+      <div class="card space-y-3 p-6"><AppSkeleton w="w-32" h="h-5" /><AppSkeleton v-for="j in 6" :key="j" /></div>
+      <div class="card space-y-3 p-6"><AppSkeleton w="w-32" h="h-5" /><AppSkeleton v-for="j in 6" :key="j" /></div>
+    </div>
+  </div>
   <div v-else-if="d" class="mx-auto max-w-4xl">
     <RouterLink :to="{ name: 'disciples' }" class="mb-4 inline-block text-sm text-saffron-600 hover:underline">← К списку</RouterLink>
 
@@ -120,9 +133,7 @@ onMounted(async () => {
 
       <form v-if="auth.canEdit" class="mt-4 flex flex-wrap gap-2" @submit.prevent="addItem">
         <input v-model="newItem.title" class="input flex-1" placeholder="Новое требование (напр. «Стаж 1 год», «Обеты»)" />
-        <select v-model="newItem.target" class="input w-40">
-          <option v-for="s in STATUS_ORDER" :key="s" :value="s">{{ STATUS_LABELS[s] }}</option>
-        </select>
+        <div class="w-40"><AppSelect v-model="newItem.target" :options="statusOptions" /></div>
         <button class="btn-primary">Добавить</button>
       </form>
     </div>

@@ -1,9 +1,12 @@
 <script setup>
-import { ref, reactive, onMounted, watch } from 'vue'
+import { ref, reactive, onMounted, watch, computed } from 'vue'
 import { RouterLink } from 'vue-router'
 import client from '../api/client'
 import { useAuthStore } from '../stores/auth'
-import { STATUS_LABELS, STATUS_ORDER, STATUS_BADGE, formatDate } from '../lib/format'
+import AppSelect from '../components/AppSelect.vue'
+import AppIcon from '../components/AppIcon.vue'
+import AppSkeleton from '../components/AppSkeleton.vue'
+import { STATUS_LABELS, STATUS_ORDER, STATUS_BADGE } from '../lib/format'
 
 const auth = useAuthStore()
 const items = ref([])
@@ -13,6 +16,10 @@ const temples = ref([])
 const mentors = ref([])
 
 const filters = reactive({ q: '', status: '', country: '', temple_id: '', mentor_id: '', ready: '' })
+
+const statusOptions = [{ value: '', label: 'Все статусы' }, ...STATUS_ORDER.map((s) => ({ value: s, label: STATUS_LABELS[s] }))]
+const templeOptions = computed(() => [{ value: '', label: 'Все храмы' }, ...temples.value.map((t) => ({ value: t.id, label: t.name }))])
+const mentorOptions = computed(() => [{ value: '', label: 'Все наставники' }, ...mentors.value.map((m) => ({ value: m.id, label: m.full_name }))])
 
 let debounce
 watch(filters, () => {
@@ -67,35 +74,28 @@ onMounted(async () => {
         <p class="text-ink-700/60">Найдено: {{ total }}</p>
       </div>
       <div class="flex gap-2">
-        <button class="btn-outline" @click="exportFile('xlsx')">⬇ Excel</button>
-        <button class="btn-outline" @click="exportFile('pdf')">⬇ PDF</button>
+        <button class="btn-outline" @click="exportFile('xlsx')"><AppIcon name="download" :size="16" /> Excel</button>
+        <button class="btn-outline" @click="exportFile('pdf')"><AppIcon name="download" :size="16" /> PDF</button>
         <RouterLink v-if="auth.isStaff" :to="{ name: 'disciple-new' }" class="btn-primary">+ Добавить</RouterLink>
       </div>
     </div>
 
     <!-- Filters -->
     <div class="card mb-5 p-4">
-      <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
-        <input v-model="filters.q" class="input lg:col-span-2" placeholder="🔍 Поиск по имени…" />
-        <select v-model="filters.status" class="input">
-          <option value="">Все статусы</option>
-          <option v-for="s in STATUS_ORDER" :key="s" :value="s">{{ STATUS_LABELS[s] }}</option>
-        </select>
+      <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div class="relative lg:col-span-1">
+          <AppIcon name="search" :size="16" class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-700/40" />
+          <input v-model="filters.q" class="input pl-9" placeholder="Поиск по имени…" />
+        </div>
+        <AppSelect v-model="filters.status" :options="statusOptions" placeholder="Все статусы" />
         <input v-model="filters.country" class="input" placeholder="Страна" />
-        <select v-model="filters.temple_id" class="input">
-          <option value="">Все храмы</option>
-          <option v-for="t in temples" :key="t.id" :value="t.id">{{ t.name }}</option>
-        </select>
-        <select v-model="filters.mentor_id" class="input">
-          <option value="">Все наставники</option>
-          <option v-for="m in mentors" :key="m.id" :value="m.id">{{ m.full_name }}</option>
-        </select>
-      </div>
-      <div class="mt-3 flex items-center gap-4">
-        <label class="flex items-center gap-2 text-sm text-ink-700">
-          <input type="checkbox" v-model="filters.ready" true-value="true" false-value="" />
-          Только готовые к инициации
+        <AppSelect v-model="filters.temple_id" :options="templeOptions" placeholder="Все храмы" />
+        <AppSelect v-model="filters.mentor_id" :options="mentorOptions" placeholder="Все наставники" />
+        <label class="flex items-center gap-2 px-1 text-sm text-ink-700">
+          <input type="checkbox" v-model="filters.ready" true-value="true" false-value="" /> Готовые к инициации
         </label>
+      </div>
+      <div class="mt-3">
         <button class="text-sm text-saffron-600 hover:underline" @click="reset">Сбросить фильтры</button>
       </div>
     </div>
@@ -114,32 +114,38 @@ onMounted(async () => {
             </tr>
           </thead>
           <tbody class="divide-y divide-parchment-100">
-            <tr v-for="d in items" :key="d.id" class="hover:bg-parchment-50">
-              <td class="px-4 py-3">
-                <RouterLink :to="{ name: 'disciple', params: { id: d.id } }" class="flex items-center gap-3">
-                  <img v-if="d.photo_url" :src="d.photo_url" class="photo-bw h-9 w-9 rounded-full object-cover" />
-                  <span v-else class="flex h-9 w-9 items-center justify-center rounded-full bg-parchment-200 text-ink-700">
-                    {{ (d.spiritual_name || d.material_name || '?')[0] }}
-                  </span>
-                  <span>
-                    <span class="block font-medium text-ink-900">{{ d.spiritual_name || d.material_name }}</span>
-                    <span v-if="d.spiritual_name" class="block text-xs text-ink-700/60">{{ d.material_name }}</span>
-                  </span>
-                </RouterLink>
-              </td>
-              <td class="px-4 py-3">
-                <span class="badge" :class="STATUS_BADGE[d.initiation_status]">{{ STATUS_LABELS[d.initiation_status] }}</span>
-              </td>
-              <td class="px-4 py-3 text-ink-700">{{ d.country || '—' }}<span v-if="d.city">, {{ d.city }}</span></td>
-              <td class="px-4 py-3 text-ink-700">{{ d.temple?.name || '—' }}</td>
-              <td class="px-4 py-3 text-ink-700">{{ d.mentor?.full_name || '—' }}</td>
-            </tr>
-            <tr v-if="!loading && !items.length">
-              <td colspan="5" class="px-4 py-10 text-center text-ink-700/50">Ученики не найдены</td>
-            </tr>
-            <tr v-if="loading">
-              <td colspan="5" class="px-4 py-10 text-center text-ink-700/50">Загрузка…</td>
-            </tr>
+            <template v-if="loading">
+              <tr v-for="i in 8" :key="i">
+                <td class="px-4 py-3">
+                  <div class="flex items-center gap-3"><AppSkeleton w="w-9" h="h-9" rounded="rounded-full" /><AppSkeleton w="w-40" /></div>
+                </td>
+                <td class="px-4 py-3"><AppSkeleton w="w-20" h="h-5" rounded="rounded-full" /></td>
+                <td class="px-4 py-3"><AppSkeleton w="w-28" /></td>
+                <td class="px-4 py-3"><AppSkeleton w="w-24" /></td>
+                <td class="px-4 py-3"><AppSkeleton w="w-24" /></td>
+              </tr>
+            </template>
+            <template v-else>
+              <tr v-for="d in items" :key="d.id" class="hover:bg-parchment-50">
+                <td class="px-4 py-3">
+                  <RouterLink :to="{ name: 'disciple', params: { id: d.id } }" class="flex items-center gap-3">
+                    <img v-if="d.photo_url" :src="d.photo_url" class="photo-bw h-9 w-9 rounded-full object-cover" />
+                    <span v-else class="flex h-9 w-9 items-center justify-center rounded-full bg-parchment-200 text-ink-700">
+                      {{ (d.spiritual_name || d.material_name || '?')[0] }}
+                    </span>
+                    <span>
+                      <span class="block font-medium text-ink-900">{{ d.spiritual_name || d.material_name }}</span>
+                      <span v-if="d.spiritual_name" class="block text-xs text-ink-700/60">{{ d.material_name }}</span>
+                    </span>
+                  </RouterLink>
+                </td>
+                <td class="px-4 py-3"><span class="badge" :class="STATUS_BADGE[d.initiation_status]">{{ STATUS_LABELS[d.initiation_status] }}</span></td>
+                <td class="px-4 py-3 text-ink-700">{{ d.country || '—' }}<span v-if="d.city">, {{ d.city }}</span></td>
+                <td class="px-4 py-3 text-ink-700">{{ d.temple?.name || '—' }}</td>
+                <td class="px-4 py-3 text-ink-700">{{ d.mentor?.full_name || '—' }}</td>
+              </tr>
+              <tr v-if="!items.length"><td colspan="5" class="px-4 py-10 text-center text-ink-700/50">Ученики не найдены</td></tr>
+            </template>
           </tbody>
         </table>
       </div>

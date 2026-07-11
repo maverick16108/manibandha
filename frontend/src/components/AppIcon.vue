@@ -55,6 +55,28 @@ defineProps({
       <path d="M12 6.6V19.7" />
     </template>
 
+    <!-- chevron (dropdown) -->
+    <template v-else-if="name === 'chevron'">
+      <path d="m6 9 6 6 6-6" />
+    </template>
+
+    <!-- check -->
+    <template v-else-if="name === 'check'">
+      <path d="m5 12.5 4.5 4.5L19 7" />
+    </template>
+
+    <!-- search -->
+    <template v-else-if="name === 'search'">
+      <circle cx="11" cy="11" r="7" />
+      <path d="m20 20-3.2-3.2" />
+    </template>
+
+    <!-- download -->
+    <template v-else-if="name === 'download'">
+      <path d="M12 3.5v10.5m0 0 4-4m-4 4-4-4" />
+      <path d="M4.5 20h15" />
+    </template>
+
     <!-- Медитация / логотип (lotus) -->
     <template v-else-if="name === 'lotus'">
       <path d="M12 13.4c-1.7-1.4-2.6-3.4-2.6-5.4 0-1.8 1-3.6 2.6-5 1.6 1.4 2.6 3.2 2.6 5 0 2-.9 4-2.6 5.4Z" />

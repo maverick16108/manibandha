@@ -2,7 +2,11 @@
 import { ref, reactive, onMounted, computed } from 'vue'
 import { useRoute, useRouter, RouterLink } from 'vue-router'
 import client from '../api/client'
+import AppSelect from '../components/AppSelect.vue'
 import { STATUS_LABELS, STATUS_ORDER, MARITAL_LABELS } from '../lib/format'
+
+const maritalOptions = [{ value: '', label: '—' }, ...Object.entries(MARITAL_LABELS).map(([value, label]) => ({ value, label }))]
+const statusOptions = STATUS_ORDER.map((s) => ({ value: s, label: STATUS_LABELS[s] }))
 
 const route = useRoute()
 const router = useRouter()
@@ -11,6 +15,8 @@ const isEdit = computed(() => !!id.value)
 
 const temples = ref([])
 const mentors = ref([])
+const templeOptions = computed(() => [{ value: '', label: '—' }, ...temples.value.map((t) => ({ value: t.id, label: t.name }))])
+const mentorOptions = computed(() => [{ value: '', label: '—' }, ...mentors.value.map((m) => ({ value: m.id, label: m.full_name }))])
 const error = ref('')
 const saving = ref(false)
 
@@ -88,18 +94,12 @@ onMounted(async () => {
           <div><label class="label">Email</label><input v-model="form.email" type="email" class="input" /></div>
           <div><label class="label">Мессенджер</label><input v-model="form.messenger" class="input" /></div>
           <div><label class="label">Семейное положение</label>
-            <select v-model="form.marital_status" class="input">
-              <option value="">—</option>
-              <option v-for="(l, k) in MARITAL_LABELS" :key="k" :value="k">{{ l }}</option>
-            </select>
+            <AppSelect v-model="form.marital_status" :options="maritalOptions" placeholder="—" />
           </div>
           <div><label class="label">Страна</label><input v-model="form.country" class="input" /></div>
           <div><label class="label">Город</label><input v-model="form.city" class="input" /></div>
           <div><label class="label">Храм / община</label>
-            <select v-model="form.temple_id" class="input">
-              <option value="">—</option>
-              <option v-for="t in temples" :key="t.id" :value="t.id">{{ t.name }}</option>
-            </select>
+            <AppSelect v-model="form.temple_id" :options="templeOptions" placeholder="—" />
           </div>
           <div><label class="label">Дата рождения</label><input v-model="form.date_of_birth" type="date" class="input" /></div>
         </div>
@@ -109,9 +109,7 @@ onMounted(async () => {
         <h3 class="mb-4 font-display text-xl text-ink-900">Инициация</h3>
         <div class="grid gap-4 sm:grid-cols-2">
           <div><label class="label">Статус</label>
-            <select v-model="form.initiation_status" class="input">
-              <option v-for="s in STATUS_ORDER" :key="s" :value="s">{{ STATUS_LABELS[s] }}</option>
-            </select>
+            <AppSelect v-model="form.initiation_status" :options="statusOptions" />
           </div>
           <div></div>
           <div><label class="label">Дата харинамы</label><input v-model="form.harinama_date" type="date" class="input" /></div>
@@ -124,10 +122,7 @@ onMounted(async () => {
         <h3 class="mb-4 font-display text-xl text-ink-900">Путь аспиранта и служение</h3>
         <div class="grid gap-4 sm:grid-cols-2">
           <div><label class="label">Наставник</label>
-            <select v-model="form.mentor_id" class="input">
-              <option value="">—</option>
-              <option v-for="m in mentors" :key="m.id" :value="m.id">{{ m.full_name }}</option>
-            </select>
+            <AppSelect v-model="form.mentor_id" :options="mentorOptions" placeholder="—" />
           </div>
           <div><label class="label">Кто рекомендовал</label><input v-model="form.recommended_by" class="input" placeholder="Наставник / президент храма" /></div>
           <div><label class="label">Дата заявки</label><input v-model="form.application_date" type="date" class="input" /></div>

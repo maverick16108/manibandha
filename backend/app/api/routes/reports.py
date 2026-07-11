@@ -49,19 +49,48 @@ for _path in _FONT_CANDIDATES:
             continue
 
 
-def _filtered_query(db: Session, user: User, status_, country, temple_id, mentor_id):
-    q = scope_disciple_query(
-        db.query(Disciple).options(joinedload(Disciple.temple), joinedload(Disciple.mentor)), user
-    )
+def _apply_filters(q, status_, country, city, temple_id, mentor_id, ready, search):
     if status_:
         q = q.filter(Disciple.initiation_status == status_)
     if country:
         q = q.filter(Disciple.country.ilike(country))
+    if city:
+        q = q.filter(Disciple.city.ilike(city))
     if temple_id:
         q = q.filter(Disciple.temple_id == temple_id)
     if mentor_id:
         q = q.filter(Disciple.mentor_id == mentor_id)
+    if ready is not None:
+        q = q.filter(Disciple.ready_for_initiation.is_(ready))
+    if search:
+        like = f"%{search.strip()}%"
+        q = q.filter(Disciple.material_name.ilike(like) | Disciple.spiritual_name.ilike(like))
     return q
+
+
+def _filtered_query(db, user, status_, country, city, temple_id, mentor_id, ready, search):
+    q = scope_disciple_query(
+        db.query(Disciple).options(joinedload(Disciple.temple), joinedload(Disciple.mentor)), user
+    )
+    return _apply_filters(q, status_, country, city, temple_id, mentor_id, ready, search)
+
+
+# group_by dimension -> (column, label resolver)
+def _group_dimension(db, key: str):
+    from app.models import Temple
+
+    if key == "status":
+        return Disciple.initiation_status, lambda v: STATUS_LABELS.get(v, str(v) if v else "—")
+    if key == "country":
+        return Disciple.country, lambda v: v or "—"
+    if key == "city":
+        return Disciple.city, lambda v: v or "—"
+    if key == "mentor":
+        names = {u.id: u.full_name for u in db.query(User).all()}
+        return Disciple.mentor_id, lambda v: names.get(v, "—") if v else "—"
+    # default: temple
+    tnames = {t.id: t.name for t in db.query(Temple).all()}
+    return Disciple.temple_id, lambda v: tnames.get(v, "—") if v else "—"
 
 
 @router.get("/summary", response_model=ReportSummary)
@@ -100,6 +129,26 @@ def summary(db: Session = Depends(get_db), user: User = Depends(get_current_user
     )
 
 
+@router.get("/group", response_model=list[CountByKey])
+def group(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+    group_by: str = Query("status", description="status|country|city|temple|mentor"),
+    status_: InitiationStatus | None = Query(None, alias="status"),
+    country: str | None = None,
+    city: str | None = None,
+    temple_id: int | None = None,
+    mentor_id: int | None = None,
+    ready: bool | None = None,
+    q: str | None = None,
+):
+    col, label = _group_dimension(db, group_by)
+    query = scope_disciple_query(db.query(col, func.count()), user)
+    query = _apply_filters(query, status_, country, city, temple_id, mentor_id, ready, q)
+    rows = query.group_by(col).order_by(func.count().desc()).all()
+    return [CountByKey(key=label(v), count=n) for v, n in rows]
+
+
 _COLUMNS = [
     ("Духовное имя", lambda d: d.spiritual_name or ""),
     ("Мирское имя", lambda d: d.material_name or ""),
@@ -119,10 +168,17 @@ def export_xlsx(
     user: User = Depends(get_current_user),
     status_: InitiationStatus | None = Query(None, alias="status"),
     country: str | None = None,
+    city: str | None = None,
     temple_id: int | None = None,
     mentor_id: int | None = None,
+    ready: bool | None = None,
+    q: str | None = None,
 ):
-    rows = _filtered_query(db, user, status_, country, temple_id, mentor_id).order_by(Disciple.material_name).all()
+    rows = (
+        _filtered_query(db, user, status_, country, city, temple_id, mentor_id, ready, q)
+        .order_by(Disciple.material_name)
+        .all()
+    )
 
     wb = Workbook()
     ws = wb.active
@@ -150,10 +206,17 @@ def export_pdf(
     user: User = Depends(get_current_user),
     status_: InitiationStatus | None = Query(None, alias="status"),
     country: str | None = None,
+    city: str | None = None,
     temple_id: int | None = None,
     mentor_id: int | None = None,
+    ready: bool | None = None,
+    q: str | None = None,
 ):
-    rows = _filtered_query(db, user, status_, country, temple_id, mentor_id).order_by(Disciple.material_name).all()
+    rows = (
+        _filtered_query(db, user, status_, country, city, temple_id, mentor_id, ready, q)
+        .order_by(Disciple.material_name)
+        .all()
+    )
 
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=landscape(A4), leftMargin=12 * mm, rightMargin=12 * mm,

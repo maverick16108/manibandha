@@ -1,7 +1,12 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import client from '../api/client'
+import AppSelect from '../components/AppSelect.vue'
+import AppSkeleton from '../components/AppSkeleton.vue'
 import { ROLE_LABELS } from '../lib/format'
+
+const roleOptions = Object.entries(ROLE_LABELS).map(([value, label]) => ({ value, label }))
+const loading = ref(true)
 
 const users = ref([])
 const showForm = ref(false)
@@ -10,8 +15,13 @@ const error = ref('')
 const form = reactive({ email: '', full_name: '', role: 'secretary', password: '', is_active: true })
 
 async function load() {
-  const { data } = await client.get('/users')
-  users.value = data
+  loading.value = true
+  try {
+    const { data } = await client.get('/users')
+    users.value = data
+  } finally {
+    loading.value = false
+  }
 }
 
 function startNew() {
@@ -62,7 +72,13 @@ onMounted(load)
     </div>
 
     <div class="card divide-y divide-parchment-100">
-      <div v-for="u in users" :key="u.id" class="flex items-center justify-between p-4">
+      <template v-if="loading">
+        <div v-for="i in 4" :key="'s' + i" class="flex items-center justify-between p-4">
+          <div class="space-y-2"><AppSkeleton w="w-40" /><AppSkeleton w="w-56" h="h-3" /></div>
+          <AppSkeleton w="w-20" h="h-8" />
+        </div>
+      </template>
+      <div v-for="u in users" :key="u.id" v-show="!loading" class="flex items-center justify-between p-4">
         <div>
           <div class="font-medium text-ink-900">{{ u.full_name }} <span v-if="!u.is_active" class="badge bg-red-100 text-red-700">отключён</span></div>
           <div class="text-sm text-ink-700/60">{{ u.email }} · {{ ROLE_LABELS[u.role] }}</div>
@@ -82,9 +98,7 @@ onMounted(load)
           <div v-if="!editing"><label class="label">Email *</label><input v-model="form.email" type="email" class="input" required /></div>
           <div class="grid grid-cols-2 gap-3">
             <div><label class="label">Роль</label>
-              <select v-model="form.role" class="input">
-                <option v-for="(l, k) in ROLE_LABELS" :key="k" :value="k">{{ l }}</option>
-              </select>
+              <AppSelect v-model="form.role" :options="roleOptions" />
             </div>
             <div><label class="label">{{ editing ? 'Новый пароль' : 'Пароль *' }}</label>
               <input v-model="form.password" type="password" class="input" :required="!editing" :placeholder="editing ? 'оставьте пустым' : ''" />

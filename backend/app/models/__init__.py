@@ -5,8 +5,9 @@ from app.models.checklist import ChecklistItem
 from app.models.city import City
 from app.models.country import Country
 from app.models.region import Region
-from app.models.thread import Thread, ThreadMessage
+from app.models.thread import Thread, ThreadMessage, MessageLike, ThreadRead
 
 __all__ = [
-    "User", "Temple", "Disciple", "ChecklistItem", "City", "Country", "Region", "Thread", "ThreadMessage",
+    "User", "Temple", "Disciple", "ChecklistItem", "City", "Country", "Region",
+    "Thread", "ThreadMessage", "MessageLike", "ThreadRead",
 ]

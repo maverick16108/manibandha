@@ -16,7 +16,7 @@ const nav = [
   { name: 'service-reports', label: 'Отчёты', icon: 'reports', roles: ['guru', 'curator', 'student'] },
   { name: 'dictionaries', label: 'Справочники', icon: 'pin' },
   { name: 'reports', label: 'Статистика', icon: 'chart' },
-  { name: 'users', label: 'Пользователи', icon: 'users', guruOnly: true },
+  { name: 'users', label: 'Пользователи', icon: 'users', roles: ['guru', 'secretary'] },
 ]
 
 function canShow(item) {

@@ -16,6 +16,8 @@ class MessageOut(BaseModel):
     author_name: str | None = None
     body: str
     created_at: datetime
+    likes: int = 0
+    liked: bool = False
 
 
 class ThreadCreate(BaseModel):
@@ -36,6 +38,7 @@ class ThreadListItem(BaseModel):
     updated_at: datetime
     messages_count: int
     last_preview: str | None
+    unread: bool = False
 
 
 class ThreadOut(BaseModel):

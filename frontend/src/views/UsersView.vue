@@ -1,5 +1,5 @@
 <script setup>
-import { ref, reactive, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import client from '../api/client'
 import AppSelect from '../components/AppSelect.vue'
 import AppSkeleton from '../components/AppSkeleton.vue'
@@ -15,13 +15,16 @@ const users = ref([])
 const showForm = ref(false)
 const editing = ref(null)
 const error = ref('')
-const form = reactive({ email: '', full_name: '', role: 'secretary', password: '', is_active: true })
+const form = reactive({ email: '', full_name: '', role: 'secretary', password: '', is_active: true, disciple_id: '' })
+const disciples = ref([])
+const discipleOptions = computed(() => [{ value: '', label: '— не привязан —' }, ...disciples.value.map((d) => ({ value: d.id, label: d.spiritual_name || d.material_name }))])
 
 async function load() {
   loading.value = true
   try {
-    const { data } = await client.get('/users')
-    users.value = data
+    const [u, d] = await Promise.all([client.get('/users'), client.get('/disciples', { params: { limit: 500 } })])
+    users.value = u.data
+    disciples.value = d.data.items
   } finally {
     loading.value = false
   }
@@ -29,7 +32,7 @@ async function load() {
 
 function startNew() {
   editing.value = null
-  Object.assign(form, { email: '', full_name: '', role: 'secretary', password: '', is_active: true })
+  Object.assign(form, { email: '', full_name: '', role: 'secretary', password: '', is_active: true, disciple_id: '' })
   error.value = ''
   showForm.value = true
   focusName()
@@ -37,7 +40,7 @@ function startNew() {
 
 function startEdit(u) {
   editing.value = u.id
-  Object.assign(form, { email: u.email, full_name: u.full_name, role: u.role, password: '', is_active: u.is_active })
+  Object.assign(form, { email: u.email, full_name: u.full_name, role: u.role, password: '', is_active: u.is_active, disciple_id: u.disciple_id ?? '' })
   error.value = ''
   showForm.value = true
   focusName()
@@ -50,12 +53,13 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKey))
 async function save() {
   error.value = ''
   try {
+    const discipleId = form.disciple_id || null
     if (editing.value) {
-      const payload = { full_name: form.full_name, role: form.role, is_active: form.is_active }
+      const payload = { full_name: form.full_name, role: form.role, is_active: form.is_active, disciple_id: discipleId }
       if (form.password) payload.password = form.password
       await client.patch(`/users/${editing.value}`, payload)
     } else {
-      await client.post('/users', form)
+      await client.post('/users', { ...form, disciple_id: discipleId })
     }
     showForm.value = false
     await load()
@@ -112,6 +116,10 @@ onMounted(load)
             <div><label class="label">{{ editing ? 'Новый пароль' : 'Пароль *' }}</label>
               <input v-model="form.password" type="password" class="input" :required="!editing" :placeholder="editing ? 'оставьте пустым' : ''" />
             </div>
+          </div>
+          <div v-if="form.role === 'student'">
+            <label class="label">Анкета ученика</label>
+            <AppSelect v-model="form.disciple_id" :options="discipleOptions" placeholder="— не привязан —" />
           </div>
           <label class="flex items-center gap-2 text-sm text-ink-700"><input type="checkbox" v-model="form.is_active" /> Активен</label>
           <p v-if="error" class="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{{ error }}</p>

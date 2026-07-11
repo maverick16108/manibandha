@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user, require_roles
+from app.api.deps import get_current_user, staff_user
 from app.core.database import get_db
 from app.core.enums import Role
 from app.core.security import hash_password
@@ -12,7 +12,7 @@ router = APIRouter(prefix="/users", tags=["users"])
 
 
 @router.get("", response_model=list[UserOut])
-def list_users(db: Session = Depends(get_db), _: User = Depends(require_roles(Role.guru))):
+def list_users(db: Session = Depends(get_db), _: User = Depends(staff_user)):
     return db.query(User).order_by(User.full_name).all()
 
 
@@ -28,7 +28,7 @@ def list_mentors(db: Session = Depends(get_db), _: User = Depends(get_current_us
 
 
 @router.post("", response_model=UserOut, status_code=status.HTTP_201_CREATED)
-def create_user(payload: UserCreate, db: Session = Depends(get_db), _: User = Depends(require_roles(Role.guru))):
+def create_user(payload: UserCreate, db: Session = Depends(get_db), _: User = Depends(staff_user)):
     if db.query(User).filter(User.email == payload.email).first():
         raise HTTPException(status_code=400, detail="Пользователь с таким email уже существует")
     user = User(
@@ -47,7 +47,7 @@ def create_user(payload: UserCreate, db: Session = Depends(get_db), _: User = De
 
 @router.patch("/{user_id}", response_model=UserOut)
 def update_user(
-    user_id: int, payload: UserUpdate, db: Session = Depends(get_db), _: User = Depends(require_roles(Role.guru))
+    user_id: int, payload: UserUpdate, db: Session = Depends(get_db), _: User = Depends(staff_user)
 ):
     user = db.get(User, user_id)
     if not user:
@@ -65,7 +65,7 @@ def update_user(
 
 
 @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_user(user_id: int, db: Session = Depends(get_db), current: User = Depends(require_roles(Role.guru))):
+def delete_user(user_id: int, db: Session = Depends(get_db), current: User = Depends(staff_user)):
     user = db.get(User, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="Пользователь не найден")

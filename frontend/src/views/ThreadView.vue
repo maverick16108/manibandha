@@ -24,6 +24,14 @@ const periodLabel = computed(() => {
   return `${MONTHS[+m - 1]} ${y}`
 })
 const backTo = computed(() => (thread.value?.kind === 'report' ? { name: 'service-reports' } : { name: 'questions' }))
+const canLike = computed(() => auth.isGuru || auth.user?.role === 'curator')
+
+async function toggleLike(m) {
+  if (!canLike.value) return
+  const { data } = await client.post(`/threads/${id.value}/messages/${m.id}/like`)
+  m.likes = data.likes
+  m.liked = data.liked
+}
 
 function fmtTime(iso) {
   const d = new Date(iso)
@@ -55,7 +63,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="mx-auto max-w-3xl">
+  <div class="mx-auto max-w-6xl">
     <div v-if="loading" class="space-y-4">
       <AppSkeleton w="w-40" h="h-9" />
       <div class="card space-y-4 p-6"><AppSkeleton v-for="i in 4" :key="i" h="h-10" /></div>
@@ -85,6 +93,12 @@ onMounted(async () => {
             <div class="mb-0.5 text-xs opacity-70">{{ m.author_name || 'Аноним' }} · {{ fmtTime(m.created_at) }}</div>
             <div class="whitespace-pre-wrap">{{ m.body }}</div>
           </div>
+          <button v-if="thread.kind === 'report'"
+                  class="mt-1 flex items-center gap-1 rounded-full px-2 py-0.5 text-sm transition-colors"
+                  :class="[m.liked ? 'text-red-500' : 'text-ink-700/40', canLike ? 'cursor-pointer hover:bg-parchment-100' : 'cursor-default']"
+                  :disabled="!canLike" @click="toggleLike(m)">
+            <span>{{ m.liked ? '❤' : '♡' }}</span><span v-if="m.likes" class="text-xs">{{ m.likes }}</span>
+          </button>
         </div>
         <div v-if="!thread.messages.length" class="text-center text-sm text-ink-700/50">Сообщений пока нет</div>
         <div ref="listEnd"></div>

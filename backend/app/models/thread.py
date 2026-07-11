@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum, ForeignKey, String, func
+from sqlalchemy import DateTime, Enum, ForeignKey, String, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -38,3 +38,30 @@ class ThreadMessage(Base):
 
     thread = relationship("Thread", back_populates="messages")
     author = relationship("User")
+    likes = relationship("MessageLike", back_populates="message", cascade="all, delete-orphan")
+
+
+class ThreadRead(Base):
+    """Отметка: когда пользователь в последний раз открывал ветку (для индикатора «новое»)."""
+
+    __tablename__ = "thread_reads"
+    __table_args__ = (UniqueConstraint("thread_id", "user_id", name="uq_thread_read"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    thread_id: Mapped[int] = mapped_column(ForeignKey("threads.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class MessageLike(Base):
+    """Лайк на сообщение (отчёт ученика) от гуру или наставника."""
+
+    __tablename__ = "message_likes"
+    __table_args__ = (UniqueConstraint("message_id", "user_id", name="uq_message_like"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    message_id: Mapped[int] = mapped_column(ForeignKey("thread_messages.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    message = relationship("ThreadMessage", back_populates="likes")

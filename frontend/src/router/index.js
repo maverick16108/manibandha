@@ -16,11 +16,13 @@ const routes = [
       { path: 'disciples/:id', name: 'disciple', component: () => import('../views/DiscipleDetailView.vue') },
       { path: 'disciples/:id/edit', name: 'disciple-edit', component: () => import('../views/DiscipleFormView.vue') },
       { path: 'questions', name: 'questions', component: () => import('../views/ThreadsView.vue'), meta: { kind: 'question' } },
+      { path: 'questions/new', name: 'question-new', component: () => import('../views/ThreadComposeView.vue'), meta: { kind: 'question' } },
       { path: 'service-reports', name: 'service-reports', component: () => import('../views/ThreadsView.vue'), meta: { kind: 'report' } },
+      { path: 'service-reports/new', name: 'report-new', component: () => import('../views/ThreadComposeView.vue'), meta: { kind: 'report' } },
       { path: 'threads/:id', name: 'thread', component: () => import('../views/ThreadView.vue') },
       { path: 'dictionaries', name: 'dictionaries', component: () => import('../views/DictionariesView.vue') },
       { path: 'reports', name: 'reports', component: () => import('../views/ReportsView.vue') },
-      { path: 'users', name: 'users', component: () => import('../views/UsersView.vue'), meta: { guruOnly: true } },
+      { path: 'users', name: 'users', component: () => import('../views/UsersView.vue'), meta: { staffOnly: true } },
     ],
   },
 ]
@@ -48,6 +50,9 @@ router.beforeEach(async (to) => {
     return { name: 'login', query: { redirect: to.fullPath } }
   }
   if (to.meta.guruOnly && !auth.isGuru) {
+    return { name: 'dashboard' }
+  }
+  if (to.meta.staffOnly && !auth.isStaff) {
     return { name: 'dashboard' }
   }
   if (to.name === 'login' && auth.isAuthenticated) {

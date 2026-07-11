@@ -258,7 +258,7 @@ def export_pdf(
     cell_style = ParagraphStyle("c", parent=styles["Normal"], fontName=PDF_FONT, fontSize=8, leading=10)
 
     elements = [
-        Paragraph("Список учеников — Manibandha", title_style),
+        Paragraph("Список учеников — Е.М. Манибандха Прабху", title_style),
         Paragraph(f"Сформировано: {datetime.now():%d.%m.%Y %H:%M} · всего: {len(rows)}", cell_style),
         Spacer(1, 6 * mm),
     ]
@@ -272,7 +272,7 @@ def export_pdf(
     table.setStyle(
         TableStyle(
             [
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#7c2d12")),
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#c8742a")),
                 ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
                 ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#d6c3a5")),
                 ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#faf6f0")]),

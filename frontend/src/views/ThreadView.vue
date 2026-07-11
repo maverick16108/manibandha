@@ -161,7 +161,7 @@ onBeforeUnmount(() => { if (ws) ws.close(); clearTimeout(typingTimer); if (resiz
 
       <div class="mt-2 shrink-0">
         <div class="h-5 text-sm text-saffron-700/80"><span v-if="typingName">{{ typingName }} печатает…</span></div>
-        <MarkdownEditor v-model="body" :rows="3" submit-on-enter type-anywhere :draft-scope="`thread:${id}`" placeholder="Написать сообщение…" @submit="send" />
+        <MarkdownEditor v-model="body" :rows="3" submit-on-enter type-anywhere hide-hint :draft-scope="`thread:${id}`" placeholder="Написать сообщение…" @submit="send" />
         <div class="mt-1 flex justify-end">
           <button class="btn-primary" :disabled="sending || !body.trim()" @click="send">{{ sending ? '…' : 'Отправить' }}</button>
         </div>

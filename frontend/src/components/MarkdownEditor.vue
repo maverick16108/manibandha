@@ -12,6 +12,8 @@ const props = defineProps({
   typeAnywhere: { type: Boolean, default: false },
   // ключ черновика на сервере (напр. 'thread:12', 'new:question'); '' — не сохранять
   draftScope: { type: String, default: '' },
+  // скрыть подсказку про фото (для компактного чата)
+  hideHint: { type: Boolean, default: false },
 })
 const emit = defineEmits(['update:modelValue', 'submit'])
 
@@ -211,7 +213,7 @@ function onKeydown(e) {
         @paste="onPaste" @keydown="onKeydown"
         @dragover.prevent="dragOver = true" @dragleave="dragOver = false" @drop="onDrop"></textarea>
     </div>
-    <p v-if="!showPreview" class="mt-1 text-xs text-ink-700/40">Фото можно вставить из буфера (Ctrl+V) или перетащить в поле</p>
+    <p v-if="!showPreview && !hideHint" class="mt-1 text-xs text-ink-700/40">Фото можно вставить из буфера (Ctrl+V) или перетащить в поле</p>
   </div>
 </template>
 

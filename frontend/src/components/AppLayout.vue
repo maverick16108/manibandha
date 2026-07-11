@@ -115,9 +115,12 @@ function logout() {
         <button v-if="showSidebar" class="-ml-1 shrink-0 rounded-lg p-2 text-ink-800 hover:bg-parchment-200 lg:hidden" @click="sidebarOpen = true">
           <AppIcon name="menu" :size="28" :stroke="2" />
         </button>
-        <button v-if="showBack" class="btn-outline shrink-0" @click="goBack">
+        <button v-if="showSidebar && showBack" class="btn-outline shrink-0" @click="goBack">
           <AppIcon name="chevron" :size="16" class="rotate-90" /> Назад
         </button>
+        <RouterLink v-if="!showSidebar" to="/" class="btn-outline shrink-0">
+          <AppIcon name="chevron" :size="16" class="rotate-90" /> На главную
+        </RouterLink>
         <h1 class="truncate font-display text-lg font-semibold text-ink-900 sm:text-xl">{{ pageTitle }}</h1>
       </header>
 

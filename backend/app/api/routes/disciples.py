@@ -140,6 +140,11 @@ def update_disciple(
 
     for k, v in payload.model_dump(exclude_unset=True).items():
         setattr(disciple, k, v)
+    # синхронизировать имя связанного пользователя (для чата/профиля)
+    linked = db.query(User).filter(User.disciple_id == disciple.id).first()
+    name = disciple.spiritual_name or disciple.material_name
+    if linked and name:
+        linked.full_name = name
     db.commit()
     return _load(db).filter(Disciple.id == disciple_id).first()
 

@@ -64,7 +64,7 @@ const service = [
     <!-- Top bar -->
     <header class="absolute inset-x-0 top-0 z-20">
       <div class="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-4 sm:px-6">
-        <img src="/lotus-iskcon.png" alt="ИСККОН" class="h-11 w-auto sm:h-12" />
+        <img src="/lotus-iskcon.png" alt="ИСККОН" class="h-16 w-auto sm:h-20" />
         <RouterLink to="/login" class="btn whitespace-nowrap bg-white/90 text-ink-800 hover:bg-white">
           <span class="sm:hidden">Войти</span><span class="hidden sm:inline">Войти в кабинет</span>
         </RouterLink>

@@ -13,6 +13,7 @@ const router = useRouter()
 
 const approvalThread = ref(null)
 const formFilled = ref(false)
+const loaded = ref(false)
 
 onMounted(async () => {
   try {
@@ -22,7 +23,7 @@ onMounted(async () => {
   try {
     const { data } = await client.get(`/disciples/${auth.user.disciple_id}`)
     formFilled.value = !!(data.material_name || data.spiritual_name)
-  } catch { /* ignore */ }
+  } catch { /* ignore */ } finally { loaded.value = true }
 })
 
 function fillForm() {
@@ -49,15 +50,19 @@ function logout() {
         Как только заявку одобрят, откроется полный доступ к кабинету.
       </p>
 
-      <p class="mt-4 rounded-md px-4 py-3 text-sm"
-         :class="formFilled ? 'bg-parchment-50 text-ink-700/70' : 'bg-saffron-500/10 font-medium text-saffron-800'">
-        {{ formFilled
+      <p v-if="loaded" class="mt-4 flex items-center gap-2 rounded-lg px-4 py-3 text-sm font-medium ring-1"
+         :class="formFilled ? 'bg-emerald-50 text-emerald-700 ring-emerald-200' : 'bg-saffron-500/10 text-saffron-800 ring-saffron-300'">
+        <AppIcon :name="formFilled ? 'check' : 'chat'" :size="18" class="shrink-0" />
+        <span>{{ formFilled
           ? 'Анкета заполнена. Ожидайте — с Вами свяжется куратор для завершения регистрации.'
-          : 'Обязательно заполните анкету — только после этого заявку рассмотрят и откроется доступ к сайту. Без заполненной анкеты заявку не одобрят.' }}
+          : 'Обязательно заполните анкету — только после этого заявку рассмотрят и откроется доступ. Без анкеты заявку не одобрят.' }}</span>
       </p>
+      <div v-else class="mt-4 h-12 animate-pulse rounded-lg bg-parchment-100"></div>
 
       <div class="mt-6 flex flex-col gap-3">
-        <button class="btn-primary w-full" @click="fillForm">{{ formFilled ? 'Редактировать анкету' : 'Заполнить анкету' }}</button>
+        <button class="btn-primary w-full" :disabled="!loaded" @click="fillForm">
+          {{ !loaded ? '…' : (formFilled ? 'Редактировать анкету' : 'Заполнить анкету') }}
+        </button>
         <button v-if="approvalThread" class="btn-outline w-full" @click="openChat">
           <AppIcon name="chat" :size="16" /> Чат с куратором
         </button>

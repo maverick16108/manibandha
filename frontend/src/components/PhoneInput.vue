@@ -3,7 +3,7 @@ import { computed } from 'vue'
 
 // Stores a single number as E.164 ('+79048042771'), displays it formatted.
 // Falls back to free-text passthrough when the value holds several numbers.
-const props = defineProps({ modelValue: { type: String, default: '' } })
+const props = defineProps({ modelValue: { type: String, default: '' }, disabled: { type: Boolean, default: false } })
 const emit = defineEmits(['update:modelValue'])
 
 const digits = (s) => (s || '').replace(/\D/g, '')
@@ -38,5 +38,6 @@ function onInput(e) {
 </script>
 
 <template>
-  <input :value="display" @input="onInput" type="tel" inputmode="tel" class="input" placeholder="+7 900 000-00-00" />
+  <input :value="display" @input="onInput" :disabled="disabled" type="tel" inputmode="tel"
+         class="input" :class="disabled && 'cursor-not-allowed bg-parchment-100 text-ink-700/70'" placeholder="+7 900 000-00-00" />
 </template>

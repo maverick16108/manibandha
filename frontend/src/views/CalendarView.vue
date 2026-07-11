@@ -161,14 +161,17 @@ onMounted(load)
       </div>
       <div class="mt-1 grid grid-cols-7 gap-1">
         <template v-for="(week, wi) in weeks" :key="wi">
-          <div v-for="(d, di) in week" :key="di" class="min-h-[64px] rounded-lg p-1 sm:min-h-[88px]"
+          <div v-for="(d, di) in week" :key="di" class="min-h-[44px] rounded-lg p-1 sm:min-h-[88px]"
                :class="d ? 'border border-parchment-200 bg-white' : ''">
             <template v-if="d">
               <div class="mb-1 text-xs font-medium"
                    :class="isTodayCell(d) ? 'inline-flex h-5 w-5 items-center justify-center rounded-full bg-saffron-500 text-white' : 'text-ink-700/50'">{{ d }}</div>
               <button v-for="e in eventsOnDay(cursor.y, cursor.m, d)" :key="e.id"
-                      class="mb-0.5 block w-full whitespace-normal break-words rounded bg-saffron-500/15 px-1 py-0.5 text-left text-[11px] leading-tight text-saffron-800 hover:bg-saffron-500/25"
+                      class="mb-0.5 hidden w-full whitespace-normal break-words rounded bg-saffron-500/15 px-1 py-0.5 text-left text-[11px] leading-tight text-saffron-800 hover:bg-saffron-500/25 sm:block"
                       @click="selected = e">{{ e.title }}</button>
+              <button v-if="eventsOnDay(cursor.y, cursor.m, d).length" class="flex flex-wrap gap-1 sm:hidden" @click="selected = eventsOnDay(cursor.y, cursor.m, d)[0]">
+                <span v-for="e in eventsOnDay(cursor.y, cursor.m, d)" :key="'dot' + e.id" class="h-1.5 w-1.5 rounded-full bg-saffron-500"></span>
+              </button>
             </template>
           </div>
         </template>

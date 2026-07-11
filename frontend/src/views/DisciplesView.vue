@@ -105,12 +105,14 @@ onMounted(async () => {
         <AppSelect v-model="filters.region" :options="regionOptions" placeholder="Все области" />
         <AppSelect v-model="filters.city" :options="cityOptions" placeholder="Все города" />
         <AppSelect v-model="filters.mentor_id" :options="mentorOptions" placeholder="Все наставники" />
-        <label class="flex items-center gap-2 px-1 text-sm text-ink-700">
-          <input type="checkbox" v-model="filters.ready_pranama" true-value="true" false-value="" /> Готовые к пранаме
-        </label>
-        <label class="flex items-center gap-2 px-1 text-sm text-ink-700">
-          <input type="checkbox" v-model="filters.ready" true-value="true" false-value="" /> Готовые к инициации
-        </label>
+        <div class="flex flex-col justify-center gap-1.5 px-1">
+          <label class="flex items-center gap-2 text-sm text-ink-700">
+            <input type="checkbox" v-model="filters.ready_pranama" true-value="true" false-value="" /> Готовые к пранаме
+          </label>
+          <label class="flex items-center gap-2 text-sm text-ink-700">
+            <input type="checkbox" v-model="filters.ready" true-value="true" false-value="" /> Готовые к инициации
+          </label>
+        </div>
       </div>
       <div class="mt-3 flex flex-wrap items-center gap-3">
         <span v-if="filters.event_month" class="badge bg-saffron-500/15 text-saffron-700">

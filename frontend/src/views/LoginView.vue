@@ -47,7 +47,7 @@ async function submit() {
         <div class="mb-8 text-center">
           <AppIcon name="lotus" :size="44" class="mx-auto mb-3 text-saffron-500" />
           <h1 class="font-display text-3xl font-semibold text-ink-900">Вход в кабинет</h1>
-          <p class="mt-2 text-sm text-ink-700/70">Учёт учеников · Манибандха Прабху</p>
+          <p class="mt-2 text-sm text-ink-700/70">для учеников Манибандхи Прабху</p>
         </div>
 
         <form class="space-y-4" @submit.prevent="submit">

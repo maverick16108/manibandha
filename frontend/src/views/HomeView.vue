@@ -2,6 +2,20 @@
 import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { RouterLink } from 'vue-router'
 import AppIcon from '../components/AppIcon.vue'
+import client from '../api/client'
+
+// Публичное расписание — где сейчас Гуру
+const events = ref([])
+const MON = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек']
+function fmtDay(iso) { const [, m, d] = iso.split('-'); return `${+d} ${MON[+m - 1]}` }
+function eventDates(e) {
+  if (!e.starts_on) return ''
+  const s = fmtDay(e.starts_on)
+  return e.ends_on && e.ends_on !== e.starts_on ? `${s} — ${fmtDay(e.ends_on)}` : s
+}
+onMounted(async () => {
+  try { const { data } = await client.get('/events/public/upcoming'); events.value = data } catch { /* тихо */ }
+})
 
 // Guru photos live in /public/guru/. Bound via :src so Vite serves them from /public.
 const hero = '/guru/hero.jpg' // splash — atmospheric profile
@@ -122,6 +136,29 @@ const service = [
         </div>
         <div class="mt-12 flex flex-wrap justify-center gap-2">
           <span v-for="p in holyPlaces" :key="p" class="badge border border-parchment-200/30 text-parchment-200/90">{{ p }}</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Schedule — where the Guru is now (public) -->
+    <section v-if="events.length" class="bg-parchment-200/50">
+      <div class="mx-auto max-w-4xl px-6 py-20">
+        <p class="mb-3 text-center text-sm uppercase tracking-[0.25em] text-saffron-600">Расписание</p>
+        <h2 class="text-center font-display text-4xl font-semibold text-ink-900">Где сейчас Гуру</h2>
+        <div class="mt-12 space-y-3">
+          <div v-for="e in events" :key="e.id"
+               class="flex flex-col gap-2 rounded-2xl border border-parchment-300 bg-white/70 px-6 py-5 sm:flex-row sm:items-center sm:gap-6">
+            <div class="flex w-40 shrink-0 items-center gap-2 text-saffron-700">
+              <AppIcon name="calendar" :size="18" />
+              <span class="font-medium">{{ eventDates(e) }}</span>
+            </div>
+            <div class="flex-1">
+              <h3 class="font-display text-xl text-ink-900">{{ e.title }}</h3>
+              <p v-if="e.location" class="mt-0.5 flex items-center gap-1 text-sm text-ink-700/70">
+                <AppIcon name="pin" :size="14" /> {{ e.location }}
+              </p>
+            </div>
+          </div>
         </div>
       </div>
     </section>

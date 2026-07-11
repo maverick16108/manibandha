@@ -74,7 +74,7 @@ onMounted(load)
 </script>
 
 <template>
-  <div class="mx-auto max-w-4xl">
+  <div class="mx-auto max-w-6xl">
     <div class="mb-6 flex items-center justify-between">
       <h1 class="font-display text-3xl font-semibold text-ink-900">Пользователи</h1>
       <button class="btn-primary" @click="startNew">+ Добавить</button>

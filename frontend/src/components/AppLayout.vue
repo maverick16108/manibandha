@@ -30,11 +30,11 @@ function logout() {
       class="fixed inset-y-0 left-0 z-30 w-64 transform border-r border-parchment-200 bg-white transition-transform lg:translate-x-0"
       :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full'"
     >
-      <div class="flex h-16 items-center gap-2.5 border-b border-parchment-200 px-6">
-        <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-saffron-500 text-white shadow-sm">
-          <AppIcon name="lotus" :size="22" :stroke="1.8" />
+      <div class="flex h-16 items-center gap-2.5 border-b border-parchment-200 px-5">
+        <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-saffron-400 to-saffron-600 text-white shadow">
+          <AppIcon name="lotus-solid" :size="24" />
         </span>
-        <span class="font-display text-xl font-semibold tracking-wide text-ink-900">Манибандха</span>
+        <span class="font-sans text-xl font-bold tracking-tight text-ink-900">Манибандха</span>
       </div>
       <nav class="p-3">
         <template v-for="item in nav" :key="item.name">

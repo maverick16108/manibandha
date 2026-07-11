@@ -1,12 +1,14 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, EmailStr
+from pydantic import BaseModel, ConfigDict
 
 from app.core.enums import Role
 
 
 class UserBase(BaseModel):
-    email: EmailStr
+    # plain str (not EmailStr): internal accounts may use reserved TLDs like .local,
+    # which email-validator rejects — and that broke response serialization on /auth/me.
+    email: str
     full_name: str
     role: Role = Role.secretary
     is_active: bool = True

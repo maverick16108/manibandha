@@ -147,19 +147,25 @@ const service = [
         <p class="mb-3 text-center text-sm uppercase tracking-[0.25em] text-saffron-600">Расписание</p>
         <h2 class="text-center font-display text-4xl font-semibold text-ink-900">Где сейчас Гуру</h2>
         <div class="mt-12 space-y-3">
-          <div v-for="e in events" :key="e.id"
-               class="flex flex-col gap-2 rounded-2xl border border-parchment-300 bg-white/70 px-6 py-5 sm:flex-row sm:items-center sm:gap-6">
+          <RouterLink v-for="e in events" :key="e.id" :to="{ name: 'public-event', params: { id: e.id } }"
+               class="group flex flex-col gap-2 rounded-2xl border border-parchment-300 bg-white/70 px-6 py-5 transition hover:border-saffron-300 hover:bg-white hover:shadow-sm sm:flex-row sm:items-center sm:gap-6">
             <div class="flex w-40 shrink-0 items-center gap-2 text-saffron-700">
               <AppIcon name="calendar" :size="18" />
               <span class="font-medium">{{ eventDates(e) }}</span>
             </div>
-            <div class="flex-1">
-              <h3 class="font-display text-xl text-ink-900">{{ e.title }}</h3>
+            <div class="min-w-0 flex-1">
+              <h3 class="truncate font-display text-xl text-ink-900">{{ e.title }}</h3>
               <p v-if="e.location" class="mt-0.5 flex items-center gap-1 text-sm text-ink-700/70">
                 <AppIcon name="pin" :size="14" /> {{ e.location }}
               </p>
             </div>
-          </div>
+            <AppIcon name="chevron" :size="18" class="hidden shrink-0 -rotate-90 text-ink-700/30 transition group-hover:text-saffron-600 sm:block" />
+          </RouterLink>
+        </div>
+        <div class="mt-8 text-center">
+          <RouterLink to="/calendar" class="btn-outline">
+            <AppIcon name="calendar" :size="16" /> Открыть календарь
+          </RouterLink>
         </div>
       </div>
     </section>

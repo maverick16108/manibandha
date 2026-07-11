@@ -20,7 +20,7 @@ const error = ref('')
 const saving = ref(false)
 const now = new Date()
 const MONTHS = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь']
-const form = reactive({ disciple_id: '', body: '', month: now.getMonth() + 1, year: now.getFullYear() })
+const form = reactive({ disciple_id: '', subject: '', body: '', month: now.getMonth() + 1, year: now.getFullYear() })
 
 const discipleOptions = computed(() => disciples.value.map((d) => ({ value: d.id, label: d.spiritual_name || d.material_name })))
 const monthOptions = MONTHS.map((m, i) => ({ value: i + 1, label: m }))
@@ -33,6 +33,7 @@ async function submit() {
   const payload = { kind: kind.value, body: form.body }
   if (!auth.user?.disciple_id) payload.disciple_id = form.disciple_id || null
   if (isReport.value) payload.period = `${form.year}-${String(form.month).padStart(2, '0')}`
+  else payload.subject = form.subject.trim()
   try {
     const { data } = await client.post('/threads', payload)
     router.push({ name: 'thread', params: { id: data.id } })
@@ -60,6 +61,10 @@ onMounted(async () => {
       <div v-if="!auth.user?.disciple_id">
         <label class="label">Ученик *</label>
         <AppSelect v-model="form.disciple_id" :options="discipleOptions" placeholder="Выберите ученика" />
+      </div>
+      <div v-if="!isReport">
+        <label class="label">Заголовок вопроса *</label>
+        <input v-model="form.subject" class="input" required placeholder="Коротко о чём вопрос" />
       </div>
       <div v-if="isReport" class="grid grid-cols-2 gap-3 sm:max-w-md">
         <div><label class="label">Месяц</label><AppSelect v-model="form.month" :options="monthOptions" /></div>

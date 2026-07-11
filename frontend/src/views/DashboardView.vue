@@ -58,8 +58,6 @@ onMounted(async () => {
 
 <template>
   <div>
-    <p class="mb-8 text-ink-700/60">Сводка по ученикам · нажмите на показатель, чтобы открыть список</p>
-
     <!-- Loading skeleton -->
     <div v-if="loading" class="space-y-8">
       <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

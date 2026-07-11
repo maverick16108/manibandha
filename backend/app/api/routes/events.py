@@ -16,6 +16,16 @@ def list_events(db: Session = Depends(get_db), _: User = Depends(get_current_use
     return db.query(Event).order_by(Event.starts_on.desc()).all()
 
 
+def _brief(e: Event) -> dict:
+    return {
+        "id": e.id,
+        "title": e.title,
+        "location": e.location,
+        "starts_on": e.starts_on.isoformat() if e.starts_on else None,
+        "ends_on": e.ends_on.isoformat() if e.ends_on else None,
+    }
+
+
 @router.get("/public/upcoming")
 def public_upcoming(db: Session = Depends(get_db)):
     """Публичное расписание для лендинга — предстоящие/текущие события (без деталей)."""
@@ -24,19 +34,26 @@ def public_upcoming(db: Session = Depends(get_db)):
         db.query(Event)
         .filter((Event.ends_on >= today) | (Event.ends_on.is_(None) & (Event.starts_on >= today)))
         .order_by(Event.starts_on.asc())
-        .limit(6)
+        .limit(8)
         .all()
     )
-    return [
-        {
-            "id": e.id,
-            "title": e.title,
-            "location": e.location,
-            "starts_on": e.starts_on.isoformat() if e.starts_on else None,
-            "ends_on": e.ends_on.isoformat() if e.ends_on else None,
-        }
-        for e in rows
-    ]
+    return [_brief(e) for e in rows]
+
+
+@router.get("/public")
+def public_list(db: Session = Depends(get_db)):
+    """Все события для публичного календаря (без описаний)."""
+    rows = db.query(Event).order_by(Event.starts_on.desc()).all()
+    return [_brief(e) for e in rows]
+
+
+@router.get("/public/{event_id}")
+def public_detail(event_id: int, db: Session = Depends(get_db)):
+    """Полная карточка события для публичной страницы (с описанием)."""
+    ev = db.get(Event, event_id)
+    if not ev:
+        raise HTTPException(status_code=404, detail="Событие не найдено")
+    return {**_brief(ev), "description": ev.description}
 
 
 @router.get("/{event_id}", response_model=EventOut)

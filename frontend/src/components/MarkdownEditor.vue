@@ -41,6 +41,37 @@ watch(() => props.modelValue, (v) => {
   else nextTick(autoGrow)
 })
 
+// ручное растягивание за верхний хват (тянуть вверх — поле выше)
+let resizing = false
+let startY = 0
+let startH = 0
+function onResizeMove(e) {
+  if (!resizing) return
+  const y = e.touches ? e.touches[0].clientY : e.clientY
+  const el = textarea.value
+  if (!el) return
+  el.style.height = Math.max(64, Math.min(window.innerHeight * 0.85, startH + (startY - y))) + 'px'
+  if (e.cancelable) e.preventDefault()
+}
+function stopResize() {
+  resizing = false
+  window.removeEventListener('mousemove', onResizeMove)
+  window.removeEventListener('mouseup', stopResize)
+  window.removeEventListener('touchmove', onResizeMove)
+  window.removeEventListener('touchend', stopResize)
+}
+function startResize(e) {
+  const el = textarea.value
+  if (!el) return
+  resizing = true
+  startY = e.touches ? e.touches[0].clientY : e.clientY
+  startH = el.offsetHeight
+  window.addEventListener('mousemove', onResizeMove)
+  window.addEventListener('mouseup', stopResize)
+  window.addEventListener('touchmove', onResizeMove, { passive: false })
+  window.addEventListener('touchend', stopResize)
+}
+
 // печать в любом месте страницы → в это поле
 function onDocType(e) {
   if (e.ctrlKey || e.metaKey || e.altKey || showPreview.value) return
@@ -60,7 +91,7 @@ function onDocType(e) {
   }
 }
 onMounted(() => { if (props.typeAnywhere) document.addEventListener('keydown', onDocType) })
-onBeforeUnmount(() => document.removeEventListener('keydown', onDocType))
+onBeforeUnmount(() => { document.removeEventListener('keydown', onDocType); stopResize() })
 
 function setValue(v, caret) {
   emit('update:modelValue', v)

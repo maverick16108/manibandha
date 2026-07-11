@@ -32,7 +32,12 @@ const periodLabel = computed(() => {
 })
 const canLike = computed(() => auth.isGuru || auth.user?.role === 'curator')
 
-usePageTitle(() => (thread.value ? `${thread.value.kind === 'report' ? 'Отчёт' : 'Вопрос'} · ${thread.value.disciple_name}` : ''))
+usePageTitle(() => {
+  const t = thread.value
+  if (!t) return ''
+  const head = t.kind === 'report' ? 'Отчёт' : (t.subject || 'Вопрос')
+  return `${head} · ${t.disciple_name}`
+})
 
 function fmtTime(iso) {
   return new Date(iso).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
@@ -106,7 +111,7 @@ onBeforeUnmount(() => { if (ws) ws.close(); clearTimeout(typingTimer) })
 </script>
 
 <template>
-  <div class="mx-auto flex h-[calc(100dvh-6rem)] max-w-6xl flex-col lg:h-[calc(100dvh-8rem)]">
+  <div class="mx-auto flex h-[calc(100dvh-6rem)] max-w-6xl flex-col -mb-4 sm:-mb-6 lg:-mb-8">
     <div v-if="loading" class="space-y-4">
       <AppSkeleton w="w-40" h="h-9" />
       <div class="card space-y-4 p-6"><AppSkeleton v-for="i in 4" :key="i" h="h-10" /></div>

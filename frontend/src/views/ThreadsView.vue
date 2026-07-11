@@ -81,11 +81,11 @@ onMounted(async () => {
           <div class="min-w-0">
             <div class="flex items-center gap-2">
               <span v-if="t.unread" class="h-2.5 w-2.5 shrink-0 rounded-full bg-saffron-500" title="Новое"></span>
-              <span class="font-medium text-ink-900">{{ t.disciple_name }}</span>
-              <span v-if="t.period" class="badge bg-saffron-500/15 text-saffron-700">{{ periodLabel(t.period) }}</span>
-              <span v-if="t.unread" class="badge bg-saffron-500/15 text-saffron-700">Новое</span>
+              <span class="truncate font-medium text-ink-900">{{ (!isReport && t.subject) ? t.subject : t.disciple_name }}</span>
+              <span v-if="t.period" class="badge shrink-0 bg-saffron-500/15 text-saffron-700">{{ periodLabel(t.period) }}</span>
+              <span v-if="t.unread" class="badge shrink-0 bg-saffron-500/15 text-saffron-700">Новое</span>
             </div>
-            <div v-if="t.subject" class="text-sm text-ink-800">{{ t.subject }}</div>
+            <div v-if="!isReport && t.subject" class="text-sm text-ink-700/60">{{ t.disciple_name }}</div>
             <div class="mt-1 truncate text-sm text-ink-700/60">{{ t.last_preview }}</div>
           </div>
           <div class="shrink-0 text-right text-xs text-ink-700/50">

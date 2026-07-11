@@ -4,6 +4,8 @@ import { useAuthStore } from '../stores/auth'
 const routes = [
   { path: '/', name: 'home', component: () => import('../views/HomeView.vue'), meta: { public: true } },
   { path: '/login', name: 'login', component: () => import('../views/LoginView.vue'), meta: { public: true } },
+  { path: '/calendar', name: 'public-calendar', component: () => import('../views/PublicCalendarView.vue'), meta: { public: true } },
+  { path: '/events/:id', name: 'public-event', component: () => import('../views/PublicEventView.vue'), meta: { public: true } },
   {
     path: '/app',
     component: () => import('../components/AppLayout.vue'),

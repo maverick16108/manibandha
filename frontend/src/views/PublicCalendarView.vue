@@ -95,19 +95,19 @@ onMounted(async () => {
         <template v-for="(week, wi) in weeks" :key="wi">
           <div v-for="(d, di) in week" :key="di"
                class="min-h-[44px] rounded-lg p-1 sm:min-h-[84px]"
-               :class="d ? 'border border-parchment-200 bg-white' : ''">
+               :class="[d ? 'border border-parchment-200 bg-white' : '', d && eventsOnDay(cursor.y, cursor.m, d).length ? 'cursor-pointer sm:cursor-default' : '']"
+               @click="d && eventsOnDay(cursor.y, cursor.m, d).length && focusDay(cursor.y, cursor.m, d)">
             <template v-if="d">
               <div class="mb-1 text-xs font-medium"
                    :class="isToday(d) ? 'inline-flex h-5 w-5 items-center justify-center rounded-full bg-saffron-500 text-white' : 'text-ink-700/50'">{{ d }}</div>
               <!-- десктоп: названия -->
               <button v-for="e in eventsOnDay(cursor.y, cursor.m, d)" :key="e.id"
                       class="mb-0.5 hidden w-full whitespace-normal break-words rounded bg-saffron-500/15 px-1 py-0.5 text-left text-[11px] leading-tight text-saffron-800 hover:bg-saffron-500/25 sm:block"
-                      @click="openEvent(e.id)">{{ e.title }}</button>
-              <!-- мобильный: точки (тап → к событию в списке) -->
-              <button v-if="eventsOnDay(cursor.y, cursor.m, d).length" class="flex w-full flex-wrap gap-1 pt-0.5 sm:hidden"
-                      @click="focusDay(cursor.y, cursor.m, d)">
+                      @click.stop="openEvent(e.id)">{{ e.title }}</button>
+              <!-- мобильный: точки -->
+              <div v-if="eventsOnDay(cursor.y, cursor.m, d).length" class="flex flex-wrap gap-1 pt-0.5 sm:hidden">
                 <span v-for="e in eventsOnDay(cursor.y, cursor.m, d)" :key="'dot' + e.id" class="h-2 w-2 rounded-full bg-saffron-500"></span>
-              </button>
+              </div>
             </template>
           </div>
         </template>

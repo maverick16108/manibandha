@@ -9,6 +9,7 @@ import AppIcon from '../components/AppIcon.vue'
 import AppDatePicker from '../components/AppDatePicker.vue'
 import EventsMap from '../components/EventsMap.vue'
 import { renderMarkdown } from '../lib/markdown'
+import { extractImageUrls, preloadImages } from '../lib/preload'
 import { formatDate } from '../lib/format'
 import { usePageTitle } from '../composables/pageTitle'
 import { onEscape } from '../composables/useEscape'
@@ -74,6 +75,7 @@ async function load() {
   try {
     const { data } = await client.get('/events')
     events.value = data
+    preloadImages(data.flatMap((e) => extractImageUrls(e.description))) // фото вперёд (без ожидания)
   } finally {
     loading.value = false
   }
@@ -162,16 +164,17 @@ onMounted(load)
       <div class="mt-1 grid grid-cols-7 gap-1">
         <template v-for="(week, wi) in weeks" :key="wi">
           <div v-for="(d, di) in week" :key="di" class="min-h-[44px] rounded-lg p-1 sm:min-h-[88px]"
-               :class="d ? 'border border-parchment-200 bg-white' : ''">
+               :class="[d ? 'border border-parchment-200 bg-white' : '', d && eventsOnDay(cursor.y, cursor.m, d).length ? 'cursor-pointer sm:cursor-default' : '']"
+               @click="d && eventsOnDay(cursor.y, cursor.m, d).length && (selected = eventsOnDay(cursor.y, cursor.m, d)[0])">
             <template v-if="d">
               <div class="mb-1 text-xs font-medium"
                    :class="isTodayCell(d) ? 'inline-flex h-5 w-5 items-center justify-center rounded-full bg-saffron-500 text-white' : 'text-ink-700/50'">{{ d }}</div>
               <button v-for="e in eventsOnDay(cursor.y, cursor.m, d)" :key="e.id"
                       class="mb-0.5 hidden w-full whitespace-normal break-words rounded bg-saffron-500/15 px-1 py-0.5 text-left text-[11px] leading-tight text-saffron-800 hover:bg-saffron-500/25 sm:block"
-                      @click="selected = e">{{ e.title }}</button>
-              <button v-if="eventsOnDay(cursor.y, cursor.m, d).length" class="flex flex-wrap gap-1 sm:hidden" @click="selected = eventsOnDay(cursor.y, cursor.m, d)[0]">
-                <span v-for="e in eventsOnDay(cursor.y, cursor.m, d)" :key="'dot' + e.id" class="h-1.5 w-1.5 rounded-full bg-saffron-500"></span>
-              </button>
+                      @click.stop="selected = e">{{ e.title }}</button>
+              <div v-if="eventsOnDay(cursor.y, cursor.m, d).length" class="flex flex-wrap gap-1 pt-0.5 sm:hidden">
+                <span v-for="e in eventsOnDay(cursor.y, cursor.m, d)" :key="'dot' + e.id" class="h-2 w-2 rounded-full bg-saffron-500"></span>
+              </div>
             </template>
           </div>
         </template>

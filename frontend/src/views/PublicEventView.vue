@@ -3,6 +3,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter, RouterLink } from 'vue-router'
 import client from '../api/client'
 import { renderMarkdown } from '../lib/markdown'
+import { extractImageUrls, preloadImages } from '../lib/preload'
 import PublicShell from '../components/PublicShell.vue'
 import AppIcon from '../components/AppIcon.vue'
 
@@ -25,8 +26,11 @@ function fmt(iso) { if (!iso) return ''; const [y, m, d] = iso.split('-'); retur
 function range(e) { if (!e.starts_on) return ''; const s = fmt(e.starts_on); return e.ends_on && e.ends_on !== e.starts_on ? `${s} — ${fmt(e.ends_on)}` : s }
 
 onMounted(async () => {
-  try { const { data } = await client.get(`/events/public/${route.params.id}`); ev.value = data }
-  catch { notFound.value = true }
+  try {
+    const { data } = await client.get(`/events/public/${route.params.id}`)
+    await preloadImages(extractImageUrls(data.description)) // фото вперёд — без скачков
+    ev.value = data
+  } catch { notFound.value = true }
   finally { loading.value = false }
 })
 </script>

@@ -6,6 +6,7 @@ import { useAuthStore } from '../stores/auth'
 import AppSkeleton from '../components/AppSkeleton.vue'
 import MarkdownEditor from '../components/MarkdownEditor.vue'
 import { renderMarkdown } from '../lib/markdown'
+import { extractImageUrls, preloadImages } from '../lib/preload'
 import { usePageTitle } from '../composables/pageTitle'
 
 const route = useRoute()
@@ -58,6 +59,7 @@ async function scrollDown() {
 }
 async function load() {
   const { data } = await client.get(`/threads/${id.value}`)
+  await preloadImages(data.messages.flatMap((m) => extractImageUrls(m.body))) // фото вперёд — без скачков
   thread.value = data
   await scrollDown()
 }
@@ -70,8 +72,10 @@ function connectWs() {
     const data = JSON.parse(ev.data)
     if (data.type === 'message') {
       if (!thread.value.messages.some((m) => m.id === data.message.id)) {
-        thread.value.messages.push(data.message)
-        scrollDown()
+        preloadImages(extractImageUrls(data.message.body)).then(() => {
+          thread.value.messages.push(data.message)
+          scrollDown()
+        })
       }
     } else if (data.type === 'typing' && data.user_id !== auth.user?.id) {
       typingName.value = data.name

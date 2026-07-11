@@ -44,7 +44,11 @@ function fmtTime(iso) {
 }
 async function scrollDown() {
   await nextTick()
-  if (scroller.value) scroller.value.scrollTop = scroller.value.scrollHeight
+  // rAF x2 — дождаться финальной раскладки (высота flex-1 контейнера), иначе не долистывает
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    const el = scroller.value
+    if (el) el.scrollTop = el.scrollHeight
+  }))
 }
 async function load() {
   const { data } = await client.get(`/threads/${id.value}`)
@@ -118,8 +122,8 @@ onBeforeUnmount(() => { if (ws) ws.close(); clearTimeout(typingTimer) })
     </div>
 
     <template v-else-if="thread">
-      <div class="mb-3 flex shrink-0 flex-wrap items-center gap-2">
-        <span v-if="thread.period" class="badge bg-saffron-500/15 text-saffron-700">{{ periodLabel }}</span>
+      <div v-if="thread.period" class="mb-2 flex shrink-0 flex-wrap items-center gap-2">
+        <span class="badge bg-saffron-500/15 text-saffron-700">{{ periodLabel }}</span>
       </div>
 
       <div ref="scroller" class="card flex-1 space-y-3 overflow-y-auto p-5">
@@ -140,10 +144,10 @@ onBeforeUnmount(() => { if (ws) ws.close(); clearTimeout(typingTimer) })
         <div v-if="!thread.messages.length" class="text-center text-sm text-ink-700/50">Сообщений пока нет</div>
       </div>
 
-      <div class="mt-3 shrink-0">
-        <div class="mb-1 h-5 text-sm text-saffron-700/80"><span v-if="typingName">{{ typingName }} печатает…</span></div>
+      <div class="mt-2 shrink-0">
+        <div class="h-5 text-sm text-saffron-700/80"><span v-if="typingName">{{ typingName }} печатает…</span></div>
         <MarkdownEditor v-model="body" :rows="3" submit-on-enter type-anywhere :draft-scope="`thread:${id}`" placeholder="Написать сообщение…" @submit="send" />
-        <div class="mt-2 flex justify-end">
+        <div class="-mt-7 flex justify-end pr-1">
           <button class="btn-primary" :disabled="sending || !body.trim()" @click="send">{{ sending ? '…' : 'Отправить' }}</button>
         </div>
       </div>

@@ -130,7 +130,7 @@ onBeforeUnmount(() => { if (ws) ws.close(); clearTimeout(typingTimer); if (resiz
 </script>
 
 <template>
-  <div class="mx-auto flex h-[calc(100dvh-6rem)] max-w-6xl flex-col -mb-4 sm:-mb-6 lg:-mb-8">
+  <div class="mx-auto flex h-[calc(100dvh-7rem)] max-w-6xl flex-col -mb-1 sm:-mb-2 lg:-mb-3">
     <div v-if="loading" class="space-y-4">
       <AppSkeleton w="w-40" h="h-9" />
       <div class="card space-y-4 p-6"><AppSkeleton v-for="i in 4" :key="i" h="h-10" /></div>
@@ -162,7 +162,7 @@ onBeforeUnmount(() => { if (ws) ws.close(); clearTimeout(typingTimer); if (resiz
       <div class="mt-2 shrink-0">
         <div class="h-5 text-sm text-saffron-700/80"><span v-if="typingName">{{ typingName }} печатает…</span></div>
         <MarkdownEditor v-model="body" :rows="3" submit-on-enter type-anywhere :draft-scope="`thread:${id}`" placeholder="Написать сообщение…" @submit="send" />
-        <div class="mt-2 flex justify-end">
+        <div class="mt-1 flex justify-end">
           <button class="btn-primary" :disabled="sending || !body.trim()" @click="send">{{ sending ? '…' : 'Отправить' }}</button>
         </div>
       </div>

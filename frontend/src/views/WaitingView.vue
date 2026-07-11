@@ -12,14 +12,17 @@ const auth = useAuthStore()
 const router = useRouter()
 
 const approvalThread = ref(null)
+const formFilled = ref(false)
 
 onMounted(async () => {
   try {
     const { data } = await client.get('/threads')
     approvalThread.value = (Array.isArray(data) ? data : []).find((t) => t.kind === 'approval') || null
-  } catch {
-    /* ignore — кнопка чата просто не появится */
-  }
+  } catch { /* ignore */ }
+  try {
+    const { data } = await client.get(`/disciples/${auth.user.disciple_id}`)
+    formFilled.value = !!(data.material_name || data.spiritual_name)
+  } catch { /* ignore */ }
 })
 
 function fillForm() {
@@ -42,16 +45,18 @@ function logout() {
       <img src="/lotus-mark.png" alt="" class="mx-auto mb-4 h-12 w-auto" />
       <h1 class="font-display text-2xl font-semibold text-ink-900">Спасибо за регистрацию!</h1>
       <p class="mt-3 font-serif text-ink-700/80">
-        Ваш аккаунт создан и ожидает подтверждения (апрув) наставником.
+        Ваш аккаунт создан и ожидает подтверждения куратором.
         Как только заявку одобрят, откроется полный доступ к кабинету.
       </p>
 
       <p class="mt-4 rounded-md bg-parchment-50 px-4 py-3 text-sm text-ink-700/70">
-        Пока заявка на рассмотрении, вы можете заполнить свою анкету — это ускорит одобрение.
+        {{ formFilled
+          ? 'Анкета заполнена. Ожидайте — с Вами свяжется куратор для завершения регистрации.'
+          : 'Пока заявка на рассмотрении, заполните свою анкету — это ускорит одобрение.' }}
       </p>
 
       <div class="mt-6 flex flex-col gap-3">
-        <button class="btn-primary w-full" @click="fillForm">Заполнить анкету</button>
+        <button class="btn-primary w-full" @click="fillForm">{{ formFilled ? 'Редактировать анкету' : 'Заполнить анкету' }}</button>
         <button v-if="approvalThread" class="btn-outline w-full" @click="openChat">
           <AppIcon name="chat" :size="16" /> Чат с куратором
         </button>

@@ -13,6 +13,8 @@ const route = useRoute()
 const sidebarOpen = ref(false)
 const profileMenu = ref(false)
 onEscape(() => { profileMenu.value = false; sidebarOpen.value = false })
+// незаапрувленный кандидат — без левого меню, только экран ожидания
+const showSidebar = computed(() => !auth.isPending)
 
 // caps — любое из перечисленных прав открывает раздел
 const nav = [
@@ -49,8 +51,9 @@ function logout() {
 
 <template>
   <div class="min-h-screen bg-parchment-100">
-    <!-- Sidebar -->
+    <!-- Sidebar (скрыт для незаапрувленного кандидата) -->
     <aside
+      v-if="showSidebar"
       class="fixed inset-y-0 left-0 z-30 flex w-64 transform flex-col border-r border-parchment-200 bg-white transition-transform lg:translate-x-0"
       :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full'"
     >
@@ -107,9 +110,9 @@ function logout() {
     <div v-if="profileMenu" class="fixed inset-0 z-20" @click="profileMenu = false"></div>
 
     <!-- Main -->
-    <div class="lg:pl-64">
+    <div :class="showSidebar && 'lg:pl-64'">
       <header class="sticky top-0 z-10 flex h-16 items-center gap-3 border-b border-parchment-200 bg-parchment-50/90 px-4 backdrop-blur sm:px-6">
-        <button class="-ml-1 shrink-0 rounded-lg p-2 text-ink-800 hover:bg-parchment-200 lg:hidden" @click="sidebarOpen = true">
+        <button v-if="showSidebar" class="-ml-1 shrink-0 rounded-lg p-2 text-ink-800 hover:bg-parchment-200 lg:hidden" @click="sidebarOpen = true">
           <AppIcon name="menu" :size="28" :stroke="2" />
         </button>
         <button v-if="showBack" class="btn-outline shrink-0" @click="goBack">

@@ -87,6 +87,7 @@ const service = [
           </p>
           <div class="mt-10 flex flex-wrap justify-center gap-3 lg:justify-end">
             <a href="#about" class="btn-primary">О духовном учителе</a>
+            <a v-if="events.length" href="#schedule" class="btn border border-white/50 text-white hover:bg-white/10">Расписание</a>
             <RouterLink to="/login" class="btn border border-white/50 text-white hover:bg-white/10">Кабинет учеников</RouterLink>
           </div>
         </div>
@@ -141,7 +142,7 @@ const service = [
     </section>
 
     <!-- Schedule — where the Guru is now (public) -->
-    <section v-if="events.length" class="bg-parchment-200/50">
+    <section v-if="events.length" id="schedule" class="scroll-mt-20 bg-parchment-200/50">
       <div class="mx-auto max-w-4xl px-6 py-20">
         <p class="mb-3 text-center text-sm uppercase tracking-[0.25em] text-saffron-600">Расписание</p>
         <h2 class="text-center font-display text-4xl font-semibold text-ink-900">Где сейчас Гуру</h2>

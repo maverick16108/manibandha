@@ -4,11 +4,14 @@ import { useRoute, useRouter } from 'vue-router'
 import client from '../api/client'
 import AppDatePicker from '../components/AppDatePicker.vue'
 import MarkdownEditor from '../components/MarkdownEditor.vue'
+import { usePageTitle } from '../composables/pageTitle'
 
 const route = useRoute()
 const router = useRouter()
 const id = computed(() => route.params.id)
 const isEdit = computed(() => !!id.value)
+
+usePageTitle(() => (isEdit.value ? 'Изменить событие' : 'Новое событие'))
 
 const form = reactive({ title: '', location: '', starts_on: '', ends_on: '', description: '' })
 const error = ref('')
@@ -46,7 +49,6 @@ onMounted(async () => {
 
 <template>
   <div class="mx-auto max-w-6xl">
-    <h1 class="mb-6 font-display text-3xl font-semibold text-ink-900">{{ isEdit ? 'Изменить событие' : 'Новое событие' }}</h1>
     <form class="card space-y-4 p-6" @submit.prevent="save">
       <div><label class="label">Название *</label><input v-model="form.title" class="input" required autofocus /></div>
       <div><label class="label">Место (где находится гуру)</label><input v-model="form.location" class="input" placeholder="Вриндаван, Индия" /></div>

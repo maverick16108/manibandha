@@ -8,6 +8,7 @@ import AppSelect from '../components/AppSelect.vue'
 import AppSkeleton from '../components/AppSkeleton.vue'
 import AppIcon from '../components/AppIcon.vue'
 import { STATUS_LABELS, STATUS_ORDER, STATUS_BADGE, MARITAL_LABELS, formatDate, phoneList } from '../lib/format'
+import { usePageTitle } from '../composables/pageTitle'
 
 const statusOptions = STATUS_ORDER.map((s) => ({ value: s, label: STATUS_LABELS[s] }))
 
@@ -20,6 +21,8 @@ const d = ref(null)
 const stats = ref(null)
 const loading = ref(true)
 const newItem = reactive({ title: '', target: 'harinama' })
+
+usePageTitle(() => (d.value ? (d.value.spiritual_name || d.value.material_name) : ''))
 
 async function load() {
   const { data } = await client.get(`/disciples/${id.value}`)

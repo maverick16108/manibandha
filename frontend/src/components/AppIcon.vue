@@ -143,6 +143,12 @@ defineProps({
       <circle cx="12" cy="12" r="3" />
     </template>
 
+    <!-- logout -->
+    <template v-else-if="name === 'logout'">
+      <path d="M15 4.5H6a1.5 1.5 0 0 0-1.5 1.5v12A1.5 1.5 0 0 0 6 19.5h9" />
+      <path d="M18.5 12H10m8.5 0-3-3m3 3-3 3" />
+    </template>
+
     <!-- shield (roles / доступ) -->
     <template v-else-if="name === 'shield'">
       <path d="M12 3 5 5.5v5.2c0 4.4 3 7.6 7 9.3 4-1.7 7-4.9 7-9.3V5.5L12 3Z" />

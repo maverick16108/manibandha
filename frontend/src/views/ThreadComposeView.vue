@@ -5,12 +5,15 @@ import client from '../api/client'
 import { useAuthStore } from '../stores/auth'
 import AppSelect from '../components/AppSelect.vue'
 import MarkdownEditor from '../components/MarkdownEditor.vue'
+import { usePageTitle } from '../composables/pageTitle'
 
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 const kind = computed(() => route.meta.kind) // 'question' | 'report'
 const isReport = computed(() => kind.value === 'report')
+
+usePageTitle(() => (isReport.value ? 'Новый отчёт о служении' : 'Новый вопрос гуру'))
 
 const disciples = ref([])
 const error = ref('')
@@ -53,8 +56,6 @@ onMounted(async () => {
 
 <template>
   <div class="mx-auto max-w-6xl">
-    <h1 class="mb-6 font-display text-3xl font-semibold text-ink-900">{{ isReport ? 'Новый отчёт о служении' : 'Новый вопрос гуру' }}</h1>
-
     <form class="card space-y-4 p-6" @submit.prevent="submit">
       <div v-if="!auth.user?.disciple_id">
         <label class="label">Ученик *</label>

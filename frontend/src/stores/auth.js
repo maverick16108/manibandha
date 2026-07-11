@@ -36,6 +36,11 @@ export const useAuthStore = defineStore('auth', {
       }
       return data
     },
+    async updateProfile(payload) {
+      const { data } = await client.patch('/auth/me', payload)
+      this.user = { ...this.user, ...data }
+      return data
+    },
     logout() {
       this.token = null
       this.user = null

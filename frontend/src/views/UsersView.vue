@@ -5,6 +5,9 @@ import AppSelect from '../components/AppSelect.vue'
 import AppSkeleton from '../components/AppSkeleton.vue'
 import { confirmDialog } from '../composables/confirm'
 import { ROLE_LABELS } from '../lib/format'
+import { usePageTitle } from '../composables/pageTitle'
+
+usePageTitle('Пользователи')
 
 const roleOptions = Object.entries(ROLE_LABELS).map(([value, label]) => ({ value, label }))
 const loading = ref(true)
@@ -80,7 +83,6 @@ onMounted(load)
 <template>
   <div class="mx-auto max-w-6xl">
     <div class="mb-6 flex items-center justify-between">
-      <h1 class="font-display text-3xl font-semibold text-ink-900">Пользователи</h1>
       <button class="btn-primary" @click="startNew">+ Добавить</button>
     </div>
 

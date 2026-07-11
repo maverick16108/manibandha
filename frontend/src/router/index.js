@@ -27,6 +27,7 @@ const routes = [
       { path: 'reports', name: 'reports', component: () => import('../views/ReportsView.vue') },
       { path: 'users', name: 'users', component: () => import('../views/UsersView.vue'), meta: { staffOnly: true } },
       { path: 'roles', name: 'roles', component: () => import('../views/RolesView.vue'), meta: { guruOnly: true } },
+      { path: 'profile', name: 'profile', component: () => import('../views/ProfileView.vue') },
     ],
   },
 ]

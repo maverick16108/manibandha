@@ -16,6 +16,7 @@ class User(Base):
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[Role] = mapped_column(Enum(Role, native_enum=False), nullable=False, default=Role.secretary)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    avatar_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     # For the (optional) student role — links a login to their own disciple card.
     # use_alter breaks the circular FK cycle (users <-> disciples) for table creation.

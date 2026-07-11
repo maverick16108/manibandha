@@ -6,6 +6,9 @@ import AppSelect from '../components/AppSelect.vue'
 import AppIcon from '../components/AppIcon.vue'
 import AppSkeleton from '../components/AppSkeleton.vue'
 import { STATUS_LABELS, STATUS_ORDER, STATUS_BADGE } from '../lib/format'
+import { usePageTitle } from '../composables/pageTitle'
+
+usePageTitle('Отчёты')
 
 const mentors = ref([])
 const regionsOpt = ref([])
@@ -88,7 +91,6 @@ onMounted(async () => {
   <div>
     <div class="mb-6 flex flex-wrap items-center justify-between gap-3">
       <div>
-        <h1 class="font-display text-3xl font-semibold text-ink-900">Отчёты</h1>
         <p class="text-ink-700/60">Конструктор: фильтры, группировка и экспорт</p>
       </div>
       <div class="flex gap-2">

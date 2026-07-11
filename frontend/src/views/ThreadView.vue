@@ -6,6 +6,7 @@ import { useAuthStore } from '../stores/auth'
 import AppSkeleton from '../components/AppSkeleton.vue'
 import MarkdownEditor from '../components/MarkdownEditor.vue'
 import { renderMarkdown } from '../lib/markdown'
+import { usePageTitle } from '../composables/pageTitle'
 
 const route = useRoute()
 const auth = useAuthStore()
@@ -30,6 +31,8 @@ const periodLabel = computed(() => {
   return `${MONTHS[+m - 1]} ${y}`
 })
 const canLike = computed(() => auth.isGuru || auth.user?.role === 'curator')
+
+usePageTitle(() => (thread.value ? `${thread.value.kind === 'report' ? 'Отчёт' : 'Вопрос'} · ${thread.value.disciple_name}` : ''))
 
 function fmtTime(iso) {
   return new Date(iso).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
@@ -111,9 +114,6 @@ onBeforeUnmount(() => { if (ws) ws.close(); clearTimeout(typingTimer) })
 
     <template v-else-if="thread">
       <div class="mb-3 flex shrink-0 flex-wrap items-center gap-2">
-        <h1 class="font-display text-2xl font-semibold text-ink-900">
-          {{ thread.kind === 'report' ? 'Отчёт' : 'Вопрос' }} · {{ thread.disciple_name }}
-        </h1>
         <span v-if="thread.period" class="badge bg-saffron-500/15 text-saffron-700">{{ periodLabel }}</span>
       </div>
 

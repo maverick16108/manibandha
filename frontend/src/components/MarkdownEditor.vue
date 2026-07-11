@@ -134,14 +134,21 @@ function onKeydown(e) {
     <div v-if="showPreview"
          class="markdown-body input min-h-[8rem] w-full overflow-auto bg-parchment-50"
          v-html="previewHtml() || '<span class=\'text-ink-700/40\'>Пусто</span>'"></div>
-    <textarea
-      v-show="!showPreview"
-      ref="textarea" :value="modelValue" :rows="rows" :placeholder="placeholder"
-      class="input w-full resize-y transition-colors"
-      :class="dragOver && 'border-saffron-400 ring-1 ring-saffron-400'"
-      @input="emit('update:modelValue', $event.target.value); autoGrow()"
-      @paste="onPaste" @keydown="onKeydown"
-      @dragover.prevent="dragOver = true" @dragleave="dragOver = false" @drop="onDrop"></textarea>
+    <div v-show="!showPreview" class="relative">
+      <!-- хват сверху: тянуть, чтобы увеличить поле -->
+      <div class="absolute left-1/2 top-0 z-10 flex h-4 w-16 -translate-x-1/2 -translate-y-1/2 cursor-ns-resize items-center justify-center rounded-full bg-parchment-100 ring-1 ring-parchment-300 hover:bg-parchment-200"
+           title="Потяните, чтобы изменить высоту"
+           @mousedown="startResize" @touchstart.prevent="startResize">
+        <span class="h-1 w-6 rounded-full bg-ink-700/30"></span>
+      </div>
+      <textarea
+        ref="textarea" :value="modelValue" :rows="rows" :placeholder="placeholder"
+        class="input w-full resize-none transition-colors"
+        :class="dragOver && 'border-saffron-400 ring-1 ring-saffron-400'"
+        @input="emit('update:modelValue', $event.target.value); autoGrow()"
+        @paste="onPaste" @keydown="onKeydown"
+        @dragover.prevent="dragOver = true" @dragleave="dragOver = false" @drop="onDrop"></textarea>
+    </div>
     <p v-if="!showPreview" class="mt-1 text-xs text-ink-700/40">Фото можно вставить из буфера (Ctrl+V) или перетащить в поле</p>
   </div>
 </template>

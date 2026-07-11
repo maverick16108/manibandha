@@ -13,6 +13,13 @@ class UserBase(BaseModel):
     role: Role = Role.secretary
     is_active: bool = True
     disciple_id: int | None = None
+    avatar_url: str | None = None
+
+
+class SelfUpdate(BaseModel):
+    """Пользователь редактирует свой профиль (имя, аватар)."""
+    full_name: str | None = None
+    avatar_url: str | None = None
 
 
 class UserCreate(UserBase):

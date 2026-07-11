@@ -7,6 +7,9 @@ import { confirmDialog } from '../composables/confirm'
 import AppSkeleton from '../components/AppSkeleton.vue'
 import { renderMarkdown } from '../lib/markdown'
 import { formatDate } from '../lib/format'
+import { usePageTitle } from '../composables/pageTitle'
+
+usePageTitle('Календарь событий')
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -47,7 +50,6 @@ onMounted(load)
   <div class="mx-auto max-w-5xl">
     <div class="mb-6 flex items-center justify-between">
       <div>
-        <h1 class="font-display text-3xl font-semibold text-ink-900">Календарь событий</h1>
         <p class="text-ink-700/60">Где находится гуру и что происходит</p>
       </div>
       <RouterLink v-if="auth.isStaff" :to="{ name: 'event-new' }" class="btn-primary">+ Событие</RouterLink>

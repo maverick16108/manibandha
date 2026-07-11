@@ -6,11 +6,14 @@ import { useAuthStore } from '../stores/auth'
 import AppSelect from '../components/AppSelect.vue'
 import AppSkeleton from '../components/AppSkeleton.vue'
 import { formatDate } from '../lib/format'
+import { usePageTitle } from '../composables/pageTitle'
 
 const route = useRoute()
 const auth = useAuthStore()
 const kind = computed(() => route.meta.kind) // 'question' | 'report'
 const isReport = computed(() => kind.value === 'report')
+
+usePageTitle(() => (isReport.value ? 'Отчёты о служении' : 'Вопросы гуру'))
 
 const threads = ref([])
 const loading = ref(true)
@@ -56,7 +59,6 @@ onMounted(async () => {
   <div class="mx-auto max-w-6xl">
     <div class="mb-6 flex items-center justify-between">
       <div>
-        <h1 class="font-display text-3xl font-semibold text-ink-900">{{ isReport ? 'Отчёты о служении' : 'Вопросы гуру' }}</h1>
         <p class="text-ink-700/60">{{ isReport ? 'Ежемесячные отчёты учеников · доступ: ученик, наставник, гуру' : 'Личные вопросы · видит только гуру и сам ученик' }}</p>
       </div>
       <RouterLink v-if="auth.user?.disciple_id" :to="{ name: isReport ? 'report-new' : 'question-new' }" class="btn-primary">

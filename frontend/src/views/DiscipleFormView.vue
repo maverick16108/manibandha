@@ -8,6 +8,7 @@ import AppDatePicker from '../components/AppDatePicker.vue'
 import PhotoUpload from '../components/PhotoUpload.vue'
 import PhoneInput from '../components/PhoneInput.vue'
 import { STATUS_LABELS, STATUS_ORDER, MARITAL_LABELS } from '../lib/format'
+import { usePageTitle } from '../composables/pageTitle'
 
 const maritalOptions = [{ value: '', label: '—' }, ...Object.entries(MARITAL_LABELS).map(([value, label]) => ({ value, label }))]
 const statusOptions = STATUS_ORDER.map((s) => ({ value: s, label: STATUS_LABELS[s] }))
@@ -18,6 +19,8 @@ const id = computed(() => route.params.id)
 const isEdit = computed(() => !!id.value)
 // back to the disciple card when editing, otherwise to the list
 const backTo = computed(() => (isEdit.value ? { name: 'disciple', params: { id: id.value } } : { name: 'disciples' }))
+
+usePageTitle(() => (isEdit.value ? 'Редактировать ученика' : 'Новый ученик'))
 
 const mentors = ref([])
 const cities = ref([])
@@ -120,10 +123,6 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
 
 <template>
   <div class="mx-auto max-w-6xl">
-    <h1 class="mb-6 font-display text-3xl font-semibold text-ink-900">
-      {{ isEdit ? 'Редактировать ученика' : 'Новый ученик' }}
-    </h1>
-
     <form class="space-y-6" @submit.prevent="save">
       <section class="card p-6">
         <h3 class="mb-4 font-display text-xl text-ink-900">Основное</h3>

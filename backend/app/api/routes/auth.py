@@ -7,7 +7,7 @@ from app.core.database import get_db
 from app.core.security import create_access_token, verify_password
 from app.models import User
 from app.schemas.auth import Token
-from app.schemas.user import UserOut
+from app.schemas.user import SelfUpdate, UserOut
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -26,4 +26,14 @@ def login(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get
 
 @router.get("/me", response_model=UserOut)
 def me(user: User = Depends(get_current_user)):
+    return user
+
+
+@router.patch("/me", response_model=UserOut)
+def update_me(payload: SelfUpdate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    data = payload.model_dump(exclude_unset=True)
+    for k, v in data.items():
+        setattr(user, k, v)
+    db.commit()
+    db.refresh(user)
     return user

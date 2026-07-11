@@ -4,6 +4,9 @@ import client from '../api/client'
 import AppIcon from '../components/AppIcon.vue'
 import AppSkeleton from '../components/AppSkeleton.vue'
 import { ROLE_LABELS } from '../lib/format'
+import { usePageTitle } from '../composables/pageTitle'
+
+usePageTitle('Роли и доступ')
 
 const sections = ref([]) // [[key, label], ...]
 const matrix = ref({}) // { role: { section: bool } }
@@ -50,7 +53,6 @@ onMounted(load)
   <div class="mx-auto max-w-6xl">
     <div class="mb-6 flex flex-wrap items-center justify-between gap-3">
       <div>
-        <h1 class="font-display text-3xl font-semibold text-ink-900">Роли и доступ</h1>
         <p class="text-ink-700/60">Какие разделы видят и используют предопределённые роли</p>
       </div>
       <button class="btn-primary" :disabled="saving || loading" @click="save">

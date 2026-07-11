@@ -1,0 +1,63 @@
+<script setup>
+import { reactive, ref } from 'vue'
+import { useAuthStore } from '../stores/auth'
+import { usePageTitle } from '../composables/pageTitle'
+import { ROLE_LABELS } from '../lib/format'
+import PhotoUpload from '../components/PhotoUpload.vue'
+import AppIcon from '../components/AppIcon.vue'
+
+usePageTitle('Профиль')
+
+const auth = useAuthStore()
+const form = reactive({
+  full_name: auth.user?.full_name || '',
+  avatar_url: auth.user?.avatar_url || '',
+})
+const saving = ref(false)
+const saved = ref(false)
+
+async function save() {
+  saving.value = true
+  saved.value = false
+  try {
+    await auth.updateProfile({ full_name: form.full_name, avatar_url: form.avatar_url })
+    saved.value = true
+  } finally {
+    saving.value = false
+  }
+}
+</script>
+
+<template>
+  <div class="mx-auto max-w-2xl">
+    <div class="card p-6">
+      <div class="flex items-center gap-4">
+        <img v-if="form.avatar_url" :src="form.avatar_url" class="photo-bw h-20 w-20 rounded-full object-cover" />
+        <span v-else class="flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-saffron-400 to-saffron-600 text-2xl font-semibold text-white">
+          {{ (auth.user?.full_name || '?').trim()[0] }}
+        </span>
+        <div>
+          <div class="font-display text-2xl font-semibold text-ink-900">{{ auth.user?.full_name }}</div>
+          <div class="text-sm text-ink-700/60">{{ ROLE_LABELS[auth.user?.role] || auth.user?.role }} · {{ auth.user?.email }}</div>
+        </div>
+      </div>
+
+      <div class="mt-6 space-y-5">
+        <div>
+          <label class="label">Аватар / фото</label>
+          <PhotoUpload v-model="form.avatar_url" />
+        </div>
+        <div>
+          <label class="label">Имя</label>
+          <input v-model="form.full_name" class="input" placeholder="Ваше имя" />
+        </div>
+      </div>
+
+      <div class="mt-6 flex items-center gap-3">
+        <button class="btn-primary" :disabled="saving" @click="save">
+          <AppIcon v-if="saved" name="check" :size="16" /> {{ saved ? 'Сохранено' : (saving ? 'Сохранение…' : 'Сохранить') }}
+        </button>
+      </div>
+    </div>
+  </div>
+</template>

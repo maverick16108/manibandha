@@ -1,6 +1,9 @@
 <script setup>
 import { ref } from 'vue'
 import DictionaryPanel from '../components/DictionaryPanel.vue'
+import { usePageTitle } from '../composables/pageTitle'
+
+usePageTitle('Справочники')
 
 const tabs = [
   { key: 'cities', title: 'Города', endpoint: '/cities', withCountry: true },
@@ -12,7 +15,6 @@ const active = ref('cities')
 
 <template>
   <div>
-    <h1 class="mb-1 font-display text-3xl font-semibold text-ink-900">Справочники</h1>
     <p class="mb-6 text-ink-700/60">Города, области и страны для анкет и фильтров</p>
 
     <div class="mb-5 flex gap-1 border-b border-parchment-200">

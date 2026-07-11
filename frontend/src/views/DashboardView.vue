@@ -7,6 +7,9 @@ import DonutChart from '../components/charts/DonutChart.vue'
 import BarList from '../components/charts/BarList.vue'
 import TimeSeriesChart from '../components/charts/TimeSeriesChart.vue'
 import { STATUS_LABELS, STATUS_ORDER } from '../lib/format'
+import { usePageTitle } from '../composables/pageTitle'
+
+usePageTitle('Обзор')
 
 const router = useRouter()
 const summary = ref(null)
@@ -55,7 +58,6 @@ onMounted(async () => {
 
 <template>
   <div>
-    <h1 class="mb-1 font-display text-3xl font-semibold text-ink-900">Обзор</h1>
     <p class="mb-8 text-ink-700/60">Сводка по ученикам · нажмите на показатель, чтобы открыть список</p>
 
     <!-- Loading skeleton -->

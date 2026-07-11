@@ -4,6 +4,7 @@ import client from '../api/client'
 import AppSelect from '../components/AppSelect.vue'
 import AppSkeleton from '../components/AppSkeleton.vue'
 import AppIcon from '../components/AppIcon.vue'
+import PhoneInput from '../components/PhoneInput.vue'
 import { confirmDialog } from '../composables/confirm'
 import { ROLE_LABELS } from '../lib/format'
 import { usePageTitle } from '../composables/pageTitle'
@@ -20,7 +21,7 @@ const roles = ref([]) // [{id, name, ...}] — динамические роли
 const showForm = ref(false)
 const editing = ref(null)
 const error = ref('')
-const form = reactive({ email: '', full_name: '', role: 'secretary', password: '', is_active: true, disciple_id: '', role_ids: [] })
+const form = reactive({ email: '', full_name: '', phone: '', role: 'secretary', password: '', is_active: true, disciple_id: '', role_ids: [] })
 const disciples = ref([])
 const discipleOptions = computed(() => [{ value: '', label: '— не привязан —' }, ...disciples.value.map((d) => ({ value: d.id, label: d.spiritual_name || d.material_name }))])
 
@@ -48,7 +49,7 @@ function toggleRole(id) {
 
 function startNew() {
   editing.value = null
-  Object.assign(form, { email: '', full_name: '', role: 'secretary', password: '', is_active: true, disciple_id: '', role_ids: [] })
+  Object.assign(form, { email: '', full_name: '', phone: '', role: 'secretary', password: '', is_active: true, disciple_id: '', role_ids: [] })
   error.value = ''
   showForm.value = true
   focusName()
@@ -56,7 +57,7 @@ function startNew() {
 
 async function startEdit(u) {
   editing.value = u.id
-  Object.assign(form, { email: u.email, full_name: u.full_name, role: u.role, password: '', is_active: u.is_active, disciple_id: u.disciple_id ?? '', role_ids: [] })
+  Object.assign(form, { email: u.email, full_name: u.full_name, phone: u.phone ?? '', role: u.role, password: '', is_active: u.is_active, disciple_id: u.disciple_id ?? '', role_ids: [] })
   error.value = ''
   showForm.value = true
   focusName()
@@ -78,7 +79,7 @@ async function save() {
     const discipleId = form.disciple_id || null
     let userId
     if (editing.value) {
-      const payload = { full_name: form.full_name, role: form.role, is_active: form.is_active, disciple_id: discipleId }
+      const payload = { full_name: form.full_name, phone: form.phone || null, role: form.role, is_active: form.is_active, disciple_id: discipleId }
       if (form.password) payload.password = form.password
       await client.patch(`/users/${editing.value}`, payload)
       userId = editing.value
@@ -135,6 +136,7 @@ onMounted(load)
         <form class="space-y-3" @submit.prevent="save">
           <div><label class="label">Имя *</label><input ref="nameInput" v-model="form.full_name" class="input" required /></div>
           <div v-if="!editing"><label class="label">Email *</label><input v-model="form.email" type="email" class="input" required /></div>
+          <div><label class="label">Телефон (для входа по SMS)</label><PhoneInput v-model="form.phone" /></div>
           <div class="grid grid-cols-2 gap-3">
             <div><label class="label">Роль</label>
               <AppSelect v-model="form.role" :options="roleOptions" />

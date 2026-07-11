@@ -29,10 +29,15 @@ def list_mentors(db: Session = Depends(get_db), _: User = Depends(get_current_us
 
 @router.post("", response_model=UserOut, status_code=status.HTTP_201_CREATED)
 def create_user(payload: UserCreate, db: Session = Depends(get_db), _: User = Depends(staff_user)):
+    from app.core.sms import normalize_phone
     if db.query(User).filter(User.email == payload.email).first():
         raise HTTPException(status_code=400, detail="Пользователь с таким email уже существует")
+    phone = normalize_phone(payload.phone) if payload.phone else None
+    if phone and db.query(User).filter(User.phone == phone).first():
+        raise HTTPException(status_code=400, detail="Пользователь с таким телефоном уже существует")
     user = User(
         email=payload.email,
+        phone=phone or None,
         full_name=payload.full_name,
         role=payload.role,
         is_active=payload.is_active,
@@ -57,6 +62,12 @@ def update_user(
         pwd = data.pop("password")
         if pwd:
             user.hashed_password = hash_password(pwd)
+    if "phone" in data:
+        from app.core.sms import normalize_phone
+        ph = normalize_phone(data.pop("phone") or "") or None
+        if ph and db.query(User).filter(User.phone == ph, User.id != user.id).first():
+            raise HTTPException(status_code=400, detail="Пользователь с таким телефоном уже существует")
+        user.phone = ph
     for k, v in data.items():
         setattr(user, k, v)
     db.commit()

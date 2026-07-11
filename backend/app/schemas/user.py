@@ -9,6 +9,7 @@ class UserBase(BaseModel):
     # plain str (not EmailStr): internal accounts may use reserved TLDs like .local,
     # which email-validator rejects — and that broke response serialization on /auth/me.
     email: str
+    phone: str | None = None
     full_name: str
     role: Role = Role.secretary
     is_active: bool = True
@@ -28,6 +29,7 @@ class UserCreate(UserBase):
 
 class UserUpdate(BaseModel):
     full_name: str | None = None
+    phone: str | None = None
     role: Role | None = None
     is_active: bool | None = None
     password: str | None = None

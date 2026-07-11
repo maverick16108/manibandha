@@ -5,6 +5,7 @@ import { useAuthStore } from '../stores/auth'
 
 import AppIcon from '../components/AppIcon.vue'
 import PhoneInput from '../components/PhoneInput.vue'
+import OtpInput from '../components/OtpInput.vue'
 import { formatPhone } from '../lib/format'
 
 const portrait = '/guru/1.jpg'
@@ -12,8 +13,9 @@ const auth = useAuthStore()
 const router = useRouter()
 const route = useRoute()
 
-// 'phone' — основной способ (SMS), 'staff' — вход по email для персонала
-const mode = ref('phone')
+// 'login' | 'register' — обе вкладки работают по SMS. Админский вход скрыт.
+const mode = ref('login')
+const adminMode = ref(false)
 
 // --- Phone auth ---
 const phone = ref('')
@@ -21,12 +23,30 @@ const code = ref('')
 const step = ref(1) // 1: ввод телефона, 2: ввод кода
 const phoneError = ref('')
 const phoneLoading = ref(false)
+const resent = ref(false)
+
+function switchMode(m) {
+  if (m === mode.value) return
+  mode.value = m
+  step.value = 1
+  code.value = ''
+  phoneError.value = ''
+  resent.value = false
+}
 
 async function requestCode() {
   phoneError.value = ''
   phoneLoading.value = true
   try {
-    await auth.requestPhoneCode(phone.value)
+    const r = await auth.requestPhoneCode(phone.value)
+    if (mode.value === 'login' && r.exists === false) {
+      phoneError.value = 'Этот номер не зарегистрирован — перейдите на «Регистрация».'
+      return
+    }
+    if (mode.value === 'register' && r.exists === true) {
+      phoneError.value = 'Этот номер уже зарегистрирован — перейдите на «Вход».'
+      return
+    }
     step.value = 2
   } catch (e) {
     phoneError.value = e.response?.data?.detail || 'Не удалось отправить код. Проверьте номер.'
@@ -37,9 +57,11 @@ async function requestCode() {
 
 async function resendCode() {
   phoneError.value = ''
+  resent.value = false
   phoneLoading.value = true
   try {
     await auth.requestPhoneCode(phone.value)
+    resent.value = true
   } catch (e) {
     phoneError.value = e.response?.data?.detail || 'Не удалось отправить код повторно.'
   } finally {
@@ -48,6 +70,7 @@ async function resendCode() {
 }
 
 async function verifyCode() {
+  if (code.value.length < 4 || phoneLoading.value) return
   phoneError.value = ''
   phoneLoading.value = true
   try {
@@ -64,9 +87,10 @@ function editPhone() {
   step.value = 1
   code.value = ''
   phoneError.value = ''
+  resent.value = false
 }
 
-// --- Staff email auth (existing) ---
+// --- Admin email auth (скрытый вход) ---
 const email = ref('')
 const password = ref('')
 const error = ref('')
@@ -77,12 +101,22 @@ async function submit() {
   loading.value = true
   try {
     await auth.login(email.value, password.value)
-    router.push(route.query.redirect || { name: 'dashboard' })
+    router.push(route.query.redirect || '/app')
   } catch (e) {
     error.value = e.response?.data?.detail || 'Не удалось войти. Проверьте email и пароль.'
   } finally {
     loading.value = false
   }
+}
+
+function openAdmin() {
+  adminMode.value = true
+  error.value = ''
+}
+
+function closeAdmin() {
+  adminMode.value = false
+  error.value = ''
 }
 </script>
 
@@ -107,28 +141,52 @@ async function submit() {
           <p class="mt-2 text-sm text-ink-700/70">для учеников Манибандхи Прабху</p>
         </div>
 
-        <!-- Mode toggle -->
-        <div class="mb-6 flex rounded-lg border border-parchment-300 bg-parchment-50 p-1">
-          <button
-            type="button"
-            class="flex-1 rounded-md px-3 py-2 text-sm font-medium transition"
-            :class="mode === 'phone' ? 'bg-saffron-500 text-white shadow-sm' : 'text-ink-700/70 hover:text-ink-900'"
-            @click="mode = 'phone'"
-          >
-            По телефону
-          </button>
-          <button
-            type="button"
-            class="flex-1 rounded-md px-3 py-2 text-sm font-medium transition"
-            :class="mode === 'staff' ? 'bg-saffron-500 text-white shadow-sm' : 'text-ink-700/70 hover:text-ink-900'"
-            @click="mode = 'staff'"
-          >
-            Для персонала
-          </button>
-        </div>
+        <!-- Admin email form (hidden entrance) -->
+        <template v-if="adminMode">
+          <form class="space-y-4" @submit.prevent="submit">
+            <div>
+              <label class="label">Email</label>
+              <input v-model="email" type="email" autocomplete="username" class="input" placeholder="you@example.com" required />
+            </div>
+            <div>
+              <label class="label">Пароль</label>
+              <input v-model="password" type="password" autocomplete="current-password" class="input" placeholder="••••••••" required />
+            </div>
 
-        <!-- Phone mode -->
-        <div v-if="mode === 'phone'">
+            <p v-if="error" class="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{{ error }}</p>
+
+            <button type="submit" class="btn-primary w-full" :disabled="loading">
+              {{ loading ? 'Вход…' : 'Войти' }}
+            </button>
+          </form>
+
+          <button type="button" class="mt-6 block w-full text-center text-sm text-saffron-600 hover:text-saffron-700" @click="closeAdmin">
+            ← Назад ко входу по телефону
+          </button>
+        </template>
+
+        <!-- Phone auth (login / register tabs) -->
+        <template v-else>
+          <!-- Tabs -->
+          <div class="mb-6 flex rounded-lg border border-parchment-300 bg-parchment-50 p-1">
+            <button
+              type="button"
+              class="flex-1 rounded-md px-3 py-2 text-sm font-medium transition"
+              :class="mode === 'login' ? 'bg-saffron-500 text-white shadow-sm' : 'text-ink-700/70 hover:text-ink-900'"
+              @click="switchMode('login')"
+            >
+              Вход
+            </button>
+            <button
+              type="button"
+              class="flex-1 rounded-md px-3 py-2 text-sm font-medium transition"
+              :class="mode === 'register' ? 'bg-saffron-500 text-white shadow-sm' : 'text-ink-700/70 hover:text-ink-900'"
+              @click="switchMode('register')"
+            >
+              Регистрация
+            </button>
+          </div>
+
           <!-- Step 1: enter phone -->
           <form v-if="step === 1" class="space-y-4" @submit.prevent="requestCode">
             <div>
@@ -140,11 +198,12 @@ async function submit() {
             <p v-if="phoneError" class="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{{ phoneError }}</p>
 
             <button type="submit" class="btn-primary w-full" :disabled="phoneLoading || !phone">
-              {{ phoneLoading ? 'Отправляем…' : 'Получить код' }}
+              <template v-if="phoneLoading">Отправляем…</template>
+              <template v-else>{{ mode === 'login' ? 'Войти' : 'Зарегистрироваться' }}</template>
             </button>
 
-            <p class="rounded-md bg-parchment-50 px-3 py-2 text-center text-xs text-ink-700/70">
-              Впервые? Просто введите телефон — аккаунт создастся автоматически.
+            <p v-if="mode === 'register'" class="rounded-md bg-parchment-50 px-3 py-2 text-center text-xs text-ink-700/70">
+              Аккаунт создастся автоматически. После входа заполните анкету.
             </p>
           </form>
 
@@ -157,17 +216,10 @@ async function submit() {
 
             <div>
               <label class="label">Код из SMS</label>
-              <input
-                v-model="code"
-                inputmode="numeric"
-                autocomplete="one-time-code"
-                maxlength="4"
-                class="input text-center text-2xl tracking-[0.5em]"
-                placeholder="0000"
-                required
-              />
+              <OtpInput v-model="code" :length="4" @complete="verifyCode" />
             </div>
 
+            <p v-if="resent" class="rounded-md bg-sage-500/10 px-3 py-2 text-sm text-sage-600">Код отправлен</p>
             <p v-if="phoneError" class="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{{ phoneError }}</p>
 
             <button type="submit" class="btn-primary w-full" :disabled="phoneLoading || code.length < 4">
@@ -178,29 +230,21 @@ async function submit() {
               Отправить код повторно
             </button>
           </form>
-        </div>
-
-        <!-- Staff email mode (existing) -->
-        <form v-else class="space-y-4" @submit.prevent="submit">
-          <div>
-            <label class="label">Email</label>
-            <input v-model="email" type="email" autocomplete="username" class="input" placeholder="you@example.com" required />
-          </div>
-          <div>
-            <label class="label">Пароль</label>
-            <input v-model="password" type="password" autocomplete="current-password" class="input" placeholder="••••••••" required />
-          </div>
-
-          <p v-if="error" class="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{{ error }}</p>
-
-          <button type="submit" class="btn-primary w-full" :disabled="loading">
-            {{ loading ? 'Вход…' : 'Войти' }}
-          </button>
-        </form>
+        </template>
 
         <RouterLink to="/" class="mt-6 block text-center text-sm text-saffron-600 hover:text-saffron-700">
           ← На главную
         </RouterLink>
+
+        <!-- Hidden admin entrance -->
+        <button
+          v-if="!adminMode"
+          type="button"
+          class="mt-4 block w-full text-center text-xs text-ink-700/50 transition hover:text-ink-700"
+          @click="openAdmin"
+        >
+          Вход для администратора
+        </button>
       </div>
     </div>
   </div>

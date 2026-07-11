@@ -63,7 +63,8 @@ const service = [
   <div class="min-h-screen bg-parchment-100 text-ink-800">
     <!-- Top bar -->
     <header class="absolute inset-x-0 top-0 z-20">
-      <div class="mx-auto flex max-w-6xl items-center justify-end gap-3 px-4 py-4 sm:px-6">
+      <div class="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-4 sm:px-6">
+        <AppIcon name="lotus" :size="30" class="text-white/60 drop-shadow-sm" :stroke="1.5" />
         <RouterLink to="/login" class="btn whitespace-nowrap bg-white/90 text-ink-800 hover:bg-white">
           <span class="sm:hidden">Войти</span><span class="hidden sm:inline">Войти в кабинет</span>
         </RouterLink>

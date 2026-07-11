@@ -74,7 +74,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="mx-auto max-w-4xl">
+  <div class="mx-auto max-w-6xl">
     <div class="mb-6 flex items-center justify-between">
       <div>
         <h1 class="font-display text-3xl font-semibold text-ink-900">{{ isReport ? 'Отчёты о служении' : 'Вопросы гуру' }}</h1>

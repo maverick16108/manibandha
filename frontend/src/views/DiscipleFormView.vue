@@ -3,6 +3,8 @@ import { ref, reactive, onMounted, computed } from 'vue'
 import { useRoute, useRouter, RouterLink } from 'vue-router'
 import client from '../api/client'
 import AppSelect from '../components/AppSelect.vue'
+import AppDatePicker from '../components/AppDatePicker.vue'
+import PhotoUpload from '../components/PhotoUpload.vue'
 import { STATUS_LABELS, STATUS_ORDER, MARITAL_LABELS } from '../lib/format'
 
 const maritalOptions = [{ value: '', label: '—' }, ...Object.entries(MARITAL_LABELS).map(([value, label]) => ({ value, label }))]
@@ -101,7 +103,7 @@ onMounted(async () => {
         <div class="grid gap-4 sm:grid-cols-2">
           <div><label class="label">Мирское имя *</label><input v-model="form.material_name" class="input" required /></div>
           <div><label class="label">Духовное имя</label><input v-model="form.spiritual_name" class="input" /></div>
-          <div class="sm:col-span-2"><label class="label">Фото (URL)</label><input v-model="form.photo_url" class="input" placeholder="https://…" /></div>
+          <div class="sm:col-span-2"><label class="label">Фото</label><PhotoUpload v-model="form.photo_url" /></div>
         </div>
       </section>
 
@@ -120,7 +122,7 @@ onMounted(async () => {
           <div><label class="label">Храм / община</label>
             <AppSelect v-model="form.temple_id" :options="templeOptions" placeholder="—" />
           </div>
-          <div><label class="label">Дата рождения</label><input v-model="form.date_of_birth" type="date" class="input" /></div>
+          <div><label class="label">Дата рождения</label><AppDatePicker v-model="form.date_of_birth" /></div>
         </div>
       </section>
 
@@ -131,9 +133,9 @@ onMounted(async () => {
             <AppSelect v-model="form.initiation_status" :options="statusOptions" />
           </div>
           <div></div>
-          <div><label class="label">Дата харинамы</label><input v-model="form.harinama_date" type="date" class="input" /></div>
+          <div><label class="label">Дата харинамы</label><AppDatePicker v-model="form.harinama_date" /></div>
           <div><label class="label">Духовное имя (харинама)</label><input v-model="form.harinama_name" class="input" /></div>
-          <div><label class="label">Дата второй инициации (брахман)</label><input v-model="form.brahman_date" type="date" class="input" /></div>
+          <div><label class="label">Дата второй инициации (брахман)</label><AppDatePicker v-model="form.brahman_date" /></div>
         </div>
       </section>
 
@@ -144,7 +146,7 @@ onMounted(async () => {
             <AppSelect v-model="form.mentor_id" :options="mentorOptions" placeholder="—" />
           </div>
           <div><label class="label">Кто рекомендовал</label><input v-model="form.recommended_by" class="input" placeholder="Наставник / президент храма" /></div>
-          <div><label class="label">Дата заявки</label><input v-model="form.application_date" type="date" class="input" /></div>
+          <div><label class="label">Дата заявки</label><AppDatePicker v-model="form.application_date" /></div>
           <div class="flex items-end">
             <label class="flex items-center gap-2 text-sm text-ink-700">
               <input type="checkbox" v-model="form.ready_for_initiation" /> Готов(а) к инициации

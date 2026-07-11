@@ -55,6 +55,12 @@ defineProps({
       <path d="M12 6.6V19.7" />
     </template>
 
+    <!-- calendar -->
+    <template v-else-if="name === 'calendar'">
+      <rect x="3.5" y="5" width="17" height="15.5" rx="2" />
+      <path d="M3.5 9.5h17M8 3.5v3M16 3.5v3" />
+    </template>
+
     <!-- expand / maximize -->
     <template v-else-if="name === 'expand'">
       <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3m8 0h3a2 2 0 0 0 2-2v-3" />

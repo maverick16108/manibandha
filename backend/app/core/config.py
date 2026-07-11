@@ -17,6 +17,9 @@ class Settings(BaseSettings):
 
     DATABASE_URL: str = "postgresql+psycopg2://manibandha:manibandha@localhost:5432/manibandha"
 
+    # Directory for uploaded images (served at /uploads). Absolute on prod, relative in dev.
+    UPLOAD_DIR: str = "uploads"
+
     FIRST_GURU_EMAIL: str = "guru@manibandha.local"
     FIRST_GURU_PASSWORD: str = "change-me"
     FIRST_GURU_NAME: str = "Maharaj"

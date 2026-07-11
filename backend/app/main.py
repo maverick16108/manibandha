@@ -1,7 +1,12 @@
+import os
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
-from app.api.routes import auth, cities, countries, disciples, pipeline, regions, reports, temples, users
+from app.api.routes import (
+    auth, cities, countries, disciples, mentors, pipeline, regions, reports, temples, uploads, users,
+)
 from app.core.config import settings
 
 app = FastAPI(title=settings.APP_NAME, openapi_url=f"{settings.API_PREFIX}/openapi.json",
@@ -16,8 +21,12 @@ app.add_middleware(
 )
 
 for r in (auth.router, users.router, temples.router, cities.router, countries.router, regions.router,
-          disciples.router, pipeline.router, reports.router):
+          disciples.router, pipeline.router, reports.router, uploads.router, mentors.router):
     app.include_router(r, prefix=settings.API_PREFIX)
+
+# Serve uploaded images (dev; in prod nginx also serves /uploads directly).
+os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=settings.UPLOAD_DIR), name="uploads")
 
 
 @app.get(f"{settings.API_PREFIX}/health", tags=["health"])

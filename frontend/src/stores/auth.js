@@ -44,8 +44,8 @@ export const useAuthStore = defineStore('auth', {
       }
       return data
     },
-    async requestPhoneCode(phone) {
-      const { data } = await client.post('/auth/phone/request', { phone })
+    async requestPhoneCode(phone, purpose = 'auto') {
+      const { data } = await client.post('/auth/phone/request', { phone, purpose })
       return data
     },
     async loginByPhone(phone, code) {

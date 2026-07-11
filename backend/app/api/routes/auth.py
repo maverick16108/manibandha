@@ -23,11 +23,17 @@ def _token_for(user: User) -> Token:
 
 
 @router.post("/phone/request")
-def phone_request(phone: str = Body(..., embed=True), db: Session = Depends(get_db)):
-    """Отправить SMS-код на телефон (для регистрации или входа)."""
+def phone_request(phone: str = Body(...), purpose: str = Body("auto"), db: Session = Depends(get_db)):
+    """Отправить SMS-код на телефон. purpose: 'login' | 'register' | 'auto'.
+    SMS не отправляется, если номер не подходит под выбранное действие."""
     ph = normalize_phone(phone)
     if len(ph) != 11:
         raise HTTPException(status_code=400, detail="Некорректный номер телефона")
+    exists = db.query(User).filter(User.phone == ph).first() is not None
+    if purpose == "register" and exists:
+        raise HTTPException(status_code=400, detail="Этот номер уже зарегистрирован — перейдите на «Вход».")
+    if purpose == "login" and not exists:
+        raise HTTPException(status_code=400, detail="Этот номер не зарегистрирован — перейдите на «Регистрация».")
     code = f"{secrets.randbelow(10000):04d}"
     db.query(SmsCode).filter(SmsCode.phone == ph).delete()
     db.add(SmsCode(
@@ -36,7 +42,6 @@ def phone_request(phone: str = Body(..., embed=True), db: Session = Depends(get_
     ))
     db.commit()
     send_sms(ph, f"Код для входа на manibandha.ru: {code}")
-    exists = db.query(User).filter(User.phone == ph).first() is not None
     return {"sent": True, "exists": exists}
 
 

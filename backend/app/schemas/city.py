@@ -4,6 +4,7 @@ from pydantic import BaseModel, ConfigDict
 class CityBase(BaseModel):
     name: str
     country: str | None = None
+    region: str | None = None
 
 
 class CityCreate(CityBase):
@@ -13,6 +14,7 @@ class CityCreate(CityBase):
 class CityUpdate(BaseModel):
     name: str | None = None
     country: str | None = None
+    region: str | None = None
 
 
 class CityOut(CityBase):

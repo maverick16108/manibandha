@@ -67,15 +67,7 @@ async function requestCode() {
   phoneError.value = ''
   phoneLoading.value = true
   try {
-    const r = await auth.requestPhoneCode(phone.value)
-    if (mode.value === 'login' && r.exists === false) {
-      phoneError.value = 'Этот номер не зарегистрирован — перейдите на «Регистрация».'
-      return
-    }
-    if (mode.value === 'register' && r.exists === true) {
-      phoneError.value = 'Этот номер уже зарегистрирован — перейдите на «Вход».'
-      return
-    }
+    await auth.requestPhoneCode(phone.value, mode.value)
     step.value = 2
     startCooldown()
   } catch (e) {
@@ -91,7 +83,7 @@ async function resendCode() {
   resent.value = false
   phoneLoading.value = true
   try {
-    await auth.requestPhoneCode(phone.value)
+    await auth.requestPhoneCode(phone.value, mode.value)
     resent.value = true
     startCooldown()
   } catch (e) {

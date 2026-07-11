@@ -88,7 +88,7 @@ router.beforeEach(async (to) => {
   if (auth.isAuthenticated && auth.isPending) {
     if (to.name === 'login') return { name: 'waiting' }
     if (to.meta.requiresAuth) {
-      const allowedForPending = ['waiting', 'profile', 'disciple', 'disciple-edit', 'thread']
+      const allowedForPending = ['waiting', 'profile', 'disciple-edit', 'thread']
       return allowedForPending.includes(to.name) ? true : { name: 'waiting' }
     }
   }

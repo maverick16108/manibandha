@@ -21,7 +21,7 @@ def create_city(payload: CityCreate, db: Session = Depends(get_db), _: User = De
         raise HTTPException(status_code=400, detail="Название города обязательно")
     if db.query(City).filter(City.name.ilike(name)).first():
         raise HTTPException(status_code=400, detail="Такой город уже есть")
-    city = City(name=name, country=(payload.country or None))
+    city = City(name=name, country=(payload.country or None), region=(payload.region or None))
     db.add(city)
     db.commit()
     db.refresh(city)

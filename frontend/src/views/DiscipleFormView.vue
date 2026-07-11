@@ -1,5 +1,5 @@
 <script setup>
-import { ref, reactive, onMounted, onBeforeUnmount, computed, nextTick } from 'vue'
+import { ref, reactive, onMounted, onBeforeUnmount, computed, nextTick, watch } from 'vue'
 import { useRoute, useRouter, RouterLink, onBeforeRouteLeave } from 'vue-router'
 import client from '../api/client'
 import { useAuthStore } from '../stores/auth'
@@ -108,6 +108,13 @@ onMounted(async () => {
   snapshot = JSON.stringify(form) // baseline for unsaved-changes detection
   // при самостоятельном заполнении — пустое имя в фокусе
   if (selfFill.value && !form.material_name) nextTick(() => nameInput.value?.focus())
+
+  // при выборе города — автоматически проставить область (и страну)
+  watch(() => form.city, (name) => {
+    const c = cities.value.find((x) => x.name === name)
+    if (c?.region) form.region = c.region
+    if (c && !form.country) form.country = 'Россия'
+  })
 })
 
 // Warn on leaving with unsaved changes
@@ -134,7 +141,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
       <section class="card p-6">
         <h3 class="mb-4 font-display text-xl text-ink-900">Основное</h3>
         <div class="grid gap-4 sm:grid-cols-2">
-          <div><label class="label">Мирское имя *</label><input ref="nameInput" v-model="form.material_name" class="input" required /></div>
+          <div><label class="label">ФИО *</label><input ref="nameInput" v-model="form.material_name" class="input" required /></div>
           <div v-if="!selfFill"><label class="label">Духовное имя</label><input v-model="form.spiritual_name" class="input" /></div>
           <div class="sm:col-span-2"><label class="label">Фото</label><PhotoUpload v-model="form.photo_url" /></div>
         </div>

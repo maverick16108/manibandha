@@ -88,7 +88,6 @@ const service = [
           <div class="mt-10 flex flex-wrap justify-center gap-3 lg:justify-end">
             <a href="#about" class="btn-primary">О духовном учителе</a>
             <a v-if="events.length" href="#schedule" class="btn border border-white/50 text-white hover:bg-white/10">Расписание</a>
-            <RouterLink to="/login" class="btn border border-white/50 text-white hover:bg-white/10">Кабинет учеников</RouterLink>
           </div>
         </div>
       </div>

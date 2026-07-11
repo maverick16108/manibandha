@@ -47,7 +47,7 @@ function range(e) { const s = fmtShort(e.starts_on); return e.ends_on && e.ends_
 function prevMonth() { let { y, m } = cursor.value; m--; if (m < 1) { m = 12; y-- } cursor.value = { y, m } }
 function nextMonth() { let { y, m } = cursor.value; m++; if (m > 12) { m = 1; y++ } cursor.value = { y, m } }
 function isToday(d) { return d && cursor.value.y === today.getFullYear() && cursor.value.m === today.getMonth() + 1 && d === today.getDate() }
-function openEvent(id) { router.push({ name: 'public-event', params: { id } }) }
+function openEvent(id) { router.push({ name: 'public-event', params: { id }, query: { from: 'calendar' } }) }
 
 onMounted(async () => {
   cursor.value = { y: today.getFullYear(), m: today.getMonth() + 1 }
@@ -57,6 +57,11 @@ onMounted(async () => {
 
 <template>
   <PublicShell>
+    <nav class="mb-4 flex items-center gap-1.5 text-sm text-ink-700/60">
+      <RouterLink to="/" class="hover:text-saffron-700">Главная</RouterLink>
+      <span class="text-ink-700/30">/</span>
+      <span class="text-ink-800">Календарь</span>
+    </nav>
     <h1 class="mb-6 font-display text-3xl font-semibold text-ink-900 sm:text-4xl">Календарь событий</h1>
 
     <div class="card p-4 sm:p-6">

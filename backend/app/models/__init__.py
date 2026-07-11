@@ -8,8 +8,9 @@ from app.models.region import Region
 from app.models.thread import Thread, ThreadMessage, MessageLike, ThreadRead
 from app.models.event import Event
 from app.models.permission import RolePermission
+from app.models.draft import Draft
 
 __all__ = [
     "User", "Temple", "Disciple", "ChecklistItem", "City", "Country", "Region",
-    "Thread", "ThreadMessage", "MessageLike", "ThreadRead", "Event", "RolePermission",
+    "Thread", "ThreadMessage", "MessageLike", "ThreadRead", "Event", "RolePermission", "Draft",
 ]

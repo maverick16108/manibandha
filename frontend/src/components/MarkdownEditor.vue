@@ -10,6 +10,8 @@ const props = defineProps({
   submitOnEnter: { type: Boolean, default: false },
   // печать в любом месте страницы попадает в это поле (для чатов/сообщений)
   typeAnywhere: { type: Boolean, default: false },
+  // ключ черновика на сервере (напр. 'thread:12', 'new:question'); '' — не сохранять
+  draftScope: { type: String, default: '' },
 })
 const emit = defineEmits(['update:modelValue', 'submit'])
 
@@ -33,12 +35,37 @@ function autoGrow() {
 }
 onMounted(autoGrow)
 
-// когда поле очистили (напр. после отправки) — вернуть стандартную высоту
+// ── черновик на сервере (автосохранение) ──
+let draftTimer = null
+let draftLoaded = false
+async function loadDraft() {
+  if (!props.draftScope) { draftLoaded = true; return }
+  try {
+    const { data } = await client.get(`/drafts/${encodeURIComponent(props.draftScope)}`)
+    if (data.body && !props.modelValue) emit('update:modelValue', data.body)
+  } catch { /* нет черновика */ }
+  draftLoaded = true
+}
+function scheduleDraftSave() {
+  if (!props.draftScope || !draftLoaded) return
+  clearTimeout(draftTimer)
+  draftTimer = setTimeout(saveDraft, 600)
+}
+async function saveDraft() {
+  if (!props.draftScope) return
+  const v = props.modelValue || ''
+  try {
+    if (v) await client.put(`/drafts/${encodeURIComponent(props.draftScope)}`, { body: v })
+    else await client.delete(`/drafts/${encodeURIComponent(props.draftScope)}`)
+  } catch { /* игнор */ }
+}
+onMounted(loadDraft)
+
+// когда поле очистили (напр. после отправки) — вернуть стандартную высоту + сохранить черновик
 watch(() => props.modelValue, (v) => {
   const el = textarea.value
-  if (!el) return
-  if (!v) el.style.height = ''
-  else nextTick(autoGrow)
+  if (el) { if (!v) el.style.height = ''; else nextTick(autoGrow) }
+  scheduleDraftSave()
 })
 
 // ручное растягивание за верхний хват (тянуть вверх — поле выше)
@@ -91,7 +118,11 @@ function onDocType(e) {
   }
 }
 onMounted(() => { if (props.typeAnywhere) document.addEventListener('keydown', onDocType) })
-onBeforeUnmount(() => { document.removeEventListener('keydown', onDocType); stopResize() })
+onBeforeUnmount(() => {
+  document.removeEventListener('keydown', onDocType)
+  stopResize()
+  if (draftTimer) { clearTimeout(draftTimer); saveDraft() }
+})
 
 function setValue(v, caret) {
   emit('update:modelValue', v)

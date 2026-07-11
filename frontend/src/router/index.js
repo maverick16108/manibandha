@@ -37,7 +37,15 @@ const routes = [
 // Разделы, доступ к которым управляется ролями (имя маршрута = ключ раздела)
 const SECTION_ROUTES = ['dashboard', 'calendar', 'disciples', 'questions', 'service-reports', 'dictionaries', 'users']
 
-const router = createRouter({ history: createWebHistory(), routes })
+const router = createRouter({
+  history: createWebHistory(),
+  routes,
+  scrollBehavior(to, from, savedPosition) {
+    if (savedPosition) return savedPosition
+    if (to.hash) return { el: to.hash, behavior: 'smooth' }
+    return { top: 0 }
+  },
+})
 
 // After a deploy, chunk filenames change; a stale tab may fail to import a route
 // chunk. Reload once so it fetches the fresh assets instead of silently failing.

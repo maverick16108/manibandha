@@ -13,15 +13,13 @@ const route = useRoute()
 const items = ref([])
 const total = ref(0)
 const loading = ref(true)
-const temples = ref([])
 const mentors = ref([])
 const regions = ref([])
 const cities = ref([])
 
-const filters = reactive({ q: '', status: '', region: '', city: '', temple_id: '', mentor_id: '', ready: '' })
+const filters = reactive({ q: '', status: '', region: '', city: '', mentor_id: '', ready: '', ready_pranama: '' })
 
 const statusOptions = [{ value: '', label: 'Все статусы' }, ...STATUS_ORDER.map((s) => ({ value: s, label: STATUS_LABELS[s] }))]
-const templeOptions = computed(() => [{ value: '', label: 'Все храмы' }, ...temples.value.map((t) => ({ value: t.id, label: t.name }))])
 const mentorOptions = computed(() => [{ value: '', label: 'Все наставники' }, ...mentors.value.map((m) => ({ value: m.id, label: m.full_name }))])
 const regionOptions = computed(() => [{ value: '', label: 'Все области' }, ...regions.value.map((r) => ({ value: r.name, label: r.name }))])
 const cityOptions = computed(() => [{ value: '', label: 'Все города' }, ...cities.value.map((c) => ({ value: c.name, label: c.name }))])
@@ -66,10 +64,9 @@ function reset() {
 onMounted(async () => {
   // seed filters from URL query (deep links from the dashboard)
   for (const k of Object.keys(filters)) if (route.query[k] != null) filters[k] = String(route.query[k])
-  const [t, m, r, c] = await Promise.all([
-    client.get('/temples'), client.get('/users/mentors'), client.get('/regions'), client.get('/cities'),
+  const [m, r, c] = await Promise.all([
+    client.get('/users/mentors'), client.get('/regions'), client.get('/cities'),
   ])
-  temples.value = t.data
   mentors.value = m.data
   regions.value = r.data
   cities.value = c.data
@@ -101,8 +98,10 @@ onMounted(async () => {
         <AppSelect v-model="filters.status" :options="statusOptions" placeholder="Все статусы" />
         <AppSelect v-model="filters.region" :options="regionOptions" placeholder="Все области" />
         <AppSelect v-model="filters.city" :options="cityOptions" placeholder="Все города" />
-        <AppSelect v-model="filters.temple_id" :options="templeOptions" placeholder="Все храмы" />
         <AppSelect v-model="filters.mentor_id" :options="mentorOptions" placeholder="Все наставники" />
+        <label class="flex items-center gap-2 px-1 text-sm text-ink-700">
+          <input type="checkbox" v-model="filters.ready_pranama" true-value="true" false-value="" /> Готовые к пранаме
+        </label>
         <label class="flex items-center gap-2 px-1 text-sm text-ink-700">
           <input type="checkbox" v-model="filters.ready" true-value="true" false-value="" /> Готовые к инициации
         </label>
@@ -120,8 +119,7 @@ onMounted(async () => {
             <tr>
               <th class="px-4 py-3">Имя</th>
               <th class="px-4 py-3">Статус</th>
-              <th class="px-4 py-3">Страна / Город</th>
-              <th class="px-4 py-3">Храм</th>
+              <th class="px-4 py-3">Область / Город</th>
               <th class="px-4 py-3">Наставник</th>
             </tr>
           </thead>
@@ -133,7 +131,6 @@ onMounted(async () => {
                 </td>
                 <td class="px-4 py-3"><AppSkeleton w="w-20" h="h-5" rounded="rounded-full" /></td>
                 <td class="px-4 py-3"><AppSkeleton w="w-28" /></td>
-                <td class="px-4 py-3"><AppSkeleton w="w-24" /></td>
                 <td class="px-4 py-3"><AppSkeleton w="w-24" /></td>
               </tr>
             </template>
@@ -152,11 +149,10 @@ onMounted(async () => {
                   </RouterLink>
                 </td>
                 <td class="px-4 py-3"><span class="badge" :class="STATUS_BADGE[d.initiation_status]">{{ STATUS_LABELS[d.initiation_status] }}</span></td>
-                <td class="px-4 py-3 text-ink-700">{{ d.country || '—' }}<span v-if="d.city">, {{ d.city }}</span></td>
-                <td class="px-4 py-3 text-ink-700">{{ d.temple?.name || '—' }}</td>
+                <td class="px-4 py-3 text-ink-700">{{ d.region || d.country || '—' }}<span v-if="d.city">, {{ d.city }}</span></td>
                 <td class="px-4 py-3 text-ink-700">{{ d.mentor?.full_name || '—' }}</td>
               </tr>
-              <tr v-if="!items.length"><td colspan="5" class="px-4 py-10 text-center text-ink-700/50">Ученики не найдены</td></tr>
+              <tr v-if="!items.length"><td colspan="4" class="px-4 py-10 text-center text-ink-700/50">Ученики не найдены</td></tr>
             </template>
           </tbody>
         </table>

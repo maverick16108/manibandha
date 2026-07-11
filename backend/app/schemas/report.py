@@ -11,4 +11,12 @@ class ReportSummary(BaseModel):
     by_status: list[CountByKey]
     by_country: list[CountByKey]
     by_temple: list[CountByKey]
+    ready_for_pranama: int
     ready_for_initiation: int
+
+
+class TimelinePoint(BaseModel):
+    period: str
+    pranama: int
+    harinama: int
+    brahman: int

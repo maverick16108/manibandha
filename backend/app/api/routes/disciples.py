@@ -36,6 +36,7 @@ def list_disciples(
     temple_id: int | None = None,
     mentor_id: int | None = None,
     ready: bool | None = None,
+    ready_pranama: bool | None = None,
     sort: str = Query("material_name", description="material_name|spiritual_name|created_at|initiation_status"),
     skip: int = 0,
     limit: int = Query(50, le=500),
@@ -59,6 +60,8 @@ def list_disciples(
         query = query.filter(Disciple.mentor_id == mentor_id)
     if ready is not None:
         query = query.filter(Disciple.ready_for_initiation.is_(ready))
+    if ready_pranama is not None:
+        query = query.filter(Disciple.ready_for_pranama.is_(ready_pranama))
 
     total = query.count()
 

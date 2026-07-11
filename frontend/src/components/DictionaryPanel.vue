@@ -2,6 +2,7 @@
 import { ref, reactive, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import client from '../api/client'
 import { useAuthStore } from '../stores/auth'
+import { confirmDialog } from '../composables/confirm'
 import AppSkeleton from './AppSkeleton.vue'
 
 const nameInput = ref(null)
@@ -66,7 +67,7 @@ async function save() {
   }
 }
 async function remove(it) {
-  if (!confirm(`Удалить «${it.name}»?`)) return
+  if (!(await confirmDialog({ message: `Удалить «${it.name}»?` }))) return
   await client.delete(`${props.endpoint}/${it.id}`)
   await load()
 }

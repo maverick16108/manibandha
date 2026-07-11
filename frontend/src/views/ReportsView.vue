@@ -7,7 +7,6 @@ import AppIcon from '../components/AppIcon.vue'
 import AppSkeleton from '../components/AppSkeleton.vue'
 import { STATUS_LABELS, STATUS_ORDER, STATUS_BADGE } from '../lib/format'
 
-const temples = ref([])
 const mentors = ref([])
 const regionsOpt = ref([])
 const citiesOpt = ref([])
@@ -17,7 +16,7 @@ const rows = ref([])
 const total = ref(0)
 const loading = ref(true)
 
-const filters = reactive({ q: '', status: '', country: '', region: '', city: '', temple_id: '', mentor_id: '', ready: '' })
+const filters = reactive({ q: '', status: '', country: '', region: '', city: '', mentor_id: '', ready: '' })
 const groupBy = ref('status')
 
 const statusOptions = [{ value: '', label: 'Все статусы' }, ...STATUS_ORDER.map((s) => ({ value: s, label: STATUS_LABELS[s] }))]
@@ -26,7 +25,6 @@ const groupOptions = [
   { value: 'region', label: 'По области' },
   { value: 'city', label: 'По городу' },
   { value: 'country', label: 'По стране' },
-  { value: 'temple', label: 'По храму' },
   { value: 'mentor', label: 'По наставнику' },
 ]
 
@@ -74,10 +72,9 @@ function reset() {
 const maxCount = () => Math.max(1, ...groups.value.map((g) => g.count))
 
 onMounted(async () => {
-  const [t, m, r, c, co] = await Promise.all([
-    client.get('/temples'), client.get('/users/mentors'), client.get('/regions'), client.get('/cities'), client.get('/countries'),
+  const [m, r, c, co] = await Promise.all([
+    client.get('/users/mentors'), client.get('/regions'), client.get('/cities'), client.get('/countries'),
   ])
-  temples.value = [{ value: '', label: 'Все храмы' }, ...t.data.map((x) => ({ value: x.id, label: x.name }))]
   mentors.value = [{ value: '', label: 'Все наставники' }, ...m.data.map((x) => ({ value: x.id, label: x.full_name }))]
   regionsOpt.value = [{ value: '', label: 'Все области' }, ...r.data.map((x) => ({ value: x.name, label: x.name }))]
   citiesOpt.value = [{ value: '', label: 'Все города' }, ...c.data.map((x) => ({ value: x.name, label: x.name }))]
@@ -107,7 +104,6 @@ onMounted(async () => {
           <input v-model="filters.q" class="input pl-9" placeholder="Поиск по имени…" />
         </div>
         <AppSelect v-model="filters.status" :options="statusOptions" placeholder="Все статусы" />
-        <AppSelect v-model="filters.temple_id" :options="temples" placeholder="Все храмы" />
         <AppSelect v-model="filters.region" :options="regionsOpt" placeholder="Все области" />
         <AppSelect v-model="filters.city" :options="citiesOpt" placeholder="Все города" />
         <AppSelect v-model="filters.country" :options="countriesOpt" placeholder="Все страны" />
@@ -152,7 +148,7 @@ onMounted(async () => {
       <div class="overflow-x-auto">
         <table class="min-w-full text-sm">
           <thead class="bg-parchment-50 text-left text-xs uppercase tracking-wide text-ink-700/60">
-            <tr><th class="px-4 py-2">Имя</th><th class="px-4 py-2">Статус</th><th class="px-4 py-2">Город</th><th class="px-4 py-2">Храм</th></tr>
+            <tr><th class="px-4 py-2">Имя</th><th class="px-4 py-2">Статус</th><th class="px-4 py-2">Область</th><th class="px-4 py-2">Город</th></tr>
           </thead>
           <tbody class="divide-y divide-parchment-100">
             <template v-if="loading">
@@ -172,7 +168,7 @@ onMounted(async () => {
                 </td>
                 <td class="px-4 py-2.5"><span class="badge" :class="STATUS_BADGE[d.initiation_status]">{{ STATUS_LABELS[d.initiation_status] }}</span></td>
                 <td class="px-4 py-2.5 text-ink-700">{{ d.city || '—' }}</td>
-                <td class="px-4 py-2.5 text-ink-700">{{ d.temple?.name || '—' }}</td>
+                <td class="px-4 py-2.5 text-ink-700">{{ d.region || '—' }}</td>
               </tr>
               <tr v-if="!rows.length"><td colspan="4" class="px-4 py-8 text-center text-ink-700/50">Ничего не найдено</td></tr>
             </template>

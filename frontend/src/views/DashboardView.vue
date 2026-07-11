@@ -5,12 +5,14 @@ import client from '../api/client'
 import AppSkeleton from '../components/AppSkeleton.vue'
 import DonutChart from '../components/charts/DonutChart.vue'
 import BarList from '../components/charts/BarList.vue'
+import TimeSeriesChart from '../components/charts/TimeSeriesChart.vue'
 import { STATUS_LABELS, STATUS_ORDER } from '../lib/format'
 
 const router = useRouter()
 const summary = ref(null)
 const cities = ref([])
 const regions = ref([])
+const timeline = ref([])
 const loading = ref(true)
 
 // Sequential warm ramp for the ordered initiation stages (кандидат → брахман).
@@ -35,14 +37,16 @@ function go(query) {
 
 onMounted(async () => {
   try {
-    const [s, c, r] = await Promise.all([
+    const [s, c, r, t] = await Promise.all([
       client.get('/reports/summary'),
       client.get('/reports/group', { params: { group_by: 'city' } }),
       client.get('/reports/group', { params: { group_by: 'region' } }),
+      client.get('/reports/timeline'),
     ])
     summary.value = s.data
     cities.value = c.data.filter((x) => x.key !== '—').slice(0, 10).map((x) => ({ label: x.key, value: x.count }))
     regions.value = r.data.filter((x) => x.key !== '—').slice(0, 10).map((x) => ({ label: x.key, value: x.count }))
+    timeline.value = t.data
   } finally {
     loading.value = false
   }
@@ -66,10 +70,14 @@ onMounted(async () => {
 
     <div v-else-if="summary" class="space-y-6">
       <!-- Stat tiles -->
-      <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <button class="card p-5 text-left transition hover:border-saffron-400/50 hover:shadow" @click="go({})">
           <div class="text-sm text-ink-700/60">Всего учеников</div>
           <div class="mt-1 font-display text-4xl font-semibold text-ink-900">{{ summary.total }}</div>
+        </button>
+        <button class="card p-5 text-left transition hover:border-saffron-400/50 hover:shadow" @click="go({ ready_pranama: 'true' })">
+          <div class="text-sm text-ink-700/60">Готовы к пранаме</div>
+          <div class="mt-1 font-display text-4xl font-semibold text-orange-600">{{ summary.ready_for_pranama }}</div>
         </button>
         <button class="card p-5 text-left transition hover:border-saffron-400/50 hover:shadow" @click="go({ ready: 'true' })">
           <div class="text-sm text-ink-700/60">Готовы к инициации</div>
@@ -86,11 +94,11 @@ onMounted(async () => {
       </div>
 
       <div class="grid gap-6 lg:grid-cols-2">
-        <!-- Pipeline funnel -->
+        <!-- Timeline: when disciples receive pranama / initiations -->
         <div class="card p-6">
-          <h3 class="mb-1 font-display text-xl text-ink-900">Ступени инициации</h3>
-          <p class="mb-5 text-sm text-ink-700/60">Путь ученика от аспиранта к брахману</p>
-          <BarList :data="statusData" clickable @select="(d) => go({ status: d.key })" />
+          <h3 class="mb-1 font-display text-xl text-ink-900">Пранама и инициации по времени</h3>
+          <p class="mb-5 text-sm text-ink-700/60">Когда ученики получают пранаму и инициации (по месяцам)</p>
+          <TimeSeriesChart :data="timeline" />
         </div>
 
         <!-- Status donut -->

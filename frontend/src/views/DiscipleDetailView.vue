@@ -3,6 +3,7 @@ import { ref, reactive, onMounted, computed } from 'vue'
 import { useRoute, useRouter, RouterLink } from 'vue-router'
 import client from '../api/client'
 import { useAuthStore } from '../stores/auth'
+import { confirmDialog } from '../composables/confirm'
 import AppSelect from '../components/AppSelect.vue'
 import AppSkeleton from '../components/AppSkeleton.vue'
 import { STATUS_LABELS, STATUS_ORDER, STATUS_BADGE, MARITAL_LABELS, formatDate, phoneList } from '../lib/format'
@@ -41,7 +42,7 @@ async function removeItem(item) {
 }
 
 async function remove() {
-  if (!confirm('Удалить ученика безвозвратно?')) return
+  if (!(await confirmDialog({ message: 'Удалить ученика безвозвратно?' }))) return
   await client.delete(`/disciples/${id.value}`)
   router.push({ name: 'disciples' })
 }
@@ -105,7 +106,7 @@ onMounted(async () => {
           <div class="flex justify-between"><dt class="text-ink-700/60">Email</dt><dd class="text-ink-800">{{ d.email || '—' }}</dd></div>
           <div class="flex justify-between"><dt class="text-ink-700/60">Мессенджер</dt><dd class="text-ink-800">{{ d.messenger || '—' }}</dd></div>
           <div class="flex justify-between"><dt class="text-ink-700/60">Страна / город</dt><dd class="text-ink-800">{{ d.country || '—' }}<span v-if="d.city">, {{ d.city }}</span></dd></div>
-          <div class="flex justify-between"><dt class="text-ink-700/60">Храм</dt><dd class="text-ink-800">{{ d.temple?.name || '—' }}</dd></div>
+          <div class="flex justify-between"><dt class="text-ink-700/60">Область</dt><dd class="text-ink-800">{{ d.region || '—' }}</dd></div>
           <div class="flex justify-between"><dt class="text-ink-700/60">Семейное положение</dt><dd class="text-ink-800">{{ MARITAL_LABELS[d.marital_status] || '—' }}</dd></div>
           <div class="flex justify-between"><dt class="text-ink-700/60">Дата рождения</dt><dd class="text-ink-800">{{ formatDate(d.date_of_birth) }}</dd></div>
           <div class="flex justify-between"><dt class="text-ink-700/60">Наставник</dt><dd class="text-ink-800">{{ d.mentor?.full_name || '—' }}</dd></div>

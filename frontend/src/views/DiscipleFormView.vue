@@ -15,12 +15,10 @@ const router = useRouter()
 const id = computed(() => route.params.id)
 const isEdit = computed(() => !!id.value)
 
-const temples = ref([])
 const mentors = ref([])
 const cities = ref([])
 const regions = ref([])
 const countries = ref([])
-const templeOptions = computed(() => [{ value: '', label: '—' }, ...temples.value.map((t) => ({ value: t.id, label: t.name }))])
 const mentorOptions = computed(() => [{ value: '', label: '—' }, ...mentors.value.map((m) => ({ value: m.id, label: m.full_name }))])
 // keep the disciple's existing value even if not yet in the dictionary
 function dictOptions(list, current) {
@@ -37,7 +35,7 @@ const saving = ref(false)
 const form = reactive({
   material_name: '', spiritual_name: '', photo_url: '',
   phone: '', email: '', messenger: '',
-  country: '', region: '', city: '', temple_id: '',
+  country: '', region: '', city: '',
   marital_status: '', date_of_birth: '',
   initiation_status: 'aspirant', pranama_date: '', harinama_date: '', harinama_name: '', brahman_date: '',
   seva: '', current_activity: '',
@@ -71,11 +69,9 @@ async function save() {
 }
 
 onMounted(async () => {
-  const [t, m, c, r, co] = await Promise.all([
-    client.get('/temples'), client.get('/users/mentors'), client.get('/cities'),
-    client.get('/regions'), client.get('/countries'),
+  const [m, c, r, co] = await Promise.all([
+    client.get('/users/mentors'), client.get('/cities'), client.get('/regions'), client.get('/countries'),
   ])
-  temples.value = t.data
   mentors.value = m.data
   cities.value = c.data
   regions.value = r.data
@@ -83,7 +79,7 @@ onMounted(async () => {
   if (isEdit.value) {
     const { data } = await client.get(`/disciples/${id.value}`)
     for (const k of Object.keys(form)) {
-      if (k === 'temple_id' || k === 'mentor_id') form[k] = data[k] ?? ''
+      if (k === 'mentor_id') form[k] = data[k] ?? ''
       else form[k] = data[k] ?? (typeof form[k] === 'boolean' ? false : '')
     }
   }
@@ -119,9 +115,6 @@ onMounted(async () => {
           <div><label class="label">Страна</label><AppSelect v-model="form.country" :options="countryOptions" placeholder="—" /></div>
           <div><label class="label">Область</label><AppSelect v-model="form.region" :options="regionOptions" placeholder="—" /></div>
           <div><label class="label">Город</label><AppSelect v-model="form.city" :options="cityOptions" placeholder="—" /></div>
-          <div><label class="label">Храм / община</label>
-            <AppSelect v-model="form.temple_id" :options="templeOptions" placeholder="—" />
-          </div>
           <div><label class="label">Дата рождения</label><AppDatePicker v-model="form.date_of_birth" /></div>
         </div>
       </section>

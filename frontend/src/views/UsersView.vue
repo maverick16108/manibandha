@@ -3,6 +3,7 @@ import { ref, reactive, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import client from '../api/client'
 import AppSelect from '../components/AppSelect.vue'
 import AppSkeleton from '../components/AppSkeleton.vue'
+import { confirmDialog } from '../composables/confirm'
 import { ROLE_LABELS } from '../lib/format'
 
 const roleOptions = Object.entries(ROLE_LABELS).map(([value, label]) => ({ value, label }))
@@ -64,7 +65,7 @@ async function save() {
 }
 
 async function remove(u) {
-  if (!confirm(`Удалить пользователя ${u.full_name}?`)) return
+  if (!(await confirmDialog({ message: `Удалить пользователя ${u.full_name}?` }))) return
   await client.delete(`/users/${u.id}`)
   await load()
 }

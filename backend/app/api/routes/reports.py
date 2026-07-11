@@ -19,7 +19,7 @@ from app.api.deps import get_current_user, scope_disciple_query
 from app.core.database import get_db
 from app.core.enums import InitiationStatus
 from app.models import Disciple, User
-from app.schemas.report import CountByKey, ReportSummary
+from app.schemas.report import CountByKey, ReportSummary, TimelinePoint
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
@@ -128,10 +128,33 @@ def summary(db: Session = Depends(get_db), user: User = Depends(get_current_user
     by_temple = [CountByKey(key=(temple_names.get(tid, "—") if tid else "—"), count=n) for tid, n in by_temple_rows]
 
     ready = scope_disciple_query(db.query(Disciple), user).filter(Disciple.ready_for_initiation.is_(True)).count()
+    ready_pr = scope_disciple_query(db.query(Disciple), user).filter(Disciple.ready_for_pranama.is_(True)).count()
 
     return ReportSummary(
-        total=total, by_status=by_status, by_country=by_country, by_temple=by_temple, ready_for_initiation=ready
+        total=total, by_status=by_status, by_country=by_country, by_temple=by_temple,
+        ready_for_pranama=ready_pr, ready_for_initiation=ready,
     )
+
+
+@router.get("/timeline", response_model=list[TimelinePoint])
+def timeline(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """Сколько учеников получили пранаму / харинаму / брахман по месяцам."""
+    rows = scope_disciple_query(
+        db.query(Disciple.pranama_date, Disciple.harinama_date, Disciple.brahman_date), user
+    ).all()
+    buckets: dict[str, dict[str, int]] = {}
+
+    def add(dt, kind):
+        if dt:
+            key = f"{dt.year:04d}-{dt.month:02d}"
+            buckets.setdefault(key, {"pranama": 0, "harinama": 0, "brahman": 0})[kind] += 1
+
+    for pr, ha, br in rows:
+        add(pr, "pranama")
+        add(ha, "harinama")
+        add(br, "brahman")
+
+    return [TimelinePoint(period=k, **buckets[k]) for k in sorted(buckets)]
 
 
 @router.get("/group", response_model=list[CountByKey])

@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
 import { useRouter, RouterLink } from 'vue-router'
 import client from '../api/client'
 import PublicShell from '../components/PublicShell.vue'
@@ -49,6 +49,19 @@ function nextMonth() { let { y, m } = cursor.value; m++; if (m > 12) { m = 1; y+
 function isToday(d) { return d && cursor.value.y === today.getFullYear() && cursor.value.m === today.getMonth() + 1 && d === today.getDate() }
 function openEvent(id) { router.push({ name: 'public-event', params: { id }, query: { from: 'calendar' } }) }
 
+// тап по дню на мобиле — прокрутить к событию в списке ниже и подсветить
+const highlightId = ref(null)
+function focusDay(y, m, d) {
+  const evs = eventsOnDay(y, m, d)
+  if (!evs.length) return
+  const first = evs[0]
+  highlightId.value = first.id
+  nextTick(() => {
+    document.getElementById('ev-' + first.id)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  })
+  setTimeout(() => { if (highlightId.value === first.id) highlightId.value = null }, 1800)
+}
+
 onMounted(async () => {
   cursor.value = { y: today.getFullYear(), m: today.getMonth() + 1 }
   try { const { data } = await client.get('/events/public'); events.value = data } catch { /* пусто */ }
@@ -90,10 +103,11 @@ onMounted(async () => {
               <button v-for="e in eventsOnDay(cursor.y, cursor.m, d)" :key="e.id"
                       class="mb-0.5 hidden w-full whitespace-normal break-words rounded bg-saffron-500/15 px-1 py-0.5 text-left text-[11px] leading-tight text-saffron-800 hover:bg-saffron-500/25 sm:block"
                       @click="openEvent(e.id)">{{ e.title }}</button>
-              <!-- мобильный: точки -->
-              <div v-if="eventsOnDay(cursor.y, cursor.m, d).length" class="flex flex-wrap gap-1 sm:hidden">
-                <span v-for="e in eventsOnDay(cursor.y, cursor.m, d)" :key="'dot' + e.id" class="h-1.5 w-1.5 rounded-full bg-saffron-500"></span>
-              </div>
+              <!-- мобильный: точки (тап → к событию в списке) -->
+              <button v-if="eventsOnDay(cursor.y, cursor.m, d).length" class="flex w-full flex-wrap gap-1 pt-0.5 sm:hidden"
+                      @click="focusDay(cursor.y, cursor.m, d)">
+                <span v-for="e in eventsOnDay(cursor.y, cursor.m, d)" :key="'dot' + e.id" class="h-2 w-2 rounded-full bg-saffron-500"></span>
+              </button>
             </template>
           </div>
         </template>
@@ -102,8 +116,9 @@ onMounted(async () => {
 
     <!-- список событий месяца -->
     <div v-if="monthEvents.length" class="mt-6 space-y-2">
-      <button v-for="e in monthEvents" :key="e.id"
-              class="flex w-full items-center gap-4 rounded-xl border border-parchment-200 bg-white px-4 py-3 text-left transition hover:border-saffron-300 hover:shadow-sm"
+      <button v-for="e in monthEvents" :key="e.id" :id="'ev-' + e.id"
+              class="flex w-full items-center gap-4 rounded-xl border bg-white px-4 py-3 text-left transition hover:border-saffron-300 hover:shadow-sm"
+              :class="highlightId === e.id ? 'border-saffron-400 ring-2 ring-saffron-300' : 'border-parchment-200'"
               @click="openEvent(e.id)">
         <span class="inline-flex w-28 shrink-0 items-center gap-1.5 text-sm font-medium text-saffron-700">
           <AppIcon name="calendar" :size="15" /> {{ range(e) }}

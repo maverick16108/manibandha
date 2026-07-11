@@ -76,17 +76,17 @@ const service = [
       <img :src="hero" alt="Манибандха Прабху" class="photo-bw absolute inset-0 h-full w-full object-cover object-[52%_14%]" />
       <!-- bottom gradient (mobile legibility) + left gradient (desktop, text sits right) -->
       <div class="absolute inset-0 bg-gradient-to-t from-ink-900 via-ink-900/65 to-ink-900/40 lg:via-ink-900/40 lg:to-ink-900/30"></div>
-      <div class="absolute inset-0 hidden lg:block bg-gradient-to-l from-ink-900/85 via-ink-900/25 to-transparent"></div>
+      <div class="absolute inset-0 hidden md:block bg-gradient-to-l from-ink-900/85 via-ink-900/25 to-transparent"></div>
 
       <div class="relative z-10 mx-auto flex min-h-[100svh] max-w-6xl flex-col justify-end px-5 pb-[12vh] pt-24 text-white sm:px-6 lg:justify-end lg:pb-[15vh]">
-        <div class="max-w-xl text-center lg:ml-auto lg:text-right">
+        <div class="max-w-xl text-center md:ml-auto md:text-right">
           <p class="mb-3 text-xs uppercase tracking-[0.3em] text-parchment-200/90 sm:mb-4 sm:text-sm">Его Милость</p>
           <h1 class="font-display text-4xl font-semibold leading-tight sm:text-6xl lg:text-7xl">Манибандха Прабху</h1>
           <p class="mt-4 font-serif text-base italic text-parchment-100/90 sm:mt-6 sm:text-lg lg:text-xl">
             Инициирующий духовный учитель Международного общества сознания Кришны (ИСККОН),
             наставник и проводник по пути преданного служения.
           </p>
-          <div class="mt-10 flex flex-wrap justify-center gap-3 lg:justify-end">
+          <div class="mt-10 flex flex-wrap justify-center gap-3 md:justify-end">
             <a href="#about" class="btn-primary">О духовном учителе</a>
             <a v-if="events.length" href="#schedule" class="btn border border-white/50 text-white hover:bg-white/10">Расписание</a>
           </div>

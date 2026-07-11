@@ -17,7 +17,7 @@ def _accessible(db: Session, user: User):
     if user.role == Role.guru:
         return q
     if user.role == Role.curator:
-        return q.filter(Thread.kind == ThreadKind.report, Disciple.mentor_id == user.id)
+        return q.filter(Thread.kind == ThreadKind.report, Disciple.mentor_id == (user.disciple_id or -1))
     if user.role == Role.student:
         return q.filter(Thread.disciple_id == (user.disciple_id or -1))
     return q.filter(Thread.id < 0)  # секретарь и прочие — нет доступа

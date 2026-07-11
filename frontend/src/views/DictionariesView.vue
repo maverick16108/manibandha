@@ -6,7 +6,6 @@ const tabs = [
   { key: 'cities', title: 'Города', endpoint: '/cities', withCountry: true },
   { key: 'regions', title: 'Области', endpoint: '/regions', withCountry: false },
   { key: 'countries', title: 'Страны', endpoint: '/countries', withCountry: false },
-  { key: 'mentors', title: 'Наставники', endpoint: '/mentors', withCountry: false },
 ]
 const active = ref('cities')
 </script>

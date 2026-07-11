@@ -42,11 +42,16 @@ const service = [
   <div class="min-h-screen bg-parchment-100 text-ink-800">
     <!-- Top bar -->
     <header class="absolute inset-x-0 top-0 z-20">
-      <div class="mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
-        <span class="flex items-center gap-2 font-display text-xl tracking-wide text-white drop-shadow">
-          <AppIcon name="lotus" :size="24" class="text-saffron-400" /> Манибандха Прабху
+      <div class="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-4 sm:px-6">
+        <span class="flex items-center gap-2.5 text-white drop-shadow">
+          <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-saffron-400 to-saffron-600 text-white shadow-lg ring-1 ring-white/30">
+            <AppIcon name="lotus-solid" :size="30" />
+          </span>
+          <span class="font-script text-2xl font-bold leading-none sm:text-3xl">Манибандха</span>
         </span>
-        <RouterLink to="/login" class="btn bg-white/90 text-ink-800 hover:bg-white">Войти в кабинет</RouterLink>
+        <RouterLink to="/login" class="btn whitespace-nowrap bg-white/90 text-ink-800 hover:bg-white">
+          <span class="sm:hidden">Войти</span><span class="hidden sm:inline">Войти в кабинет</span>
+        </RouterLink>
       </div>
     </header>
 
@@ -54,14 +59,14 @@ const service = [
     <section class="relative min-h-[100svh] overflow-hidden">
       <img :src="hero" alt="Манибандха Прабху" class="photo-bw absolute inset-0 h-full w-full object-cover object-[52%_20%]" />
       <!-- bottom gradient (mobile legibility) + left gradient (desktop, text sits right) -->
-      <div class="absolute inset-0 bg-gradient-to-t from-ink-900/95 via-ink-900/40 to-ink-900/35"></div>
+      <div class="absolute inset-0 bg-gradient-to-t from-ink-900 via-ink-900/65 to-ink-900/40 lg:via-ink-900/40 lg:to-ink-900/30"></div>
       <div class="absolute inset-0 hidden lg:block bg-gradient-to-l from-ink-900/85 via-ink-900/25 to-transparent"></div>
 
-      <div class="relative z-10 mx-auto flex min-h-[100svh] max-w-6xl flex-col justify-end px-6 pb-24 pt-28 text-white lg:justify-center lg:pb-0">
+      <div class="relative z-10 mx-auto flex min-h-[100svh] max-w-6xl flex-col justify-end px-5 pb-14 pt-24 text-white sm:px-6 lg:justify-center lg:pb-0">
         <div class="max-w-xl text-center lg:ml-auto lg:text-right">
-          <p class="mb-4 text-sm uppercase tracking-[0.3em] text-parchment-200/90">Его Милость</p>
-          <h1 class="font-display text-5xl font-semibold leading-tight sm:text-7xl">Манибандха Прабху</h1>
-          <p class="mt-6 font-serif text-lg italic text-parchment-100/90 sm:text-xl">
+          <p class="mb-3 text-xs uppercase tracking-[0.3em] text-parchment-200/90 sm:mb-4 sm:text-sm">Его Милость</p>
+          <h1 class="font-display text-4xl font-semibold leading-tight sm:text-6xl lg:text-7xl">Манибандха Прабху</h1>
+          <p class="mt-4 font-serif text-base italic text-parchment-100/90 sm:mt-6 sm:text-lg lg:text-xl">
             Инициирующий духовный учитель Международного общества сознания Кришны (ИСККОН),
             наставник и проводник по пути преданного служения.
           </p>
@@ -180,8 +185,11 @@ const service = [
     <!-- Footer -->
     <footer class="bg-ink-900 text-parchment-200/70">
       <div class="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-6 py-8 sm:flex-row">
-        <span class="flex items-center gap-2 font-display text-lg text-white">
-          <AppIcon name="lotus" :size="20" class="text-saffron-400" /> Манибандха Прабху
+        <span class="flex items-center gap-2.5 text-white">
+          <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-saffron-400 to-saffron-600 text-white shadow">
+            <AppIcon name="lotus-solid" :size="26" />
+          </span>
+          <span class="font-script text-2xl font-bold">Манибандха</span>
         </span>
         <span class="text-sm">© {{ new Date().getFullYear() }} · Служение и ученическая преемственность</span>
         <RouterLink to="/login" class="text-sm text-saffron-400 hover:text-saffron-500">Кабинет учеников →</RouterLink>

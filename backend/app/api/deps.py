@@ -69,7 +69,8 @@ def scope_disciple_query(query, user: User):
         return query
     if user.role == Role.curator:
         from app.models import Disciple
-        return query.filter(Disciple.mentor_id == user.id)
+        # наставник видит учеников, чей наставник — его анкета
+        return query.filter(Disciple.mentor_id == (user.disciple_id or -1))
     if user.role == Role.student:
         from app.models import Disciple
         return query.filter(Disciple.id == (user.disciple_id or -1))

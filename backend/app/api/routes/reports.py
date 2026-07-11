@@ -91,7 +91,7 @@ def _group_dimension(db, key: str):
     if key == "city":
         return Disciple.city, lambda v: v or "—"
     if key == "mentor":
-        names = {u.id: u.full_name for u in db.query(User).all()}
+        names = {d.id: (d.spiritual_name or d.material_name) for d in db.query(Disciple).all()}
         return Disciple.mentor_id, lambda v: names.get(v, "—") if v else "—"
     # default: temple
     tnames = {t.id: t.name for t in db.query(Temple).all()}
@@ -186,7 +186,7 @@ _COLUMNS = [
     ("Область", lambda d: d.region or ""),
     ("Город", lambda d: d.city or ""),
     ("Храм", lambda d: d.temple.name if d.temple else ""),
-    ("Наставник", lambda d: d.mentor.full_name if d.mentor else ""),
+    ("Наставник", lambda d: d.mentor.name if d.mentor else ""),
     ("Телефон", lambda d: d.phone or ""),
     ("Email", lambda d: d.email or ""),
 ]

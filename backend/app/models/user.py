@@ -27,4 +27,3 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     disciple = relationship("Disciple", foreign_keys=[disciple_id])
-    mentored = relationship("Disciple", back_populates="mentor", foreign_keys="Disciple.mentor_id")

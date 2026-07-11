@@ -24,9 +24,18 @@ function monthLabel(ym) {
   const [y, m] = (ym || '').split('-')
   return m ? `${MONTHS[+m]} ${y}` : ym
 }
+// какое событие произошло у ученика в выбранном месяце (для фильтра по месяцу)
+function eventLabel(d) {
+  const m = filters.event_month
+  if (!m) return ''
+  if (d.harinama_date && d.harinama_date.startsWith(m)) return 'Харинама'
+  if (d.brahman_date && d.brahman_date.startsWith(m)) return 'Брахман'
+  if (d.pranama_date && d.pranama_date.startsWith(m)) return 'Пранама-мантра'
+  return ''
+}
 
 const statusOptions = [{ value: '', label: 'Все статусы' }, ...STATUS_ORDER.map((s) => ({ value: s, label: STATUS_LABELS[s] }))]
-const mentorOptions = computed(() => [{ value: '', label: 'Все наставники' }, ...mentors.value.map((m) => ({ value: m.id, label: m.full_name }))])
+const mentorOptions = computed(() => [{ value: '', label: 'Все наставники' }, ...mentors.value.map((m) => ({ value: m.id, label: m.spiritual_name || m.material_name }))])
 const regionOptions = computed(() => [{ value: '', label: 'Все области' }, ...regions.value.map((r) => ({ value: r.name, label: r.name }))])
 const cityOptions = computed(() => [{ value: '', label: 'Все города' }, ...cities.value.map((c) => ({ value: c.name, label: c.name }))])
 
@@ -90,9 +99,9 @@ onMounted(async () => {
   // seed filters from URL query (deep links from the dashboard)
   for (const k of Object.keys(filters)) if (route.query[k] != null) filters[k] = String(route.query[k])
   const [m, r, c] = await Promise.all([
-    client.get('/users/mentors'), client.get('/regions'), client.get('/cities'),
+    client.get('/disciples', { params: { is_mentor: true, limit: 500 } }), client.get('/regions'), client.get('/cities'),
   ])
-  mentors.value = m.data
+  mentors.value = m.data.items
   regions.value = r.data
   cities.value = c.data
   await load()
@@ -179,9 +188,12 @@ onMounted(async () => {
                     </span>
                   </RouterLink>
                 </td>
-                <td class="px-4 py-3"><span class="badge" :class="STATUS_BADGE[d.initiation_status]">{{ STATUS_LABELS[d.initiation_status] }}</span></td>
+                <td class="px-4 py-3">
+                  <span class="badge" :class="STATUS_BADGE[d.initiation_status]">{{ STATUS_LABELS[d.initiation_status] }}</span>
+                  <span v-if="eventLabel(d)" class="badge ml-1 bg-orange-100 text-orange-800">{{ eventLabel(d) }}</span>
+                </td>
                 <td class="px-4 py-3 text-ink-700">{{ d.region || d.country || '—' }}<span v-if="d.city">, {{ d.city }}</span></td>
-                <td class="px-4 py-3 text-ink-700">{{ d.mentor?.full_name || '—' }}</td>
+                <td class="px-4 py-3 text-ink-700">{{ d.mentor?.name || '—' }}</td>
               </tr>
               <tr v-if="!items.length"><td colspan="4" class="px-4 py-10 text-center text-ink-700/50">Ученики не найдены</td></tr>
             </template>

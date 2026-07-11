@@ -5,7 +5,12 @@ from pydantic import BaseModel, ConfigDict
 from app.core.enums import InitiationStatus, MaritalStatus
 from app.schemas.checklist import ChecklistItemOut
 from app.schemas.temple import TempleOut
-from app.schemas.user import UserBrief
+
+
+class MentorBrief(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    name: str
 
 
 class DiscipleBase(BaseModel):
@@ -35,6 +40,7 @@ class DiscipleBase(BaseModel):
     current_activity: str | None = None
 
     mentor_id: int | None = None
+    is_mentor: bool = False
     recommended_by: str | None = None
     application_date: date | None = None
     ready_for_pranama: bool = False
@@ -68,6 +74,7 @@ class DiscipleUpdate(BaseModel):
     seva: str | None = None
     current_activity: str | None = None
     mentor_id: int | None = None
+    is_mentor: bool | None = None
     recommended_by: str | None = None
     application_date: date | None = None
     ready_for_pranama: bool | None = None
@@ -86,8 +93,12 @@ class DiscipleListItem(BaseModel):
     region: str | None
     city: str | None
     initiation_status: InitiationStatus
+    is_mentor: bool = False
+    pranama_date: date | None = None
+    harinama_date: date | None = None
+    brahman_date: date | None = None
     temple: TempleOut | None = None
-    mentor: UserBrief | None = None
+    mentor: MentorBrief | None = None
 
 
 class DiscipleOut(DiscipleBase):
@@ -96,7 +107,7 @@ class DiscipleOut(DiscipleBase):
     created_at: datetime
     updated_at: datetime
     temple: TempleOut | None = None
-    mentor: UserBrief | None = None
+    mentor: MentorBrief | None = None
     checklist: list[ChecklistItemOut] = []
 
 

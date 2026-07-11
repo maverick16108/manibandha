@@ -73,9 +73,10 @@ const maxCount = () => Math.max(1, ...groups.value.map((g) => g.count))
 
 onMounted(async () => {
   const [m, r, c, co] = await Promise.all([
-    client.get('/users/mentors'), client.get('/regions'), client.get('/cities'), client.get('/countries'),
+    client.get('/disciples', { params: { is_mentor: true, limit: 500 } }),
+    client.get('/regions'), client.get('/cities'), client.get('/countries'),
   ])
-  mentors.value = [{ value: '', label: 'Все наставники' }, ...m.data.map((x) => ({ value: x.id, label: x.full_name }))]
+  mentors.value = [{ value: '', label: 'Все наставники' }, ...m.data.items.map((x) => ({ value: x.id, label: x.spiritual_name || x.material_name }))]
   regionsOpt.value = [{ value: '', label: 'Все области' }, ...r.data.map((x) => ({ value: x.name, label: x.name }))]
   citiesOpt.value = [{ value: '', label: 'Все города' }, ...c.data.map((x) => ({ value: x.name, label: x.name }))]
   countriesOpt.value = [{ value: '', label: 'Все страны' }, ...co.data.map((x) => ({ value: x.name, label: x.name }))]

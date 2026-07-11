@@ -39,6 +39,7 @@ def list_disciples(
     mentor_id: int | None = None,
     ready: bool | None = None,
     ready_pranama: bool | None = None,
+    is_mentor: bool | None = Query(None, description="только наставники"),
     event_month: str | None = Query(None, description="YYYY-MM — событие (пранама/инициация) в этом месяце"),
     sort: str = Query("material_name", description="material_name|spiritual_name|created_at|initiation_status"),
     skip: int = 0,
@@ -65,6 +66,8 @@ def list_disciples(
         query = query.filter(Disciple.ready_for_initiation.is_(ready))
     if ready_pranama is not None:
         query = query.filter(Disciple.ready_for_pranama.is_(ready_pranama))
+    if is_mentor is not None:
+        query = query.filter(Disciple.is_mentor.is_(is_mentor))
     if event_month:
         try:
             y, m = map(int, event_month.split("-"))

@@ -45,8 +45,9 @@ class Disciple(Base):
     seva: Mapped[str | None] = mapped_column(Text, nullable=True)
     current_activity: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    # Pipeline (aspirant path)
-    mentor_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    # Наставник — это тоже ученик с признаком is_mentor; mentor_id ссылается на него
+    is_mentor: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
+    mentor_id: Mapped[int | None] = mapped_column(ForeignKey("disciples.id", ondelete="SET NULL"), nullable=True, index=True)
     recommended_by: Mapped[str | None] = mapped_column(String(255), nullable=True)  # наставник / президент храма
     application_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     ready_for_pranama: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
@@ -57,6 +58,10 @@ class Disciple(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
+    @property
+    def name(self) -> str:
+        return self.spiritual_name or self.material_name
+
     temple = relationship("Temple", back_populates="disciples")
-    mentor = relationship("User", back_populates="mentored", foreign_keys=[mentor_id])
+    mentor = relationship("Disciple", remote_side=[id], foreign_keys=[mentor_id])
     checklist = relationship("ChecklistItem", back_populates="disciple", cascade="all, delete-orphan")

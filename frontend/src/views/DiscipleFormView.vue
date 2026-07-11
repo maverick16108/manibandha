@@ -23,7 +23,11 @@ const mentors = ref([])
 const cities = ref([])
 const regions = ref([])
 const countries = ref([])
-const mentorOptions = computed(() => [{ value: '', label: '—' }, ...mentors.value.map((m) => ({ value: m.id, label: m.full_name }))])
+// наставники — это ученики с признаком is_mentor (кроме самого себя)
+const mentorOptions = computed(() => [
+  { value: '', label: '—' },
+  ...mentors.value.filter((m) => String(m.id) !== String(id.value)).map((m) => ({ value: m.id, label: m.spiritual_name || m.material_name })),
+])
 // keep the disciple's existing value even if not yet in the dictionary
 function dictOptions(list, current) {
   const names = list.map((x) => x.name)
@@ -46,7 +50,7 @@ const form = reactive({
   marital_status: '', date_of_birth: '',
   initiation_status: 'aspirant', pranama_date: '', harinama_date: '', harinama_name: '', brahman_date: '',
   seva: '', current_activity: '',
-  mentor_id: '', recommended_by: '', application_date: '', ready_for_pranama: false, ready_for_initiation: false,
+  mentor_id: '', is_mentor: false, recommended_by: '', application_date: '', ready_for_pranama: false, ready_for_initiation: false,
   notes: '',
 })
 
@@ -79,9 +83,10 @@ async function save() {
 
 onMounted(async () => {
   const [m, c, r, co] = await Promise.all([
-    client.get('/users/mentors'), client.get('/cities'), client.get('/regions'), client.get('/countries'),
+    client.get('/disciples', { params: { is_mentor: true, limit: 500 } }),
+    client.get('/cities'), client.get('/regions'), client.get('/countries'),
   ])
-  mentors.value = m.data
+  mentors.value = m.data.items
   cities.value = c.data
   regions.value = r.data
   countries.value = co.data
@@ -167,6 +172,9 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
           <div><label class="label">Кто рекомендовал</label><input v-model="form.recommended_by" class="input" placeholder="Наставник / президент храма" /></div>
           <div><label class="label">Дата заявки</label><AppDatePicker v-model="form.application_date" /></div>
           <div class="flex flex-col justify-end gap-2">
+            <label class="flex items-center gap-2 text-sm text-ink-700">
+              <input type="checkbox" v-model="form.is_mentor" /> Является наставником
+            </label>
             <label class="flex items-center gap-2 text-sm text-ink-700">
               <input type="checkbox" v-model="form.ready_for_pranama" /> Готов(а) к пранаме
             </label>

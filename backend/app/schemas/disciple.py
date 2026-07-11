@@ -37,6 +37,7 @@ class DiscipleBase(BaseModel):
     mentor_id: int | None = None
     recommended_by: str | None = None
     application_date: date | None = None
+    ready_for_pranama: bool = False
     ready_for_initiation: bool = False
 
     notes: str | None = None
@@ -69,6 +70,7 @@ class DiscipleUpdate(BaseModel):
     mentor_id: int | None = None
     recommended_by: str | None = None
     application_date: date | None = None
+    ready_for_pranama: bool | None = None
     ready_for_initiation: bool | None = None
     notes: str | None = None
 

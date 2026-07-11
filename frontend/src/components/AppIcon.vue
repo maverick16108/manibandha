@@ -55,6 +55,11 @@ defineProps({
       <path d="M12 6.6V19.7" />
     </template>
 
+    <!-- menu (burger) -->
+    <template v-else-if="name === 'menu'">
+      <path d="M4 7h16M4 12h16M4 17h16" />
+    </template>
+
     <!-- calendar -->
     <template v-else-if="name === 'calendar'">
       <rect x="3.5" y="5" width="17" height="15.5" rx="2" />

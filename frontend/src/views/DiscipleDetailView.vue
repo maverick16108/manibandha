@@ -77,6 +77,7 @@ onMounted(async () => {
           <p v-if="d.spiritual_name" class="text-ink-700/70">{{ d.material_name }}</p>
           <div class="mt-3 flex flex-wrap items-center gap-2">
             <span class="badge" :class="STATUS_BADGE[d.initiation_status]">{{ STATUS_LABELS[d.initiation_status] }}</span>
+            <span v-if="d.ready_for_pranama" class="badge bg-orange-100 text-orange-800">Готов к пранаме</span>
             <span v-if="d.ready_for_initiation" class="badge bg-saffron-500/15 text-saffron-700">Готов к инициации</span>
           </div>
         </div>

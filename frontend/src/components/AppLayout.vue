@@ -56,7 +56,9 @@ function logout() {
     <!-- Main -->
     <div class="lg:pl-64">
       <header class="sticky top-0 z-10 flex h-16 items-center justify-between border-b border-parchment-200 bg-parchment-50/90 px-4 backdrop-blur sm:px-6">
-        <button class="text-ink-700 lg:hidden" @click="sidebarOpen = true">☰</button>
+        <button class="-ml-1 rounded-lg p-2 text-ink-800 hover:bg-parchment-200 lg:hidden" @click="sidebarOpen = true">
+          <AppIcon name="menu" :size="28" :stroke="2" />
+        </button>
         <div class="flex-1"></div>
         <div class="flex items-center gap-3">
           <div class="text-right">

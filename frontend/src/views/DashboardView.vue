@@ -15,7 +15,7 @@ const loading = ref(true)
 
 // Sequential warm ramp for the ordered initiation stages (кандидат → брахман).
 const STATUS_COLORS = {
-  aspirant: '#e6b15c', pranama: '#d98a3d', recommended: '#c8742a', harinama: '#a4551b', brahman: '#6d3f16',
+  recommended: '#e6b15c', aspirant: '#d98a3d', pranama: '#c8742a', harinama: '#a4551b', brahman: '#6d3f16',
 }
 
 const statusData = computed(() => {
@@ -108,7 +108,7 @@ onMounted(async () => {
               <p class="text-sm text-ink-700/60">Топ регионов</p>
             </div>
           </div>
-          <BarList :data="regions" color="#6f7a5a" clickable @select="(d) => go({ region: d.label })" />
+          <BarList :data="regions" color="#6f7a5a" wide-labels clickable @select="(d) => go({ region: d.label })" />
         </div>
 
         <!-- Top cities -->

@@ -32,6 +32,7 @@ def list_disciples(
     status_: InitiationStatus | None = Query(None, alias="status"),
     country: str | None = None,
     region: str | None = None,
+    city: str | None = None,
     temple_id: int | None = None,
     mentor_id: int | None = None,
     ready: bool | None = None,
@@ -50,6 +51,8 @@ def list_disciples(
         query = query.filter(Disciple.country.ilike(country))
     if region:
         query = query.filter(Disciple.region.ilike(region))
+    if city:
+        query = query.filter(Disciple.city.ilike(city))
     if temple_id:
         query = query.filter(Disciple.temple_id == temple_id)
     if mentor_id:

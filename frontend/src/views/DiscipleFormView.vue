@@ -41,7 +41,7 @@ const form = reactive({
   marital_status: '', date_of_birth: '',
   initiation_status: 'aspirant', pranama_date: '', harinama_date: '', harinama_name: '', brahman_date: '',
   seva: '', current_activity: '',
-  mentor_id: '', recommended_by: '', application_date: '', ready_for_initiation: false,
+  mentor_id: '', recommended_by: '', application_date: '', ready_for_pranama: false, ready_for_initiation: false,
   notes: '',
 })
 
@@ -147,7 +147,10 @@ onMounted(async () => {
           </div>
           <div><label class="label">Кто рекомендовал</label><input v-model="form.recommended_by" class="input" placeholder="Наставник / президент храма" /></div>
           <div><label class="label">Дата заявки</label><AppDatePicker v-model="form.application_date" /></div>
-          <div class="flex items-end">
+          <div class="flex flex-col justify-end gap-2">
+            <label class="flex items-center gap-2 text-sm text-ink-700">
+              <input type="checkbox" v-model="form.ready_for_pranama" /> Готов(а) к пранаме
+            </label>
             <label class="flex items-center gap-2 text-sm text-ink-700">
               <input type="checkbox" v-model="form.ready_for_initiation" /> Готов(а) к инициации
             </label>

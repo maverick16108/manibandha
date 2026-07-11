@@ -6,6 +6,7 @@ const props = defineProps({
   data: { type: Array, default: () => [] },
   color: { type: String, default: '#c8742a' }, // default single-series hue
   clickable: { type: Boolean, default: false },
+  wideLabels: { type: Boolean, default: false }, // wider, wrapping labels (long region names)
 })
 const emit = defineEmits(['select'])
 const max = computed(() => Math.max(1, ...props.data.map((d) => d.value)))
@@ -16,7 +17,8 @@ const max = computed(() => Math.max(1, ...props.data.map((d) => d.value)))
     <li v-for="(d, i) in data" :key="i" class="group flex items-center gap-3"
         :class="clickable && 'cursor-pointer rounded-md px-1 -mx-1 hover:bg-parchment-100'"
         @click="clickable && emit('select', d)">
-      <span class="w-32 shrink-0 truncate text-sm text-ink-700 sm:w-36" :title="d.label">{{ d.label }}</span>
+      <span class="shrink-0 text-ink-700" :title="d.label"
+            :class="wideLabels ? 'w-40 whitespace-normal text-xs leading-tight sm:w-52' : 'w-32 truncate text-sm sm:w-36'">{{ d.label }}</span>
       <div class="relative h-6 flex-1 overflow-hidden rounded bg-parchment-100">
         <div class="h-full rounded transition-[width] duration-500"
              :style="{ width: (d.value / max * 100) + '%', background: d.color || color }"

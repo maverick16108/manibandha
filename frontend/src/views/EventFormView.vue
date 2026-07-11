@@ -45,7 +45,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="mx-auto max-w-3xl">
+  <div class="mx-auto max-w-6xl">
     <h1 class="mb-6 font-display text-3xl font-semibold text-ink-900">{{ isEdit ? 'Изменить событие' : 'Новое событие' }}</h1>
     <form class="card space-y-4 p-6" @submit.prevent="save">
       <div><label class="label">Название *</label><input v-model="form.title" class="input" required autofocus /></div>

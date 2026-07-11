@@ -14,10 +14,11 @@ const nav = [
   { name: 'dashboard', label: 'Обзор', icon: 'overview' },
   { name: 'calendar', label: 'Календарь', icon: 'calendar' },
   { name: 'disciples', label: 'Ученики', icon: 'disciples' },
-  { name: 'questions', label: 'Вопросы', icon: 'chat', roles: ['guru', 'student'] },
-  { name: 'service-reports', label: 'Отчёты', icon: 'reports', roles: ['guru', 'curator', 'student'] },
+  { name: 'questions', label: 'Вопросы', icon: 'chat' },
+  { name: 'service-reports', label: 'Отчёты', icon: 'reports' },
   { name: 'dictionaries', label: 'Справочники', icon: 'pin' },
-  { name: 'users', label: 'Пользователи', icon: 'users', roles: ['guru', 'secretary'] },
+  { name: 'users', label: 'Пользователи', icon: 'users' },
+  { name: 'roles', label: 'Роли', icon: 'shield', guruOnly: true },
 ]
 
 // top-level sections (nav) — everything else is a sub-page, so show a back button
@@ -29,9 +30,8 @@ function goBack() {
 }
 
 function canShow(item) {
-  if (item.guruOnly && !auth.isGuru) return false
-  if (item.roles && !item.roles.includes(auth.user?.role)) return false
-  return true
+  if (item.guruOnly) return auth.isGuru
+  return auth.canSee(item.name)
 }
 
 function logout() {

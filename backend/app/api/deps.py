@@ -53,6 +53,18 @@ def staff_user(user: User = Depends(get_current_user)) -> User:
     return user
 
 
+def require_section(section: str):
+    """Проверка, что роль пользователя имеет доступ к разделу (гуру — всегда)."""
+
+    def _checker(user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> User:
+        from app.core import permissions as perm
+        if not perm.is_allowed(db, user.role, section):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Раздел недоступен для вашей роли")
+        return user
+
+    return _checker
+
+
 def can_view_disciples(user: User = Depends(get_current_user)) -> User:
     """Everyone authenticated may reach disciple endpoints; per-object scoping is
     applied inside the route (curator sees own, student sees self)."""

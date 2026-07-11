@@ -20,6 +20,13 @@ function openLb(i) { lightbox.value = i; document.body.style.overflow = 'hidden'
 function closeLb() { lightbox.value = -1; document.body.style.overflow = '' }
 function lbPrev() { lightbox.value = (lightbox.value - 1 + gallery.length) % gallery.length }
 function lbNext() { lightbox.value = (lightbox.value + 1) % gallery.length }
+// Свайп по фото на мобиле
+let touchX = 0
+function onTouchStart(e) { touchX = e.changedTouches[0].clientX }
+function onTouchEnd(e) {
+  const dx = e.changedTouches[0].clientX - touchX
+  if (Math.abs(dx) > 40) (dx < 0 ? lbNext : lbPrev)()
+}
 function onKey(e) {
   if (lightbox.value < 0) return
   if (e.key === 'Escape') closeLb()
@@ -42,10 +49,7 @@ const service = [
   <div class="min-h-screen bg-parchment-100 text-ink-800">
     <!-- Top bar -->
     <header class="absolute inset-x-0 top-0 z-20">
-      <div class="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-4 sm:px-6">
-        <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-saffron-400 to-saffron-600 text-white shadow-lg ring-1 ring-white/30">
-          <AppIcon name="lotus-solid" :size="32" />
-        </span>
+      <div class="mx-auto flex max-w-6xl items-center justify-end gap-3 px-4 py-4 sm:px-6">
         <RouterLink to="/login" class="btn whitespace-nowrap bg-white/90 text-ink-800 hover:bg-white">
           <span class="sm:hidden">Войти</span><span class="hidden sm:inline">Войти в кабинет</span>
         </RouterLink>
@@ -157,11 +161,11 @@ const service = [
           <button class="absolute right-5 top-5 flex h-11 w-11 items-center justify-center rounded-full text-white/80 hover:bg-white/10 hover:text-white" @click="closeLb">
             <AppIcon name="close" :size="24" />
           </button>
-          <button class="absolute left-3 flex h-12 w-12 items-center justify-center rounded-full text-white/80 hover:bg-white/10 hover:text-white sm:left-6" @click="lbPrev">
+          <button class="absolute left-3 z-10 flex h-12 w-12 items-center justify-center rounded-full bg-ink-900/50 text-white/90 backdrop-blur-sm hover:bg-ink-900/70 hover:text-white sm:left-6" @click="lbPrev">
             <AppIcon name="chevron" :size="28" class="rotate-90" />
           </button>
-          <img :src="gallery[lightbox]" alt="Манибандха Прабху" class="photo-bw max-h-[88vh] max-w-[92vw] rounded-lg object-contain shadow-2xl" />
-          <button class="absolute right-3 flex h-12 w-12 items-center justify-center rounded-full text-white/80 hover:bg-white/10 hover:text-white sm:right-6" @click="lbNext">
+          <img :src="gallery[lightbox]" alt="Манибандха Прабху" class="photo-bw max-h-[88vh] max-w-[92vw] touch-pan-y select-none rounded-lg object-contain shadow-2xl" @touchstart.passive="onTouchStart" @touchend.passive="onTouchEnd" />
+          <button class="absolute right-3 z-10 flex h-12 w-12 items-center justify-center rounded-full bg-ink-900/50 text-white/90 backdrop-blur-sm hover:bg-ink-900/70 hover:text-white sm:right-6" @click="lbNext">
             <AppIcon name="chevron" :size="28" class="-rotate-90" />
           </button>
           <div class="absolute bottom-5 text-sm text-white/60">{{ lightbox + 1 }} / {{ gallery.length }}</div>
@@ -182,12 +186,7 @@ const service = [
     <!-- Footer -->
     <footer class="bg-ink-900 text-parchment-200/70">
       <div class="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-6 py-8 sm:flex-row">
-        <span class="flex items-center gap-2.5 text-white">
-          <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-saffron-400 to-saffron-600 text-white shadow">
-            <AppIcon name="lotus-solid" :size="26" />
-          </span>
-          <span class="font-script text-2xl font-bold">Манибандха</span>
-        </span>
+        <span class="font-script text-2xl font-bold text-white">Манибандха</span>
         <span class="text-sm">© {{ new Date().getFullYear() }} · Служение и ученическая преемственность</span>
         <RouterLink to="/login" class="text-sm text-saffron-400 hover:text-saffron-500">Кабинет учеников →</RouterLink>
       </div>

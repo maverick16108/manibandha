@@ -5,6 +5,7 @@ export const useAuthStore = defineStore('auth', {
   state: () => ({
     token: localStorage.getItem('token') || null,
     user: null,
+    sections: {},
   }),
   getters: {
     isAuthenticated: (s) => !!s.token,
@@ -12,6 +13,8 @@ export const useAuthStore = defineStore('auth', {
     isGuru: (s) => s.user?.role === 'guru',
     isStaff: (s) => ['guru', 'secretary'].includes(s.user?.role),
     canEdit: (s) => ['guru', 'secretary', 'curator'].includes(s.user?.role),
+    // доступ к разделу по настройке ролей (гуру — всегда)
+    canSee: (s) => (section) => s.user?.role === 'guru' || !!s.sections[section],
   },
   actions: {
     async login(email, password) {
@@ -25,11 +28,18 @@ export const useAuthStore = defineStore('auth', {
       if (!this.token) return null
       const { data } = await client.get('/auth/me')
       this.user = data
+      try {
+        const { data: perm } = await client.get('/permissions/me')
+        this.sections = perm.sections || {}
+      } catch {
+        this.sections = {}
+      }
       return data
     },
     logout() {
       this.token = null
       this.user = null
+      this.sections = {}
       localStorage.removeItem('token')
     },
   },

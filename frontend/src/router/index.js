@@ -26,9 +26,13 @@ const routes = [
       { path: 'dictionaries', name: 'dictionaries', component: () => import('../views/DictionariesView.vue') },
       { path: 'reports', name: 'reports', component: () => import('../views/ReportsView.vue') },
       { path: 'users', name: 'users', component: () => import('../views/UsersView.vue'), meta: { staffOnly: true } },
+      { path: 'roles', name: 'roles', component: () => import('../views/RolesView.vue'), meta: { guruOnly: true } },
     ],
   },
 ]
+
+// Разделы, доступ к которым управляется ролями (имя маршрута = ключ раздела)
+const SECTION_ROUTES = ['dashboard', 'calendar', 'disciples', 'questions', 'service-reports', 'dictionaries', 'users']
 
 const router = createRouter({ history: createWebHistory(), routes })
 
@@ -52,14 +56,20 @@ router.beforeEach(async (to) => {
   if (to.meta.requiresAuth && !auth.isAuthenticated) {
     return { name: 'login', query: { redirect: to.fullPath } }
   }
+  // Куда отправлять, если раздел недоступен — первый разрешённый роли
+  const landing = () => SECTION_ROUTES.find((s) => auth.canSee(s)) || 'calendar'
   if (to.meta.guruOnly && !auth.isGuru) {
-    return { name: 'dashboard' }
+    return { name: landing() }
   }
   if (to.meta.staffOnly && !auth.isStaff) {
-    return { name: 'dashboard' }
+    return { name: landing() }
+  }
+  // Гейтинг разделов по настройке ролей
+  if (SECTION_ROUTES.includes(to.name) && !auth.canSee(to.name)) {
+    return { name: landing() }
   }
   if (to.name === 'login' && auth.isAuthenticated) {
-    return { name: 'dashboard' }
+    return { name: landing() }
   }
 })
 

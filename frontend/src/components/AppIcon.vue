@@ -124,6 +124,12 @@ defineProps({
       </g>
     </template>
 
+    <!-- shield (roles / доступ) -->
+    <template v-else-if="name === 'shield'">
+      <path d="M12 3 5 5.5v5.2c0 4.4 3 7.6 7 9.3 4-1.7 7-4.9 7-9.3V5.5L12 3Z" />
+      <path d="m9 11.5 2 2 4-4" />
+    </template>
+
     <!-- Медитация / логотип (lotus) -->
     <template v-else-if="name === 'lotus'">
       <path d="M12 13.4c-1.7-1.4-2.6-3.4-2.6-5.4 0-1.8 1-3.6 2.6-5 1.6 1.4 2.6 3.2 2.6 5 0 2-.9 4-2.6 5.4Z" />

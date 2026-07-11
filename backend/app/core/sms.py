@@ -1,6 +1,7 @@
 """Отправка SMS через SMSC.ru (тот же провайдер, что в проекте bid)."""
 import json
 import logging
+import socket
 import urllib.parse
 import urllib.request
 
@@ -8,6 +9,22 @@ from app.core.config import settings
 
 logger = logging.getLogger("sms")
 _SMSC_URL = "https://smsc.ru/sys/send.php"
+
+
+def _urlopen_ipv4(url: str, timeout: int = 12):
+    """Открыть URL, форсируя IPv4 — SMSC разрешает по IPv4-адресу сервера, а не IPv6."""
+    orig = socket.getaddrinfo
+
+    def v4_only(*args, **kwargs):
+        res = orig(*args, **kwargs)
+        filtered = [r for r in res if r[0] == socket.AF_INET]
+        return filtered or res
+
+    socket.getaddrinfo = v4_only
+    try:
+        return urllib.request.urlopen(url, timeout=timeout)
+    finally:
+        socket.getaddrinfo = orig
 
 
 def normalize_phone(raw: str) -> str:
@@ -33,7 +50,7 @@ def send_sms(phone: str, message: str) -> bool:
         "fmt": 3,  # JSON
     })
     try:
-        with urllib.request.urlopen(f"{_SMSC_URL}?{params}", timeout=10) as resp:
+        with _urlopen_ipv4(f"{_SMSC_URL}?{params}", timeout=12) as resp:
             data = json.loads(resp.read().decode("utf-8", "replace"))
         if isinstance(data, dict) and data.get("error"):
             logger.error("SMSC error: %s", data)

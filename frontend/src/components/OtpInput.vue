@@ -86,7 +86,7 @@ onMounted(() => focusBox(0))
 </script>
 
 <template>
-  <div class="flex gap-2 sm:gap-3">
+  <div class="flex justify-center gap-2 sm:gap-3">
     <input
       v-for="(box, i) in boxes"
       :key="i"

@@ -32,6 +32,31 @@ export const ROLE_LABELS = {
   student: 'Ученик',
 }
 
+// '+79048042771' -> '+7 904 804-27-71'
+export function formatPhone(p) {
+  const d = (p || '').replace(/\D/g, '')
+  if (d.length === 11 && (d[0] === '7' || d[0] === '8')) {
+    const n = d.slice(1)
+    return `+7 ${n.slice(0, 3)} ${n.slice(3, 6)}-${n.slice(6, 8)}-${n.slice(8, 10)}`
+  }
+  return p || ''
+}
+
+// raw phone string (possibly several numbers) -> [{ tel, display }] for tel: links
+export function phoneList(raw) {
+  if (!raw) return []
+  return raw
+    .split(/[,;]+/)
+    .map((t) => t.trim())
+    .filter(Boolean)
+    .map((t) => {
+      const d = t.replace(/\D/g, '')
+      const tel = d.length === 11 && (d[0] === '8' || d[0] === '7') ? '+7' + d.slice(1)
+        : d.length === 10 ? '+7' + d : t
+      return { tel, display: formatPhone(tel) }
+    })
+}
+
 export function formatDate(value) {
   if (!value) return '—'
   const d = new Date(value)

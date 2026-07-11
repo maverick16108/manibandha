@@ -5,7 +5,7 @@ import client from '../api/client'
 import { useAuthStore } from '../stores/auth'
 import AppSelect from '../components/AppSelect.vue'
 import AppSkeleton from '../components/AppSkeleton.vue'
-import { STATUS_LABELS, STATUS_ORDER, STATUS_BADGE, MARITAL_LABELS, formatDate } from '../lib/format'
+import { STATUS_LABELS, STATUS_ORDER, STATUS_BADGE, MARITAL_LABELS, formatDate, phoneList } from '../lib/format'
 
 const statusOptions = STATUS_ORDER.map((s) => ({ value: s, label: STATUS_LABELS[s] }))
 
@@ -92,7 +92,15 @@ onMounted(async () => {
       <div class="card p-6">
         <h3 class="mb-4 font-display text-xl text-ink-900">Данные</h3>
         <dl class="space-y-2 text-sm">
-          <div class="flex justify-between"><dt class="text-ink-700/60">Телефон</dt><dd class="text-ink-800">{{ d.phone || '—' }}</dd></div>
+          <div class="flex justify-between gap-4"><dt class="text-ink-700/60">Телефон</dt>
+            <dd class="text-right">
+              <template v-if="phoneList(d.phone).length">
+                <a v-for="(p, i) in phoneList(d.phone)" :key="i" :href="`tel:${p.tel}`"
+                   class="block text-saffron-700 hover:underline">{{ p.display }}</a>
+              </template>
+              <span v-else class="text-ink-800">—</span>
+            </dd>
+          </div>
           <div class="flex justify-between"><dt class="text-ink-700/60">Email</dt><dd class="text-ink-800">{{ d.email || '—' }}</dd></div>
           <div class="flex justify-between"><dt class="text-ink-700/60">Мессенджер</dt><dd class="text-ink-800">{{ d.messenger || '—' }}</dd></div>
           <div class="flex justify-between"><dt class="text-ink-700/60">Страна / город</dt><dd class="text-ink-800">{{ d.country || '—' }}<span v-if="d.city">, {{ d.city }}</span></dd></div>

@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+backend/.venv/
+backend/.env
+*.sqlite
+
+# Node / frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+frontend/.env.local
+
+# Guru photos — real images are managed outside git (per-environment)
+frontend/public/guru/*.jpg
+frontend/public/guru/*.jpeg
+frontend/public/guru/*.png
+
+# OS / editor
+.DS_Store
+*.log
+.idea/
+.vscode/

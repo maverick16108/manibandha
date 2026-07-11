@@ -1,0 +1,18 @@
+# Local development PostgreSQL for Manibandha.
+# Production runs Postgres natively on patita (see deploy/).
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: manibandha-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: manibandha
+      POSTGRES_PASSWORD: manibandha
+      POSTGRES_DB: manibandha
+    ports:
+      - "5432:5432"
+    volumes:
+      - manibandha_pg:/var/lib/postgresql/data
+
+volumes:
+  manibandha_pg:

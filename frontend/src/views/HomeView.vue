@@ -73,7 +73,7 @@ const service = [
 
     <!-- Hero -->
     <section class="relative min-h-[100svh] overflow-hidden">
-      <img :src="hero" alt="Манибандха Прабху" class="photo-bw absolute inset-0 h-full w-full object-cover object-[52%_8%]" />
+      <img :src="hero" alt="Манибандха Прабху" class="photo-bw absolute inset-0 h-full w-full object-cover object-[52%_14%]" />
       <!-- bottom gradient (mobile legibility) + left gradient (desktop, text sits right) -->
       <div class="absolute inset-0 bg-gradient-to-t from-ink-900 via-ink-900/65 to-ink-900/40 lg:via-ink-900/40 lg:to-ink-900/30"></div>
       <div class="absolute inset-0 hidden lg:block bg-gradient-to-l from-ink-900/85 via-ink-900/25 to-transparent"></div>

@@ -12,15 +12,25 @@ router = APIRouter(prefix="/threads", tags=["threads"])
 
 
 def _accessible(db: Session, user: User):
-    """Ветки, доступные пользователю по роли."""
+    """Ветки, доступные пользователю по правам-действиям."""
+    from sqlalchemy import and_, or_
+    from app.core.capabilities import user_capabilities
+
+    caps = user_capabilities(db, user)
+    own = user.disciple_id or -1
     q = db.query(Thread).join(Disciple, Thread.disciple_id == Disciple.id)
-    if user.role == Role.guru:
-        return q
-    if user.role == Role.curator:
-        return q.filter(Thread.kind == ThreadKind.report, Disciple.mentor_id == (user.disciple_id or -1))
-    if user.role == Role.student:
-        return q.filter(Thread.disciple_id == (user.disciple_id or -1))
-    return q.filter(Thread.id < 0)  # секретарь и прочие — нет доступа
+
+    conds = [Thread.disciple_id == own]  # свои ветки (вопросы/отчёты/чат апрува)
+    if "questions.answer" in caps or "questions.view_all" in caps:
+        conds.append(Thread.kind == ThreadKind.question)
+    if "reports.read_all" in caps:
+        if "disciples.view_all" in caps:
+            conds.append(Thread.kind == ThreadKind.report)
+        else:  # наставник — только отчёты закреплённых
+            conds.append(and_(Thread.kind == ThreadKind.report, Disciple.mentor_id == own))
+    if "disciples.approve" in caps:
+        conds.append(Thread.kind == ThreadKind.approval)
+    return q.filter(or_(*conds))
 
 
 def _msg_out(m: ThreadMessage, user_id: int) -> MessageOut:

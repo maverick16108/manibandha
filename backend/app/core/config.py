@@ -24,6 +24,12 @@ class Settings(BaseSettings):
     FIRST_GURU_PASSWORD: str = "change-me"
     FIRST_GURU_NAME: str = "Maharaj"
 
+    # SMSC.ru — отправка SMS-кодов (тот же аккаунт, что в проекте bid)
+    SMSC_LOGIN: str = ""
+    SMSC_PASSWORD: str = ""
+    SMSC_ENABLED: bool = False  # в dev по умолчанию выкл — код пишется в лог
+    SMS_CODE_TTL_SECONDS: int = 300
+
     @property
     def cors_origins(self) -> list[str]:
         return [o.strip() for o in self.BACKEND_CORS_ORIGINS.split(",") if o.strip()]

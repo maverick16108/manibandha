@@ -52,6 +52,8 @@ class Disciple(Base):
     application_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     ready_for_pranama: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     ready_for_initiation: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # апрув самостоятельной регистрации; анкеты, заведённые персоналом, — сразу True
+    is_approved: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True)
 
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 

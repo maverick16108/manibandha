@@ -19,6 +19,7 @@ class InitiationStatus(str, enum.Enum):
 class ThreadKind(str, enum.Enum):
     question = "question"  # приватный вопрос гуру (ученик ↔ гуру)
     report = "report"      # ежемесячный отчёт о служении (ученик, наставник, гуру)
+    approval = "approval"  # чат зарегистрированного кандидата с апрувером до апрува
 
 
 class MaritalStatus(str, enum.Enum):

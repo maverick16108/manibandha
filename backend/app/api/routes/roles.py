@@ -21,9 +21,16 @@ def _role_out(r: Role) -> dict:
 def my_capabilities(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     """Права и роли текущего пользователя — для навигации/гейтинга на фронте."""
     from app.core.capabilities import user_roles as _ur
+    from app.models import Disciple
+    pending = False
+    if user.disciple_id:
+        d = db.get(Disciple, user.disciple_id)
+        pending = bool(d and not d.is_approved)
     return {
         "capabilities": sorted(user_capabilities(db, user)),
         "roles": [r.key for r in _ur(db, user)],
+        "pending": pending,
+        "disciple_id": user.disciple_id,
     }
 
 

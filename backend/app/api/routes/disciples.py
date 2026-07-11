@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session, joinedload
 
-from app.api.deps import get_current_user, scope_disciple_query, staff_user
+from app.api.deps import get_current_user, require_cap, scope_disciple_query, staff_user
 from app.core.database import get_db
 from app.core.enums import InitiationStatus, Role
 from app.models import Disciple, User
@@ -40,6 +40,7 @@ def list_disciples(
     ready: bool | None = None,
     ready_pranama: bool | None = None,
     is_mentor: bool | None = Query(None, description="только наставники"),
+    pending: bool | None = Query(None, description="true — ожидают апрува регистрации"),
     event_month: str | None = Query(None, description="YYYY-MM — событие (пранама/инициация) в этом месяце"),
     sort: str = Query("material_name", description="material_name|spiritual_name|created_at|initiation_status"),
     skip: int = 0,
@@ -68,6 +69,8 @@ def list_disciples(
         query = query.filter(Disciple.ready_for_pranama.is_(ready_pranama))
     if is_mentor is not None:
         query = query.filter(Disciple.is_mentor.is_(is_mentor))
+    if pending is not None:
+        query = query.filter(Disciple.is_approved.is_(not pending))
     if event_month:
         try:
             y, m = map(int, event_month.split("-"))
@@ -137,6 +140,28 @@ def update_disciple(
 
     for k, v in payload.model_dump(exclude_unset=True).items():
         setattr(disciple, k, v)
+    db.commit()
+    return _load(db).filter(Disciple.id == disciple_id).first()
+
+
+@router.post("/{disciple_id}/approve", response_model=DiscipleOut)
+def approve_disciple(disciple_id: int, db: Session = Depends(get_db),
+                     _: User = Depends(require_cap("disciples.approve"))):
+    """Апрув регистрации: анкета одобрена, статус → Кандидат, пользователю выдаётся роль по умолчанию."""
+    disciple = db.get(Disciple, disciple_id)
+    if not disciple:
+        raise HTTPException(status_code=404, detail="Ученик не найден")
+    disciple.is_approved = True
+    if disciple.initiation_status == InitiationStatus.recommended:
+        disciple.initiation_status = InitiationStatus.aspirant
+    # выдать роль по умолчанию связанному пользователю
+    from app.models import Role, UserRole
+    linked = db.query(User).filter(User.disciple_id == disciple.id).first()
+    default_role = db.query(Role).filter(Role.is_default.is_(True)).first()
+    if linked and default_role:
+        exists = db.query(UserRole).filter(UserRole.user_id == linked.id, UserRole.role_id == default_role.id).first()
+        if not exists:
+            db.add(UserRole(user_id=linked.id, role_id=default_role.id))
     db.commit()
     return _load(db).filter(Disciple.id == disciple_id).first()
 

@@ -94,6 +94,7 @@ class DiscipleListItem(BaseModel):
     city: str | None
     initiation_status: InitiationStatus
     is_mentor: bool = False
+    is_approved: bool = True
     pranama_date: date | None = None
     harinama_date: date | None = None
     brahman_date: date | None = None
@@ -104,6 +105,7 @@ class DiscipleListItem(BaseModel):
 class DiscipleOut(DiscipleBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
+    is_approved: bool = True
     created_at: datetime
     updated_at: datetime
     temple: TempleOut | None = None

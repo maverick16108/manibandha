@@ -1,15 +1,82 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+import secrets
+from datetime import datetime, timedelta, timezone
+
+from fastapi import APIRouter, Body, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
+from app.core.config import settings
 from app.core.database import get_db
-from app.core.security import create_access_token, verify_password
-from app.models import User
+from app.core.enums import InitiationStatus, Role, ThreadKind
+from app.core.security import create_access_token, hash_password, verify_password
+from app.core.sms import normalize_phone, send_sms
+from app.models import Disciple, SmsCode, Thread, User
 from app.schemas.auth import Token
 from app.schemas.user import SelfUpdate, UserOut
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+def _token_for(user: User) -> Token:
+    return Token(access_token=create_access_token(subject=user.email, role=user.role.value))
+
+
+@router.post("/phone/request")
+def phone_request(phone: str = Body(..., embed=True), db: Session = Depends(get_db)):
+    """Отправить SMS-код на телефон (для регистрации или входа)."""
+    ph = normalize_phone(phone)
+    if len(ph) != 11:
+        raise HTTPException(status_code=400, detail="Некорректный номер телефона")
+    code = f"{secrets.randbelow(10000):04d}"
+    db.query(SmsCode).filter(SmsCode.phone == ph).delete()
+    db.add(SmsCode(
+        phone=ph, code=code,
+        expires_at=datetime.now(timezone.utc) + timedelta(seconds=settings.SMS_CODE_TTL_SECONDS),
+    ))
+    db.commit()
+    send_sms(ph, f"Код для входа на manibandha.ru: {code}")
+    exists = db.query(User).filter(User.phone == ph).first() is not None
+    return {"sent": True, "exists": exists}
+
+
+@router.post("/phone/verify", response_model=Token)
+def phone_verify(phone: str = Body(...), code: str = Body(...), db: Session = Depends(get_db)):
+    """Проверить код: существующий телефон → вход, новый → регистрация (создаётся анкета)."""
+    ph = normalize_phone(phone)
+    rec = db.query(SmsCode).filter(SmsCode.phone == ph).order_by(SmsCode.id.desc()).first()
+    if not rec or rec.expires_at < datetime.now(timezone.utc):
+        raise HTTPException(status_code=400, detail="Код истёк, запросите новый")
+    rec.attempts += 1
+    if rec.attempts > 5:
+        db.query(SmsCode).filter(SmsCode.phone == ph).delete()
+        db.commit()
+        raise HTTPException(status_code=400, detail="Слишком много попыток, запросите новый код")
+    if rec.code != code.strip():
+        db.commit()
+        raise HTTPException(status_code=400, detail="Неверный код")
+
+    db.query(SmsCode).filter(SmsCode.phone == ph).delete()
+    user = db.query(User).filter(User.phone == ph).first()
+    if user:
+        db.commit()
+        return _token_for(user)
+
+    # регистрация: создаём связанную пару пользователь + анкета (ждёт апрува)
+    disciple = Disciple(
+        material_name=f"+{ph}", phone=f"+{ph}",
+        initiation_status=InitiationStatus.recommended, is_approved=False,
+    )
+    db.add(disciple)
+    db.flush()
+    user = User(
+        email=f"{ph}@phone.local", phone=ph, hashed_password=hash_password(secrets.token_urlsafe(16)),
+        full_name=f"+{ph}", role=Role.student, disciple_id=disciple.id,
+    )
+    db.add(user)
+    db.add(Thread(kind=ThreadKind.approval, disciple_id=disciple.id))
+    db.commit()
+    return _token_for(user)
 
 
 @router.post("/login", response_model=Token)

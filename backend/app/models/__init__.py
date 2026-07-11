@@ -9,8 +9,9 @@ from app.models.thread import Thread, ThreadMessage, MessageLike, ThreadRead
 from app.models.event import Event
 from app.models.draft import Draft
 from app.models.role import Role, UserRole
+from app.models.sms_code import SmsCode
 
 __all__ = [
     "User", "Temple", "Disciple", "ChecklistItem", "City", "Country", "Region",
-    "Thread", "ThreadMessage", "MessageLike", "ThreadRead", "Event", "Draft", "Role", "UserRole",
+    "Thread", "ThreadMessage", "MessageLike", "ThreadRead", "Event", "Draft", "Role", "UserRole", "SmsCode",
 ]

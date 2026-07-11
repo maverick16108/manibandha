@@ -1,5 +1,5 @@
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import client from '../api/client'
 import AppSelect from '../components/AppSelect.vue'
 import AppSkeleton from '../components/AppSkeleton.vue'
@@ -7,6 +7,8 @@ import { ROLE_LABELS } from '../lib/format'
 
 const roleOptions = Object.entries(ROLE_LABELS).map(([value, label]) => ({ value, label }))
 const loading = ref(true)
+const nameInput = ref(null)
+function focusName() { nextTick(() => nameInput.value?.focus()) }
 
 const users = ref([])
 const showForm = ref(false)
@@ -29,6 +31,7 @@ function startNew() {
   Object.assign(form, { email: '', full_name: '', role: 'secretary', password: '', is_active: true })
   error.value = ''
   showForm.value = true
+  focusName()
 }
 
 function startEdit(u) {
@@ -36,7 +39,12 @@ function startEdit(u) {
   Object.assign(form, { email: u.email, full_name: u.full_name, role: u.role, password: '', is_active: u.is_active })
   error.value = ''
   showForm.value = true
+  focusName()
 }
+
+function onKey(e) { if (e.key === 'Escape' && showForm.value) showForm.value = false }
+onMounted(() => document.addEventListener('keydown', onKey))
+onBeforeUnmount(() => document.removeEventListener('keydown', onKey))
 
 async function save() {
   error.value = ''
@@ -94,7 +102,7 @@ onMounted(load)
       <div class="card w-full max-w-lg p-6">
         <h3 class="mb-4 font-display text-2xl text-ink-900">{{ editing ? 'Изменить пользователя' : 'Новый пользователь' }}</h3>
         <form class="space-y-3" @submit.prevent="save">
-          <div><label class="label">Имя *</label><input v-model="form.full_name" class="input" required /></div>
+          <div><label class="label">Имя *</label><input ref="nameInput" v-model="form.full_name" class="input" required /></div>
           <div v-if="!editing"><label class="label">Email *</label><input v-model="form.email" type="email" class="input" required /></div>
           <div class="grid grid-cols-2 gap-3">
             <div><label class="label">Роль</label>

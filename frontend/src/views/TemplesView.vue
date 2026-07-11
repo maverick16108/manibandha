@@ -1,5 +1,5 @@
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import client from '../api/client'
 import { useAuthStore } from '../stores/auth'
 import AppSkeleton from '../components/AppSkeleton.vue'
@@ -10,6 +10,11 @@ const loading = ref(true)
 const editing = ref(null)
 const form = reactive({ name: '', city: '', country: '', president_name: '', notes: '' })
 const showForm = ref(false)
+const nameInput = ref(null)
+function focusName() { nextTick(() => nameInput.value?.focus()) }
+function onKey(e) { if (e.key === 'Escape' && showForm.value) showForm.value = false }
+onMounted(() => document.addEventListener('keydown', onKey))
+onBeforeUnmount(() => document.removeEventListener('keydown', onKey))
 
 async function load() {
   loading.value = true
@@ -25,12 +30,14 @@ function startNew() {
   editing.value = null
   Object.keys(form).forEach((k) => (form[k] = ''))
   showForm.value = true
+  focusName()
 }
 
 function startEdit(t) {
   editing.value = t.id
   Object.keys(form).forEach((k) => (form[k] = t[k] ?? ''))
   showForm.value = true
+  focusName()
 }
 
 async function save() {
@@ -84,7 +91,7 @@ onMounted(load)
       <div class="card w-full max-w-lg p-6">
         <h3 class="mb-4 font-display text-2xl text-ink-900">{{ editing ? 'Изменить храм' : 'Новый храм' }}</h3>
         <form class="space-y-3" @submit.prevent="save">
-          <div><label class="label">Название *</label><input v-model="form.name" class="input" required /></div>
+          <div><label class="label">Название *</label><input ref="nameInput" v-model="form.name" class="input" required /></div>
           <div class="grid grid-cols-2 gap-3">
             <div><label class="label">Город</label><input v-model="form.city" class="input" /></div>
             <div><label class="label">Страна</label><input v-model="form.country" class="input" /></div>

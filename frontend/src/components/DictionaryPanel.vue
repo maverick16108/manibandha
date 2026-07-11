@@ -1,8 +1,18 @@
 <script setup>
-import { ref, reactive, watch, onMounted } from 'vue'
+import { ref, reactive, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import client from '../api/client'
 import { useAuthStore } from '../stores/auth'
 import AppSkeleton from './AppSkeleton.vue'
+
+const nameInput = ref(null)
+function focusName() {
+  nextTick(() => nameInput.value?.focus())
+}
+function onKey(e) {
+  if (e.key === 'Escape' && showForm.value) showForm.value = false
+}
+onMounted(() => document.addEventListener('keydown', onKey))
+onBeforeUnmount(() => document.removeEventListener('keydown', onKey))
 
 const props = defineProps({
   endpoint: { type: String, required: true }, // e.g. '/cities'
@@ -34,12 +44,14 @@ function startNew() {
   Object.assign(form, { name: '', country: '' })
   error.value = ''
   showForm.value = true
+  focusName()
 }
 function startEdit(it) {
   editing.value = it.id
   Object.assign(form, { name: it.name, country: it.country ?? '' })
   error.value = ''
   showForm.value = true
+  focusName()
 }
 async function save() {
   error.value = ''
@@ -93,7 +105,7 @@ onMounted(load)
       <div class="card w-full max-w-md p-6">
         <h3 class="mb-4 font-display text-2xl text-ink-900">{{ editing ? 'Изменить' : 'Добавить' }}</h3>
         <form class="space-y-3" @submit.prevent="save">
-          <div><label class="label">Название *</label><input v-model="form.name" class="input" required autofocus /></div>
+          <div><label class="label">Название *</label><input ref="nameInput" v-model="form.name" class="input" required /></div>
           <div v-if="withCountry"><label class="label">Страна</label><input v-model="form.country" class="input" placeholder="Россия" /></div>
           <p v-if="error" class="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{{ error }}</p>
           <div class="flex gap-2 pt-2">

@@ -24,3 +24,7 @@ frontend/public/guru/*.png
 *.log
 .idea/
 .vscode/
+
+# scratch
+_contact_sheet.jpg
+_manifest.txt

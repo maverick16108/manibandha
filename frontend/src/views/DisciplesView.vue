@@ -1,5 +1,5 @@
 <script setup>
-import { ref, reactive, onMounted, watch, computed } from 'vue'
+import { ref, reactive, onMounted, onBeforeUnmount, watch, computed } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import client from '../api/client'
 import { useAuthStore } from '../stores/auth'
@@ -67,6 +67,25 @@ function reset() {
   Object.keys(filters).forEach((k) => (filters[k] = ''))
 }
 
+// Type anywhere on the page to search by name
+const searchInput = ref(null)
+function onDocKey(e) {
+  if (e.ctrlKey || e.metaKey || e.altKey) return
+  const t = e.target
+  const tag = (t.tagName || '').toLowerCase()
+  if (tag === 'input' || tag === 'textarea' || tag === 'select' || t.isContentEditable) return
+  if (e.key.length === 1 && e.key !== ' ') {
+    filters.q += e.key
+    searchInput.value?.focus()
+    e.preventDefault()
+  } else if (e.key === 'Backspace' && filters.q) {
+    filters.q = filters.q.slice(0, -1)
+    e.preventDefault()
+  }
+}
+onMounted(() => document.addEventListener('keydown', onDocKey))
+onBeforeUnmount(() => document.removeEventListener('keydown', onDocKey))
+
 onMounted(async () => {
   // seed filters from URL query (deep links from the dashboard)
   for (const k of Object.keys(filters)) if (route.query[k] != null) filters[k] = String(route.query[k])
@@ -99,7 +118,7 @@ onMounted(async () => {
       <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <div class="relative lg:col-span-1">
           <AppIcon name="search" :size="16" class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-700/40" />
-          <input v-model="filters.q" class="input pl-9" placeholder="Поиск по имени…" />
+          <input ref="searchInput" v-model="filters.q" class="input pl-9" placeholder="Поиск по имени…" />
         </div>
         <AppSelect v-model="filters.status" :options="statusOptions" placeholder="Все статусы" />
         <AppSelect v-model="filters.region" :options="regionOptions" placeholder="Все области" />

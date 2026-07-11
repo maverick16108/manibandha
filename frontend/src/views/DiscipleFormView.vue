@@ -1,7 +1,8 @@
 <script setup>
-import { ref, reactive, onMounted, computed } from 'vue'
-import { useRoute, useRouter, RouterLink } from 'vue-router'
+import { ref, reactive, onMounted, onBeforeUnmount, computed } from 'vue'
+import { useRoute, useRouter, RouterLink, onBeforeRouteLeave } from 'vue-router'
 import client from '../api/client'
+import { confirmDialog } from '../composables/confirm'
 import AppSelect from '../components/AppSelect.vue'
 import AppDatePicker from '../components/AppDatePicker.vue'
 import PhotoUpload from '../components/PhotoUpload.vue'
@@ -33,6 +34,9 @@ const regionOptions = computed(() => dictOptions(regions.value, form.region))
 const countryOptions = computed(() => dictOptions(countries.value, form.country))
 const error = ref('')
 const saving = ref(false)
+const saved = ref(false)
+let snapshot = '' // JSON of the form at load; used to detect unsaved changes
+const isDirty = () => !saved.value && snapshot !== '' && JSON.stringify(form) !== snapshot
 
 const form = reactive({
   material_name: '', spiritual_name: '', photo_url: '',
@@ -58,9 +62,11 @@ async function save() {
     const payload = clean(form)
     if (isEdit.value) {
       await client.patch(`/disciples/${id.value}`, payload)
+      saved.value = true
       router.push({ name: 'disciple', params: { id: id.value } })
     } else {
       const { data } = await client.post('/disciples', payload)
+      saved.value = true
       router.push({ name: 'disciple', params: { id: data.id } })
     }
   } catch (e) {
@@ -85,7 +91,25 @@ onMounted(async () => {
       else form[k] = data[k] ?? (typeof form[k] === 'boolean' ? false : '')
     }
   }
+  snapshot = JSON.stringify(form) // baseline for unsaved-changes detection
 })
+
+// Warn on leaving with unsaved changes
+onBeforeRouteLeave(async () => {
+  if (!isDirty()) return true
+  return await confirmDialog({
+    title: 'Несохранённые изменения',
+    message: 'Вы точно хотите выйти без сохранения? Изменения не будут сохранены.',
+    confirmText: 'Выйти без сохранения',
+    cancelText: 'Остаться',
+    danger: true,
+  })
+})
+function beforeUnload(e) {
+  if (isDirty()) { e.preventDefault(); e.returnValue = '' }
+}
+onMounted(() => window.addEventListener('beforeunload', beforeUnload))
+onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
 </script>
 
 <template>

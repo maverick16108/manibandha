@@ -3,7 +3,8 @@ import { RouterLink } from 'vue-router'
 
 // Guru photos live in /public/guru/ (1 = main portrait, 2–4 = gallery).
 // Bound via :src so Vite serves them from /public at runtime (not build-time imports).
-const portrait = '/guru/1.jpg'
+const hero = '/guru/hero.jpg'          // splash — atmospheric kirtan shot
+const portrait = '/guru/1.jpg'         // clear portrait — About section & login
 const gallery = ['/guru/2.jpg', '/guru/3.jpg', '/guru/4.jpg']
 
 const holyPlaces = ['Вриндаван', 'Маяпур', 'Джаганнатха Пури', 'Говардхан', 'Курукшетра', 'Ахобилам', 'Калькутта']
@@ -22,7 +23,7 @@ const holyPlaces = ['Вриндаван', 'Маяпур', 'Джаганнатх�
     <!-- Hero -->
     <section class="relative overflow-hidden">
       <div class="absolute inset-0">
-        <img :src="portrait" alt="Манибандха Прабху" class="photo-bw h-full w-full object-cover object-center" />
+        <img :src="hero" alt="Манибандха Прабху" class="photo-bw h-full w-full object-cover object-center" />
         <div class="absolute inset-0 bg-gradient-to-t from-ink-900/85 via-ink-900/45 to-ink-900/60"></div>
       </div>
       <div class="relative mx-auto flex max-w-6xl flex-col items-center px-6 py-40 text-center text-white">

@@ -137,7 +137,7 @@ onBeforeUnmount(() => { if (ws) ws.close(); clearTimeout(typingTimer) })
 
       <div class="mt-3 shrink-0">
         <div class="mb-1 h-5 text-sm text-saffron-700/80"><span v-if="typingName">{{ typingName }} печатает…</span></div>
-        <MarkdownEditor v-model="body" :rows="3" submit-on-enter placeholder="Написать сообщение…" @submit="send" />
+        <MarkdownEditor v-model="body" :rows="3" submit-on-enter type-anywhere placeholder="Написать сообщение…" @submit="send" />
         <div class="mt-2 flex justify-end">
           <button class="btn-primary" :disabled="sending || !body.trim()" @click="send">{{ sending ? '…' : 'Отправить' }}</button>
         </div>

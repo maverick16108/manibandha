@@ -1,5 +1,5 @@
 <script setup>
-import { ref, nextTick, onMounted } from 'vue'
+import { ref, nextTick, onMounted, onBeforeUnmount, watch } from 'vue'
 import client from '../api/client'
 import AppIcon from './AppIcon.vue'
 
@@ -8,6 +8,8 @@ const props = defineProps({
   placeholder: { type: String, default: 'Текст… (поддерживается markdown)' },
   rows: { type: Number, default: 4 },
   submitOnEnter: { type: Boolean, default: false },
+  // печать в любом месте страницы попадает в это поле (для чатов/сообщений)
+  typeAnywhere: { type: Boolean, default: false },
 })
 const emit = defineEmits(['update:modelValue', 'submit'])
 
@@ -30,6 +32,35 @@ function autoGrow() {
   }
 }
 onMounted(autoGrow)
+
+// когда поле очистили (напр. после отправки) — вернуть стандартную высоту
+watch(() => props.modelValue, (v) => {
+  const el = textarea.value
+  if (!el) return
+  if (!v) el.style.height = ''
+  else nextTick(autoGrow)
+})
+
+// печать в любом месте страницы → в это поле
+function onDocType(e) {
+  if (e.ctrlKey || e.metaKey || e.altKey || showPreview.value) return
+  const t = e.target
+  const tag = (t.tagName || '').toLowerCase()
+  if (tag === 'input' || tag === 'textarea' || tag === 'select' || t.isContentEditable) return
+  const el = textarea.value
+  if (!el) return
+  if (e.key.length === 1 && e.key !== ' ') {
+    e.preventDefault()
+    emit('update:modelValue', (props.modelValue || '') + e.key)
+    nextTick(() => { el.focus(); el.selectionStart = el.selectionEnd = el.value.length; autoGrow() })
+  } else if (e.key === 'Backspace' && props.modelValue) {
+    e.preventDefault()
+    emit('update:modelValue', props.modelValue.slice(0, -1))
+    nextTick(() => { el.focus(); el.selectionStart = el.selectionEnd = el.value.length })
+  }
+}
+onMounted(() => { if (props.typeAnywhere) document.addEventListener('keydown', onDocType) })
+onBeforeUnmount(() => document.removeEventListener('keydown', onDocType))
 
 function setValue(v, caret) {
   emit('update:modelValue', v)

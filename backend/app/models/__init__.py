@@ -7,10 +7,10 @@ from app.models.country import Country
 from app.models.region import Region
 from app.models.thread import Thread, ThreadMessage, MessageLike, ThreadRead
 from app.models.event import Event
-from app.models.permission import RolePermission
 from app.models.draft import Draft
+from app.models.role import Role, UserRole
 
 __all__ = [
     "User", "Temple", "Disciple", "ChecklistItem", "City", "Country", "Region",
-    "Thread", "ThreadMessage", "MessageLike", "ThreadRead", "Event", "RolePermission", "Draft",
+    "Thread", "ThreadMessage", "MessageLike", "ThreadRead", "Event", "Draft", "Role", "UserRole",
 ]

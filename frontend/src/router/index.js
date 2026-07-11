@@ -34,8 +34,22 @@ const routes = [
   },
 ]
 
-// Разделы, доступ к которым управляется ролями (имя маршрута = ключ раздела)
-const SECTION_ROUTES = ['dashboard', 'calendar', 'disciples', 'questions', 'service-reports', 'dictionaries', 'users']
+// Требуемые права-действия для маршрутов (любое из списка открывает доступ)
+const ROUTE_CAPS = {
+  dashboard: ['dashboard.view'],
+  calendar: ['calendar.view'],
+  'event-new': ['calendar.manage'], 'event-edit': ['calendar.manage'],
+  disciples: ['disciples.view_all', 'disciples.view_own'],
+  'disciple-new': ['disciples.create'], 'disciple-edit': ['disciples.edit'],
+  questions: ['questions.ask', 'questions.answer', 'questions.view_all'],
+  'question-new': ['questions.ask'],
+  'service-reports': ['reports.write', 'reports.read_all'],
+  'report-new': ['reports.write'],
+  dictionaries: ['dictionaries.manage'],
+  users: ['users.manage'],
+  roles: ['roles.manage'],
+}
+const LANDING_ORDER = ['dashboard', 'calendar', 'disciples', 'questions', 'service-reports', 'dictionaries', 'users']
 
 const router = createRouter({
   history: createWebHistory(),
@@ -67,16 +81,11 @@ router.beforeEach(async (to) => {
   if (to.meta.requiresAuth && !auth.isAuthenticated) {
     return { name: 'login', query: { redirect: to.fullPath } }
   }
-  // Куда отправлять, если раздел недоступен — первый разрешённый роли
-  const landing = () => SECTION_ROUTES.find((s) => auth.canSee(s)) || 'calendar'
-  if (to.meta.guruOnly && !auth.isGuru) {
-    return { name: landing() }
-  }
-  if (to.meta.staffOnly && !auth.isStaff) {
-    return { name: landing() }
-  }
-  // Гейтинг разделов по настройке ролей
-  if (SECTION_ROUTES.includes(to.name) && !auth.canSee(to.name)) {
+  // Гейтинг по правам-действиям
+  const has = (caps) => (caps || []).some((c) => auth.can(c))
+  const landing = () => LANDING_ORDER.find((n) => has(ROUTE_CAPS[n])) || 'profile'
+  const need = ROUTE_CAPS[to.name]
+  if (need && !has(need)) {
     return { name: landing() }
   }
   if (to.name === 'login' && auth.isAuthenticated) {

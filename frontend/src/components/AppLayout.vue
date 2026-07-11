@@ -14,15 +14,16 @@ const sidebarOpen = ref(false)
 const profileMenu = ref(false)
 onEscape(() => { profileMenu.value = false; sidebarOpen.value = false })
 
+// caps — любое из перечисленных прав открывает раздел
 const nav = [
-  { name: 'dashboard', label: 'Обзор', icon: 'overview' },
-  { name: 'calendar', label: 'Календарь', icon: 'calendar' },
-  { name: 'disciples', label: 'Ученики', icon: 'disciples' },
-  { name: 'questions', label: 'Вопросы', icon: 'chat' },
-  { name: 'service-reports', label: 'Отчёты', icon: 'reports' },
-  { name: 'dictionaries', label: 'Справочники', icon: 'pin' },
-  { name: 'users', label: 'Пользователи', icon: 'users' },
-  { name: 'roles', label: 'Роли', icon: 'shield', guruOnly: true },
+  { name: 'dashboard', label: 'Обзор', icon: 'overview', caps: ['dashboard.view'] },
+  { name: 'calendar', label: 'Календарь', icon: 'calendar', caps: ['calendar.view'] },
+  { name: 'disciples', label: 'Ученики', icon: 'disciples', caps: ['disciples.view_all', 'disciples.view_own'] },
+  { name: 'questions', label: 'Вопросы', icon: 'chat', caps: ['questions.ask', 'questions.answer', 'questions.view_all'] },
+  { name: 'service-reports', label: 'Отчёты', icon: 'reports', caps: ['reports.write', 'reports.read_all'] },
+  { name: 'dictionaries', label: 'Справочники', icon: 'pin', caps: ['dictionaries.manage'] },
+  { name: 'users', label: 'Пользователи', icon: 'users', caps: ['users.manage'] },
+  { name: 'roles', label: 'Роли', icon: 'shield', caps: ['roles.manage'] },
 ]
 
 // top-level sections (nav) — everything else is a sub-page, so show a back button
@@ -34,8 +35,7 @@ function goBack() {
 }
 
 function canShow(item) {
-  if (item.guruOnly) return auth.isGuru
-  return auth.canSee(item.name)
+  return (item.caps || []).some((c) => auth.can(c))
 }
 
 const initials = computed(() => (auth.user?.full_name || '?').trim()[0]?.toUpperCase() || '?')

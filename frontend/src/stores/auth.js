@@ -5,16 +5,18 @@ export const useAuthStore = defineStore('auth', {
   state: () => ({
     token: localStorage.getItem('token') || null,
     user: null,
-    sections: {},
+    caps: [],
+    roles: [],
   }),
   getters: {
     isAuthenticated: (s) => !!s.token,
     role: (s) => s.user?.role || null,
-    isGuru: (s) => s.user?.role === 'guru',
-    isStaff: (s) => ['guru', 'secretary'].includes(s.user?.role),
-    canEdit: (s) => ['guru', 'secretary', 'curator'].includes(s.user?.role),
-    // доступ к разделу по настройке ролей (гуру — всегда)
-    canSee: (s) => (section) => s.user?.role === 'guru' || !!s.sections[section],
+    // право-действие
+    can: (s) => (cap) => s.caps.includes(cap),
+    // производные (для совместимости с существующими проверками)
+    isGuru: (s) => s.roles.includes('guru'),
+    isStaff: (s) => s.caps.includes('users.manage'),
+    canEdit: (s) => s.caps.includes('disciples.edit'),
   },
   actions: {
     async login(email, password) {
@@ -29,10 +31,12 @@ export const useAuthStore = defineStore('auth', {
       const { data } = await client.get('/auth/me')
       this.user = data
       try {
-        const { data: perm } = await client.get('/permissions/me')
-        this.sections = perm.sections || {}
+        const { data: perm } = await client.get('/me/capabilities')
+        this.caps = perm.capabilities || []
+        this.roles = perm.roles || []
       } catch {
-        this.sections = {}
+        this.caps = []
+        this.roles = []
       }
       return data
     },
@@ -44,7 +48,8 @@ export const useAuthStore = defineStore('auth', {
     logout() {
       this.token = null
       this.user = null
-      this.sections = {}
+      this.caps = []
+      this.roles = []
       localStorage.removeItem('token')
     },
   },

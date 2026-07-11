@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.api.routes import (
-    auth, cities, countries, disciples, drafts, events, mentors, permissions, pipeline, regions, reports, temples,
+    auth, cities, countries, disciples, drafts, events, mentors, pipeline, regions, reports, roles, temples,
     threads, uploads, users,
 )
 from app.core.config import settings
@@ -23,7 +23,7 @@ app.add_middleware(
 
 for r in (auth.router, users.router, temples.router, cities.router, countries.router, regions.router,
           disciples.router, pipeline.router, reports.router, uploads.router, mentors.router, threads.router,
-          events.router, permissions.router, drafts.router):
+          events.router, roles.router, drafts.router):
     app.include_router(r, prefix=settings.API_PREFIX)
 
 # WebSocket for interactive chat (typing + instant delivery)

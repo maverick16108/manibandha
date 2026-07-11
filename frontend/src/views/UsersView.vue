@@ -3,6 +3,7 @@ import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick } from 'v
 import client from '../api/client'
 import AppSelect from '../components/AppSelect.vue'
 import AppSkeleton from '../components/AppSkeleton.vue'
+import AppIcon from '../components/AppIcon.vue'
 import { confirmDialog } from '../composables/confirm'
 import { ROLE_LABELS } from '../lib/format'
 import { usePageTitle } from '../composables/pageTitle'
@@ -15,38 +16,56 @@ const nameInput = ref(null)
 function focusName() { nextTick(() => nameInput.value?.focus()) }
 
 const users = ref([])
+const roles = ref([]) // [{id, name, ...}] — динамические роли для назначения
 const showForm = ref(false)
 const editing = ref(null)
 const error = ref('')
-const form = reactive({ email: '', full_name: '', role: 'secretary', password: '', is_active: true, disciple_id: '' })
+const form = reactive({ email: '', full_name: '', role: 'secretary', password: '', is_active: true, disciple_id: '', role_ids: [] })
 const disciples = ref([])
 const discipleOptions = computed(() => [{ value: '', label: '— не привязан —' }, ...disciples.value.map((d) => ({ value: d.id, label: d.spiritual_name || d.material_name }))])
 
 async function load() {
   loading.value = true
   try {
-    const [u, d] = await Promise.all([client.get('/users'), client.get('/disciples', { params: { limit: 500 } })])
+    const [u, d, r] = await Promise.all([
+      client.get('/users'),
+      client.get('/disciples', { params: { limit: 500 } }),
+      client.get('/roles'),
+    ])
     users.value = u.data
     disciples.value = d.data.items
+    roles.value = r.data
   } finally {
     loading.value = false
   }
 }
 
+function toggleRole(id) {
+  const i = form.role_ids.indexOf(id)
+  if (i === -1) form.role_ids.push(id)
+  else form.role_ids.splice(i, 1)
+}
+
 function startNew() {
   editing.value = null
-  Object.assign(form, { email: '', full_name: '', role: 'secretary', password: '', is_active: true, disciple_id: '' })
+  Object.assign(form, { email: '', full_name: '', role: 'secretary', password: '', is_active: true, disciple_id: '', role_ids: [] })
   error.value = ''
   showForm.value = true
   focusName()
 }
 
-function startEdit(u) {
+async function startEdit(u) {
   editing.value = u.id
-  Object.assign(form, { email: u.email, full_name: u.full_name, role: u.role, password: '', is_active: u.is_active, disciple_id: u.disciple_id ?? '' })
+  Object.assign(form, { email: u.email, full_name: u.full_name, role: u.role, password: '', is_active: u.is_active, disciple_id: u.disciple_id ?? '', role_ids: [] })
   error.value = ''
   showForm.value = true
   focusName()
+  try {
+    const { data } = await client.get(`/users/${u.id}/roles`)
+    form.role_ids = data.role_ids || []
+  } catch {
+    form.role_ids = []
+  }
 }
 
 function onKey(e) { if (e.key === 'Escape' && showForm.value) showForm.value = false }
@@ -57,13 +76,18 @@ async function save() {
   error.value = ''
   try {
     const discipleId = form.disciple_id || null
+    let userId
     if (editing.value) {
       const payload = { full_name: form.full_name, role: form.role, is_active: form.is_active, disciple_id: discipleId }
       if (form.password) payload.password = form.password
       await client.patch(`/users/${editing.value}`, payload)
+      userId = editing.value
     } else {
-      await client.post('/users', { ...form, disciple_id: discipleId })
+      const { role_ids, ...userPayload } = form
+      const { data } = await client.post('/users', { ...userPayload, disciple_id: discipleId })
+      userId = data.id
     }
+    await client.put(`/users/${userId}/roles`, { role_ids: form.role_ids })
     showForm.value = false
     await load()
   } catch (e) {
@@ -122,6 +146,24 @@ onMounted(load)
           <div v-if="form.role === 'student'">
             <label class="label">Анкета ученика</label>
             <AppSelect v-model="form.disciple_id" :options="discipleOptions" placeholder="— не привязан —" />
+          </div>
+          <div v-if="roles.length">
+            <label class="label">Роли</label>
+            <div class="flex flex-wrap gap-2">
+              <button
+                v-for="r in roles"
+                :key="r.id"
+                type="button"
+                class="rounded-full border px-3 py-1.5 text-sm transition-colors"
+                :class="form.role_ids.includes(r.id)
+                  ? 'border-saffron-400 bg-saffron-500/15 text-saffron-700'
+                  : 'border-parchment-300 text-ink-700 hover:bg-parchment-100'"
+                @click="toggleRole(r.id)"
+              >
+                <AppIcon v-if="form.role_ids.includes(r.id)" name="check" :size="14" class="mr-1 inline align-[-2px]" />
+                {{ r.name }}
+              </button>
+            </div>
           </div>
           <label class="flex items-center gap-2 text-sm text-ink-700"><input type="checkbox" v-model="form.is_active" /> Активен</label>
           <p v-if="error" class="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{{ error }}</p>

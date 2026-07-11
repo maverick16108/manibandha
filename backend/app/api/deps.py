@@ -53,13 +53,13 @@ def staff_user(user: User = Depends(get_current_user)) -> User:
     return user
 
 
-def require_section(section: str):
-    """Проверка, что роль пользователя имеет доступ к разделу (гуру — всегда)."""
+def require_cap(cap: str):
+    """Проверка права-действия (capability). Гуру-superadmin проходит всегда."""
 
     def _checker(user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> User:
-        from app.core import permissions as perm
-        if not perm.is_allowed(db, user.role, section):
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Раздел недоступен для вашей роли")
+        from app.core.capabilities import has_cap
+        if not has_cap(db, user, cap):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Недостаточно прав")
         return user
 
     return _checker

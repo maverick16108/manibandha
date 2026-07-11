@@ -1,9 +1,10 @@
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import client from '../api/client'
 import { useAuthStore } from '../stores/auth'
 import AppSkeleton from '../components/AppSkeleton.vue'
+import MarkdownEditor from '../components/MarkdownEditor.vue'
 import { renderMarkdown } from '../lib/markdown'
 
 const route = useRoute()
@@ -14,12 +15,8 @@ const thread = ref(null)
 const loading = ref(true)
 const body = ref('')
 const sending = ref(false)
-const uploading = ref(false)
 const scroller = ref(null)
-const textarea = ref(null)
-const fileInput = ref(null)
 
-// realtime
 let ws = null
 const typingName = ref('')
 let typingTimer = null
@@ -32,18 +29,15 @@ const periodLabel = computed(() => {
   const [y, m] = p.split('-')
   return `${MONTHS[+m - 1]} ${y}`
 })
-const backTo = computed(() => (thread.value?.kind === 'report' ? { name: 'service-reports' } : { name: 'questions' }))
 const canLike = computed(() => auth.isGuru || auth.user?.role === 'curator')
 
 function fmtTime(iso) {
   return new Date(iso).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
 }
-
 async function scrollDown() {
   await nextTick()
   if (scroller.value) scroller.value.scrollTop = scroller.value.scrollHeight
 }
-
 async function load() {
   const { data } = await client.get(`/threads/${id.value}`)
   thread.value = data
@@ -51,10 +45,9 @@ async function load() {
 }
 
 function connectWs() {
-  const token = auth.token
-  if (!token) return
+  if (!auth.token) return
   const proto = location.protocol === 'https:' ? 'wss' : 'ws'
-  ws = new WebSocket(`${proto}://${location.host}/api/ws/threads/${id.value}?token=${encodeURIComponent(token)}`)
+  ws = new WebSocket(`${proto}://${location.host}/api/ws/threads/${id.value}?token=${encodeURIComponent(auth.token)}`)
   ws.onmessage = (ev) => {
     const data = JSON.parse(ev.data)
     if (data.type === 'message') {
@@ -70,7 +63,6 @@ function connectWs() {
   }
   ws.onclose = () => { ws = null }
 }
-
 function notifyTyping() {
   const now = Date.now()
   if (ws && ws.readyState === 1 && now - lastTypingSent > 1500) {
@@ -78,6 +70,7 @@ function notifyTyping() {
     ws.send(JSON.stringify({ type: 'typing' }))
   }
 }
+watch(body, (v) => { if (v) notifyTyping() })
 
 async function send() {
   const text = body.value.trim()
@@ -86,7 +79,7 @@ async function send() {
   try {
     if (ws && ws.readyState === 1) {
       ws.send(JSON.stringify({ type: 'message', body: text }))
-      body.value = '' // message will arrive back via broadcast
+      body.value = ''
     } else {
       await client.post(`/threads/${id.value}/messages`, { body: text })
       body.value = ''
@@ -96,47 +89,11 @@ async function send() {
     sending.value = false
   }
 }
-
 async function toggleLike(m) {
   if (!canLike.value) return
   const { data } = await client.post(`/threads/${id.value}/messages/${m.id}/like`)
   m.likes = data.likes
   m.liked = data.liked
-}
-
-// --- markdown toolbar ---
-function wrap(before, after = before, placeholder = '') {
-  const el = textarea.value
-  const start = el?.selectionStart ?? body.value.length
-  const end = el?.selectionEnd ?? body.value.length
-  const sel = body.value.slice(start, end) || placeholder
-  body.value = body.value.slice(0, start) + before + sel + after + body.value.slice(end)
-  nextTick(() => {
-    el.focus()
-    el.selectionStart = start + before.length
-    el.selectionEnd = start + before.length + sel.length
-  })
-}
-function insert(text) {
-  const el = textarea.value
-  const pos = el?.selectionStart ?? body.value.length
-  body.value = body.value.slice(0, pos) + text + body.value.slice(pos)
-  nextTick(() => { el.focus(); el.selectionStart = el.selectionEnd = pos + text.length })
-}
-
-async function onFiles(e) {
-  const files = Array.from(e.target.files || [])
-  if (!files.length) return
-  uploading.value = true
-  try {
-    const fd = new FormData()
-    files.forEach((f) => fd.append('files', f))
-    const { data } = await client.post('/uploads', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
-    data.urls.forEach((u) => insert(`\n![](${u})\n`))
-  } finally {
-    uploading.value = false
-    if (fileInput.value) fileInput.value.value = ''
-  }
 }
 
 onMounted(async () => {
@@ -153,7 +110,6 @@ onBeforeUnmount(() => { if (ws) ws.close(); clearTimeout(typingTimer) })
     </div>
 
     <template v-else-if="thread">
-      <!-- header (always visible) -->
       <div class="mb-3 flex shrink-0 flex-wrap items-center gap-2">
         <h1 class="font-display text-2xl font-semibold text-ink-900">
           {{ thread.kind === 'report' ? 'Отчёт' : 'Вопрос' }} · {{ thread.disciple_name }}
@@ -161,7 +117,6 @@ onBeforeUnmount(() => { if (ws) ws.close(); clearTimeout(typingTimer) })
         <span v-if="thread.period" class="badge bg-saffron-500/15 text-saffron-700">{{ periodLabel }}</span>
       </div>
 
-      <!-- messages (fills remaining height) -->
       <div ref="scroller" class="card flex-1 space-y-3 overflow-y-auto p-5">
         <div v-for="m in thread.messages" :key="m.id"
              class="flex flex-col" :class="m.author_id === auth.user?.id ? 'items-end' : 'items-start'">
@@ -180,39 +135,19 @@ onBeforeUnmount(() => { if (ws) ws.close(); clearTimeout(typingTimer) })
         <div v-if="!thread.messages.length" class="text-center text-sm text-ink-700/50">Сообщений пока нет</div>
       </div>
 
-      <!-- composer -->
       <div class="mt-3 shrink-0">
-        <div class="mb-1 h-5 text-sm text-saffron-700/80">
-          <span v-if="typingName">{{ typingName }} печатает…</span>
-        </div>
-        <div class="mb-1.5 flex flex-wrap items-center gap-1">
-          <button type="button" class="composer-btn font-bold" title="Жирный (Ctrl+B)" @click="wrap('**', '**', 'текст')">B</button>
-          <button type="button" class="composer-btn italic" title="Курсив" @click="wrap('*', '*', 'текст')">I</button>
-          <button type="button" class="composer-btn line-through" title="Зачёркнутый" @click="wrap('~~', '~~', 'текст')">S</button>
-          <button type="button" class="composer-btn font-mono" title="Код" @click="wrap('`', '`', 'код')">&lt;/&gt;</button>
-          <button type="button" class="composer-btn" title="Список" @click="insert('\n- ')">• Список</button>
-          <button type="button" class="composer-btn" title="Ссылка" @click="wrap('[', '](https://)', 'текст')">🔗</button>
-          <button type="button" class="composer-btn" title="Картинка" :disabled="uploading" @click="fileInput.click()">
-            {{ uploading ? '…' : '🖼 Картинка' }}
-          </button>
-          <input ref="fileInput" type="file" accept="image/*" multiple class="hidden" @change="onFiles" />
-        </div>
-        <div class="flex items-end gap-2">
-          <textarea ref="textarea" v-model="body" rows="3" class="input flex-1 resize-y"
-                    placeholder="Написать сообщение… (поддерживается **markdown**)"
-                    @input="notifyTyping" @keydown.enter.exact.prevent="send"></textarea>
+        <div class="mb-1 h-5 text-sm text-saffron-700/80"><span v-if="typingName">{{ typingName }} печатает…</span></div>
+        <MarkdownEditor v-model="body" :rows="3" submit-on-enter placeholder="Написать сообщение…" @submit="send" />
+        <div class="mt-2 flex justify-end">
           <button class="btn-primary" :disabled="sending || !body.trim()" @click="send">{{ sending ? '…' : 'Отправить' }}</button>
         </div>
-        <p class="mt-1 text-xs text-ink-700/40">Enter — отправить · Shift+Enter — новая строка</p>
       </div>
     </template>
   </div>
 </template>
 
 <style scoped>
-.composer-btn {
-  @apply rounded-md border border-parchment-300 bg-white px-2 py-1 text-sm text-ink-700 transition-colors hover:bg-parchment-100 disabled:opacity-50;
-}
 .markdown-body :deep(a) { text-decoration: underline; }
 .markdown-body :deep(ul) { margin: 0.25rem 0; }
+.markdown-body :deep(img) { max-height: 18rem; border-radius: 0.5rem; }
 </style>

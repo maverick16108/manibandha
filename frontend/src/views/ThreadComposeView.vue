@@ -4,7 +4,7 @@ import { RouterLink, useRoute, useRouter } from 'vue-router'
 import client from '../api/client'
 import { useAuthStore } from '../stores/auth'
 import AppSelect from '../components/AppSelect.vue'
-import AppIcon from '../components/AppIcon.vue'
+import MarkdownEditor from '../components/MarkdownEditor.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -66,7 +66,7 @@ onMounted(async () => {
       </div>
       <div>
         <label class="label">{{ isReport ? 'Как прошло служение в этом месяце' : 'Ваш вопрос' }}</label>
-        <textarea v-model="form.body" rows="8" class="input resize-y min-h-[10rem]" required autofocus></textarea>
+        <MarkdownEditor v-model="form.body" :rows="8" placeholder="Текст… (можно вставлять фото)" />
       </div>
       <p v-if="error" class="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{{ error }}</p>
       <div class="flex gap-2">

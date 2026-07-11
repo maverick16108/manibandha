@@ -6,8 +6,9 @@ from app.models.city import City
 from app.models.country import Country
 from app.models.region import Region
 from app.models.thread import Thread, ThreadMessage, MessageLike, ThreadRead
+from app.models.event import Event
 
 __all__ = [
     "User", "Temple", "Disciple", "ChecklistItem", "City", "Country", "Region",
-    "Thread", "ThreadMessage", "MessageLike", "ThreadRead",
+    "Thread", "ThreadMessage", "MessageLike", "ThreadRead", "Event",
 ]

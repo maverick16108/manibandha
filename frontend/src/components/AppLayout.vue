@@ -12,6 +12,7 @@ const sidebarOpen = ref(false)
 
 const nav = [
   { name: 'dashboard', label: 'Обзор', icon: 'overview' },
+  { name: 'calendar', label: 'Календарь', icon: 'calendar' },
   { name: 'disciples', label: 'Ученики', icon: 'disciples' },
   { name: 'questions', label: 'Вопросы', icon: 'chat', roles: ['guru', 'student'] },
   { name: 'service-reports', label: 'Отчёты', icon: 'reports', roles: ['guru', 'curator', 'student'] },

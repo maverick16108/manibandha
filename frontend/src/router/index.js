@@ -11,6 +11,9 @@ const routes = [
     children: [
       { path: '', redirect: '/app/dashboard' },
       { path: 'dashboard', name: 'dashboard', component: () => import('../views/DashboardView.vue') },
+      { path: 'calendar', name: 'calendar', component: () => import('../views/CalendarView.vue') },
+      { path: 'calendar/new', name: 'event-new', component: () => import('../views/EventFormView.vue') },
+      { path: 'calendar/:id/edit', name: 'event-edit', component: () => import('../views/EventFormView.vue') },
       { path: 'disciples', name: 'disciples', component: () => import('../views/DisciplesView.vue') },
       { path: 'disciples/new', name: 'disciple-new', component: () => import('../views/DiscipleFormView.vue') },
       { path: 'disciples/:id', name: 'disciple', component: () => import('../views/DiscipleDetailView.vue') },

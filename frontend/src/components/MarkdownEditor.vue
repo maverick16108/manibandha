@@ -1,6 +1,7 @@
 <script setup>
-import { ref, nextTick } from 'vue'
+import { ref, nextTick, onMounted } from 'vue'
 import client from '../api/client'
+import AppIcon from './AppIcon.vue'
 
 const props = defineProps({
   modelValue: { type: String, default: '' },
@@ -14,9 +15,25 @@ const textarea = ref(null)
 const fileInput = ref(null)
 const uploading = ref(false)
 const dragOver = ref(false)
+const showPreview = ref(false)
+
+import { renderMarkdown } from '../lib/markdown'
+const previewHtml = () => renderMarkdown(props.modelValue || '')
+
+// авто-рост поля до половины экрана; выше — пользователь тянет сам (resize-y)
+function autoGrow() {
+  const el = textarea.value
+  if (!el) return
+  const max = window.innerHeight * 0.5
+  if (el.scrollHeight > el.clientHeight && el.clientHeight < max) {
+    el.style.height = Math.min(el.scrollHeight, max) + 'px'
+  }
+}
+onMounted(autoGrow)
 
 function setValue(v, caret) {
   emit('update:modelValue', v)
+  nextTick(autoGrow)
   if (caret != null) nextTick(() => { const el = textarea.value; if (el) { el.focus(); el.selectionStart = el.selectionEnd = caret } })
 }
 function wrap(before, after = before, placeholder = '') {
@@ -70,20 +87,31 @@ function onKeydown(e) {
       <button type="button" class="md-btn line-through" title="Зачёркнутый" @click="wrap('~~', '~~', 'текст')">S</button>
       <button type="button" class="md-btn font-mono" title="Код" @click="wrap('`', '`', 'код')">&lt;/&gt;</button>
       <button type="button" class="md-btn" title="Список" @click="insert('\n- ')">• Список</button>
-      <button type="button" class="md-btn" title="Ссылка" @click="wrap('[', '](https://)', 'текст')">🔗</button>
-      <button type="button" class="md-btn" title="Картинка" :disabled="uploading" @click="fileInput.click()">
-        {{ uploading ? '…' : '🖼 Фото' }}
+      <button type="button" class="md-btn" title="Ссылка" @click="wrap('[', '](https://)', 'текст')">
+        <AppIcon name="link" :size="16" />
+      </button>
+      <button type="button" class="md-btn inline-flex items-center gap-1" title="Картинка" :disabled="uploading" @click="fileInput.click()">
+        <AppIcon name="image" :size="16" /> {{ uploading ? '…' : 'Фото' }}
+      </button>
+      <button type="button" class="md-btn ml-auto inline-flex items-center gap-1"
+              :class="showPreview && 'bg-saffron-500/15 text-saffron-700'"
+              title="Предпросмотр" @click="showPreview = !showPreview">
+        <AppIcon name="eye" :size="16" /> {{ showPreview ? 'Редактор' : 'Превью' }}
       </button>
       <input ref="fileInput" type="file" accept="image/*" multiple class="hidden" @change="uploadFiles($event.target.files)" />
     </div>
+    <div v-if="showPreview"
+         class="markdown-body input min-h-[8rem] w-full overflow-auto bg-parchment-50"
+         v-html="previewHtml() || '<span class=\'text-ink-700/40\'>Пусто</span>'"></div>
     <textarea
+      v-show="!showPreview"
       ref="textarea" :value="modelValue" :rows="rows" :placeholder="placeholder"
       class="input w-full resize-y transition-colors"
       :class="dragOver && 'border-saffron-400 ring-1 ring-saffron-400'"
-      @input="emit('update:modelValue', $event.target.value)"
+      @input="emit('update:modelValue', $event.target.value); autoGrow()"
       @paste="onPaste" @keydown="onKeydown"
       @dragover.prevent="dragOver = true" @dragleave="dragOver = false" @drop="onDrop"></textarea>
-    <p class="mt-1 text-xs text-ink-700/40">Фото можно вставить из буфера (Ctrl+V) или перетащить в поле</p>
+    <p v-if="!showPreview" class="mt-1 text-xs text-ink-700/40">Фото можно вставить из буфера (Ctrl+V) или перетащить в поле</p>
   </div>
 </template>
 
@@ -91,4 +119,8 @@ function onKeydown(e) {
 .md-btn {
   @apply rounded-md border border-parchment-300 bg-white px-2 py-1 text-sm text-ink-700 transition-colors hover:bg-parchment-100 disabled:opacity-50;
 }
+.markdown-body :deep(a) { text-decoration: underline; }
+.markdown-body :deep(ul) { margin: 0.25rem 0; padding-left: 1.1rem; list-style: disc; }
+.markdown-body :deep(img) { max-height: 18rem; border-radius: 0.5rem; margin: 0.35rem 0; }
+.markdown-body :deep(code) { background: rgba(0,0,0,.06); padding: 0 .25rem; border-radius: .25rem; }
 </style>

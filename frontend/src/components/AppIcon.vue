@@ -124,6 +124,25 @@ defineProps({
       </g>
     </template>
 
+    <!-- image (photo) -->
+    <template v-else-if="name === 'image'">
+      <rect x="3.5" y="4.5" width="17" height="15" rx="2.2" />
+      <circle cx="8.5" cy="9.5" r="1.6" />
+      <path d="m4 16.5 4.2-4 3.3 3.2L15 12l5 5" />
+    </template>
+
+    <!-- link -->
+    <template v-else-if="name === 'link'">
+      <path d="M10 13.8a3.6 3.6 0 0 0 5.1 0l2.4-2.4a3.6 3.6 0 1 0-5.1-5.1l-1.3 1.3" />
+      <path d="M14 10.2a3.6 3.6 0 0 0-5.1 0L6.5 12.6a3.6 3.6 0 1 0 5.1 5.1l1.3-1.3" />
+    </template>
+
+    <!-- eye (preview) -->
+    <template v-else-if="name === 'eye'">
+      <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z" />
+      <circle cx="12" cy="12" r="3" />
+    </template>
+
     <!-- shield (roles / доступ) -->
     <template v-else-if="name === 'shield'">
       <path d="M12 3 5 5.5v5.2c0 4.4 3 7.6 7 9.3 4-1.7 7-4.9 7-9.3V5.5L12 3Z" />

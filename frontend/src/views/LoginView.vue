@@ -3,6 +3,8 @@ import { ref } from 'vue'
 import { useRouter, useRoute, RouterLink } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 
+import AppIcon from '../components/AppIcon.vue'
+
 const portrait = '/guru/1.jpg'
 const auth = useAuthStore()
 const router = useRouter()
@@ -43,7 +45,7 @@ async function submit() {
     <div class="flex w-full items-center justify-center bg-parchment-100 px-6 lg:w-1/2">
       <div class="w-full max-w-sm">
         <div class="mb-8 text-center">
-          <div class="mb-3 text-4xl">🪷</div>
+          <AppIcon name="lotus" :size="44" class="mx-auto mb-3 text-saffron-500" />
           <h1 class="font-display text-3xl font-semibold text-ink-900">Вход в кабинет</h1>
           <p class="mt-2 text-sm text-ink-700/70">Учёт учеников · Манибандха Прабху</p>
         </div>

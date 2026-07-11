@@ -3,17 +3,18 @@ import { ref } from 'vue'
 import { RouterLink, RouterView, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { ROLE_LABELS } from '../lib/format'
+import AppIcon from './AppIcon.vue'
 
 const auth = useAuthStore()
 const router = useRouter()
 const sidebarOpen = ref(false)
 
 const nav = [
-  { name: 'dashboard', label: 'Обзор', icon: '📊' },
-  { name: 'disciples', label: 'Ученики', icon: '🧎' },
-  { name: 'temples', label: 'Храмы', icon: '🛕' },
-  { name: 'reports', label: 'Отчёты', icon: '📄' },
-  { name: 'users', label: 'Пользователи', icon: '👥', guruOnly: true },
+  { name: 'dashboard', label: 'Обзор', icon: 'overview' },
+  { name: 'disciples', label: 'Ученики', icon: 'disciples' },
+  { name: 'temples', label: 'Храмы', icon: 'temple' },
+  { name: 'reports', label: 'Отчёты', icon: 'reports' },
+  { name: 'users', label: 'Пользователи', icon: 'users', guruOnly: true },
 ]
 
 function logout() {
@@ -30,7 +31,7 @@ function logout() {
       :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full'"
     >
       <div class="flex h-16 items-center gap-2 border-b border-parchment-200 px-6">
-        <span class="text-xl">🪷</span>
+        <AppIcon name="lotus" :size="24" class="text-saffron-500" />
         <span class="font-display text-lg font-semibold text-ink-900">Манибандха</span>
       </div>
       <nav class="p-3">
@@ -42,7 +43,7 @@ function logout() {
             active-class="bg-saffron-500/10 text-saffron-700"
             @click="sidebarOpen = false"
           >
-            <span>{{ item.icon }}</span>{{ item.label }}
+            <AppIcon :name="item.icon" :size="18" />{{ item.label }}
           </RouterLink>
         </template>
       </nav>

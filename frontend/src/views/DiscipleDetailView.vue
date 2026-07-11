@@ -17,12 +17,17 @@ const auth = useAuthStore()
 const id = computed(() => route.params.id)
 
 const d = ref(null)
+const stats = ref(null)
 const loading = ref(true)
 const newItem = reactive({ title: '', target: 'harinama' })
 
 async function load() {
   const { data } = await client.get(`/disciples/${id.value}`)
   d.value = data
+  try {
+    const s = await client.get('/threads/stats', { params: { disciple_id: id.value } })
+    stats.value = s.data
+  } catch { stats.value = null }
 }
 
 async function addItem() {
@@ -83,6 +88,11 @@ onMounted(async () => {
             <span class="badge" :class="STATUS_BADGE[d.initiation_status]">{{ STATUS_LABELS[d.initiation_status] }}</span>
             <span v-if="d.ready_for_pranama" class="badge bg-orange-100 text-orange-800">Готов к пранаме</span>
             <span v-if="d.ready_for_initiation" class="badge bg-saffron-500/15 text-saffron-700">Готов к инициации</span>
+          </div>
+          <div v-if="stats" class="mt-3 flex flex-wrap gap-4 text-sm text-ink-700/70">
+            <span>Отчётов: <b class="text-ink-900">{{ stats.reports }}</b></span>
+            <span>Вопросов: <b class="text-ink-900">{{ stats.questions }}</b></span>
+            <span>Сообщений от ученика: <b class="text-ink-900">{{ stats.messages }}</b></span>
           </div>
         </div>
         <div v-if="auth.canEdit" class="flex gap-2">

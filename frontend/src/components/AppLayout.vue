@@ -12,10 +12,18 @@ const sidebarOpen = ref(false)
 const nav = [
   { name: 'dashboard', label: 'Обзор', icon: 'overview' },
   { name: 'disciples', label: 'Ученики', icon: 'disciples' },
+  { name: 'questions', label: 'Вопросы', icon: 'chat', roles: ['guru', 'student'] },
+  { name: 'service-reports', label: 'Отчёты', icon: 'reports', roles: ['guru', 'curator', 'student'] },
   { name: 'dictionaries', label: 'Справочники', icon: 'pin' },
-  { name: 'reports', label: 'Отчёты', icon: 'reports' },
+  { name: 'reports', label: 'Статистика', icon: 'chart' },
   { name: 'users', label: 'Пользователи', icon: 'users', guruOnly: true },
 ]
+
+function canShow(item) {
+  if (item.guruOnly && !auth.isGuru) return false
+  if (item.roles && !item.roles.includes(auth.user?.role)) return false
+  return true
+}
 
 function logout() {
   auth.logout()
@@ -39,7 +47,7 @@ function logout() {
       <nav class="p-3">
         <template v-for="item in nav" :key="item.name">
           <RouterLink
-            v-if="!item.guruOnly || auth.isGuru"
+            v-if="canShow(item)"
             :to="{ name: item.name }"
             class="mb-1 flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-ink-700 hover:bg-parchment-100"
             active-class="bg-saffron-500/10 text-saffron-700"

@@ -16,6 +16,11 @@ class InitiationStatus(str, enum.Enum):
     brahman = "brahman"          # вторая инициация (брахман)
 
 
+class ThreadKind(str, enum.Enum):
+    question = "question"  # приватный вопрос гуру (ученик ↔ гуру)
+    report = "report"      # ежемесячный отчёт о служении (ученик, наставник, гуру)
+
+
 class MaritalStatus(str, enum.Enum):
     single = "single"
     married = "married"

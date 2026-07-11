@@ -55,6 +55,16 @@ defineProps({
       <path d="M12 6.6V19.7" />
     </template>
 
+    <!-- chat (questions) -->
+    <template v-else-if="name === 'chat'">
+      <path d="M21 11.5a7.5 7.5 0 0 1-10.9 6.7L4 20l1.8-4.1A7.5 7.5 0 1 1 21 11.5Z" />
+    </template>
+
+    <!-- chart (statistics) -->
+    <template v-else-if="name === 'chart'">
+      <path d="M4 20V10M9.5 20V4M15 20v-6M20.5 20V8M3 20h18" />
+    </template>
+
     <!-- menu (burger) -->
     <template v-else-if="name === 'menu'">
       <path d="M4 7h16M4 12h16M4 17h16" />

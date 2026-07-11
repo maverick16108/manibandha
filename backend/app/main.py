@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.api.routes import (
-    auth, cities, countries, disciples, mentors, pipeline, regions, reports, temples, uploads, users,
+    auth, cities, countries, disciples, mentors, pipeline, regions, reports, temples, threads, uploads, users,
 )
 from app.core.config import settings
 
@@ -21,7 +21,7 @@ app.add_middleware(
 )
 
 for r in (auth.router, users.router, temples.router, cities.router, countries.router, regions.router,
-          disciples.router, pipeline.router, reports.router, uploads.router, mentors.router):
+          disciples.router, pipeline.router, reports.router, uploads.router, mentors.router, threads.router):
     app.include_router(r, prefix=settings.API_PREFIX)
 
 # Serve uploaded images (dev; in prod nginx also serves /uploads directly).

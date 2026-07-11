@@ -19,6 +19,7 @@ const nav = [
   { name: 'dashboard', label: 'Обзор', icon: 'overview', caps: ['dashboard.view'] },
   { name: 'calendar', label: 'Календарь', icon: 'calendar', caps: ['calendar.view'] },
   { name: 'disciples', label: 'Ученики', icon: 'disciples', caps: ['disciples.view_all', 'disciples.view_own'] },
+  { name: 'approvals', label: 'Заявки', icon: 'shield', caps: ['disciples.approve'] },
   { name: 'questions', label: 'Вопросы', icon: 'chat', caps: ['questions.ask', 'questions.answer', 'questions.view_all'] },
   { name: 'service-reports', label: 'Отчёты', icon: 'reports', caps: ['reports.write', 'reports.read_all'] },
   { name: 'dictionaries', label: 'Справочники', icon: 'pin', caps: ['dictionaries.manage'] },

@@ -30,6 +30,8 @@ const routes = [
       { path: 'users', name: 'users', component: () => import('../views/UsersView.vue'), meta: { staffOnly: true } },
       { path: 'roles', name: 'roles', component: () => import('../views/RolesView.vue'), meta: { guruOnly: true } },
       { path: 'profile', name: 'profile', component: () => import('../views/ProfileView.vue') },
+      { path: 'approvals', name: 'approvals', component: () => import('../views/ApprovalsView.vue') },
+      { path: 'waiting', name: 'waiting', component: () => import('../views/WaitingView.vue') },
     ],
   },
 ]
@@ -48,6 +50,7 @@ const ROUTE_CAPS = {
   dictionaries: ['dictionaries.manage'],
   users: ['users.manage'],
   roles: ['roles.manage'],
+  approvals: ['disciples.approve'],
 }
 const LANDING_ORDER = ['dashboard', 'calendar', 'disciples', 'questions', 'service-reports', 'dictionaries', 'users']
 
@@ -81,6 +84,15 @@ router.beforeEach(async (to) => {
   if (to.meta.requiresAuth && !auth.isAuthenticated) {
     return { name: 'login', query: { redirect: to.fullPath } }
   }
+  // Незаапрувленный (самостоятельно зарегистрированный) — только экран ожидания, своя анкета и чат
+  if (auth.isAuthenticated && auth.isPending) {
+    if (to.name === 'login') return { name: 'waiting' }
+    if (to.meta.requiresAuth) {
+      const allowedForPending = ['waiting', 'profile', 'disciple', 'disciple-edit', 'thread']
+      return allowedForPending.includes(to.name) ? true : { name: 'waiting' }
+    }
+  }
+
   // Гейтинг по правам-действиям
   const has = (caps) => (caps || []).some((c) => auth.can(c))
   const landing = () => LANDING_ORDER.find((n) => has(ROUTE_CAPS[n])) || 'profile'

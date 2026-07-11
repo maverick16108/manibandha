@@ -1,5 +1,5 @@
 export const STATUS_LABELS = {
-  recommended: 'Рекомендован',
+  recommended: 'Зарегистрирован',
   aspirant: 'Кандидат',
   pranama: 'Пранама-мантра',
   harinama: 'Харинама',

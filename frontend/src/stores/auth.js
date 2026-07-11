@@ -7,9 +7,11 @@ export const useAuthStore = defineStore('auth', {
     user: null,
     caps: [],
     roles: [],
+    pending: false,
   }),
   getters: {
     isAuthenticated: (s) => !!s.token,
+    isPending: (s) => s.pending,
     role: (s) => s.user?.role || null,
     // право-действие
     can: (s) => (cap) => s.caps.includes(cap),
@@ -34,11 +36,23 @@ export const useAuthStore = defineStore('auth', {
         const { data: perm } = await client.get('/me/capabilities')
         this.caps = perm.capabilities || []
         this.roles = perm.roles || []
+        this.pending = !!perm.pending
       } catch {
         this.caps = []
         this.roles = []
+        this.pending = false
       }
       return data
+    },
+    async requestPhoneCode(phone) {
+      const { data } = await client.post('/auth/phone/request', { phone })
+      return data
+    },
+    async loginByPhone(phone, code) {
+      const { data } = await client.post('/auth/phone/verify', { phone, code })
+      this.token = data.access_token
+      localStorage.setItem('token', this.token)
+      await this.fetchMe()
     },
     async updateProfile(payload) {
       const { data } = await client.patch('/auth/me', payload)
@@ -50,6 +64,7 @@ export const useAuthStore = defineStore('auth', {
       this.user = null
       this.caps = []
       this.roles = []
+      this.pending = false
       localStorage.removeItem('token')
     },
   },

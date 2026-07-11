@@ -26,7 +26,7 @@ router = APIRouter(prefix="/reports", tags=["reports"])
 STATUS_LABELS = {
     InitiationStatus.aspirant: "Кандидат",
     InitiationStatus.pranama: "Пранама-мантра",
-    InitiationStatus.recommended: "Рекомендован",
+    InitiationStatus.recommended: "Зарегистрирован",
     InitiationStatus.harinama: "Харинама",
     InitiationStatus.brahman: "Брахман",
 }

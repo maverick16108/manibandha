@@ -23,6 +23,25 @@ const plotH = H - padT - padB
 
 const hover = ref(-1)
 
+// smooth curve through points (Catmull-Rom -> cubic bezier)
+function smoothPath(pts) {
+  if (!pts.length) return ''
+  if (pts.length === 1) return `M ${pts[0].x},${pts[0].y}`
+  let d = `M ${pts[0].x},${pts[0].y}`
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i - 1] || pts[i]
+    const p1 = pts[i]
+    const p2 = pts[i + 1]
+    const p3 = pts[i + 2] || p2
+    const c1x = p1.x + (p2.x - p0.x) / 6
+    const c1y = p1.y + (p2.y - p0.y) / 6
+    const c2x = p2.x - (p3.x - p1.x) / 6
+    const c2y = p2.y - (p3.y - p1.y) / 6
+    d += ` C ${c1x},${c1y} ${c2x},${c2y} ${p2.x},${p2.y}`
+  }
+  return d
+}
+
 const geom = computed(() => {
   const n = props.data.length
   const maxVal = Math.max(1, ...props.data.flatMap((d) => SERIES.map((s) => d[s.key] || 0)))
@@ -66,9 +85,9 @@ const geom = computed(() => {
 
       <!-- series lines + dots -->
       <g v-for="s in geom.lines" :key="s.key">
-        <polyline :points="s.poly" fill="none" :stroke="s.color" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" />
+        <path :d="smoothPath(s.points)" fill="none" :stroke="s.color" stroke-width="3.5" stroke-linejoin="round" stroke-linecap="round" />
         <circle v-for="(p, i) in s.points" :key="i" :cx="p.x" :cy="p.y"
-                :r="hover === i ? 4 : 2.5" :fill="s.color">
+                :r="hover === i ? 5 : 3" :fill="s.color" stroke="#fff" stroke-width="1.5">
           <title>{{ monthLabel(data[i].period) }} · {{ s.label }}: {{ p.v }}</title>
         </circle>
       </g>

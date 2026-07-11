@@ -67,8 +67,9 @@ function toggle() {
   }
 }
 function onDoc(e) { if (root.value && !root.value.contains(e.target)) open.value = false }
-onMounted(() => document.addEventListener('mousedown', onDoc))
-onBeforeUnmount(() => document.removeEventListener('mousedown', onDoc))
+function onKey(e) { if (e.key === 'Escape' && open.value) open.value = false }
+onMounted(() => { document.addEventListener('mousedown', onDoc); document.addEventListener('keydown', onKey) })
+onBeforeUnmount(() => { document.removeEventListener('mousedown', onDoc); document.removeEventListener('keydown', onKey) })
 </script>
 
 <template>

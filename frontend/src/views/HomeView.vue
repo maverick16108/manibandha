@@ -43,11 +43,8 @@ const service = [
     <!-- Top bar -->
     <header class="absolute inset-x-0 top-0 z-20">
       <div class="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-4 sm:px-6">
-        <span class="flex items-center gap-2.5 text-white drop-shadow">
-          <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-saffron-400 to-saffron-600 text-white shadow-lg ring-1 ring-white/30">
-            <AppIcon name="lotus-solid" :size="30" />
-          </span>
-          <span class="font-script text-2xl font-bold leading-none sm:text-3xl">Манибандха</span>
+        <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-saffron-400 to-saffron-600 text-white shadow-lg ring-1 ring-white/30">
+          <AppIcon name="lotus-solid" :size="32" />
         </span>
         <RouterLink to="/login" class="btn whitespace-nowrap bg-white/90 text-ink-800 hover:bg-white">
           <span class="sm:hidden">Войти</span><span class="hidden sm:inline">Войти в кабинет</span>

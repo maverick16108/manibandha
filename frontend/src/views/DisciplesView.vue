@@ -17,7 +17,13 @@ const mentors = ref([])
 const regions = ref([])
 const cities = ref([])
 
-const filters = reactive({ q: '', status: '', region: '', city: '', mentor_id: '', ready: '', ready_pranama: '' })
+const filters = reactive({ q: '', status: '', region: '', city: '', mentor_id: '', ready: '', ready_pranama: '', event_month: '' })
+
+const MONTHS = ['', 'янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек']
+function monthLabel(ym) {
+  const [y, m] = (ym || '').split('-')
+  return m ? `${MONTHS[+m]} ${y}` : ym
+}
 
 const statusOptions = [{ value: '', label: 'Все статусы' }, ...STATUS_ORDER.map((s) => ({ value: s, label: STATUS_LABELS[s] }))]
 const mentorOptions = computed(() => [{ value: '', label: 'Все наставники' }, ...mentors.value.map((m) => ({ value: m.id, label: m.full_name }))])
@@ -106,7 +112,11 @@ onMounted(async () => {
           <input type="checkbox" v-model="filters.ready" true-value="true" false-value="" /> Готовые к инициации
         </label>
       </div>
-      <div class="mt-3">
+      <div class="mt-3 flex flex-wrap items-center gap-3">
+        <span v-if="filters.event_month" class="badge bg-saffron-500/15 text-saffron-700">
+          События: {{ monthLabel(filters.event_month) }}
+          <button class="ml-1 text-saffron-700/70 hover:text-saffron-700" @click="filters.event_month = ''">✕</button>
+        </span>
         <button class="text-sm text-saffron-600 hover:underline" @click="reset">Сбросить фильтры</button>
       </div>
     </div>

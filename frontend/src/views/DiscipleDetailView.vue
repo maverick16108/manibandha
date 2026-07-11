@@ -6,6 +6,7 @@ import { useAuthStore } from '../stores/auth'
 import { confirmDialog } from '../composables/confirm'
 import AppSelect from '../components/AppSelect.vue'
 import AppSkeleton from '../components/AppSkeleton.vue'
+import AppIcon from '../components/AppIcon.vue'
 import { STATUS_LABELS, STATUS_ORDER, STATUS_BADGE, MARITAL_LABELS, formatDate, phoneList } from '../lib/format'
 
 const statusOptions = STATUS_ORDER.map((s) => ({ value: s, label: STATUS_LABELS[s] }))
@@ -53,7 +54,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div v-if="loading" class="mx-auto max-w-4xl space-y-6">
+  <div v-if="loading" class="mx-auto max-w-6xl space-y-6">
     <div class="card flex gap-6 p-6">
       <AppSkeleton w="w-28" h="h-28" rounded="rounded-xl" />
       <div class="flex-1 space-y-3"><AppSkeleton w="w-56" h="h-8" /><AppSkeleton w="w-32" /><AppSkeleton w="w-24" h="h-5" rounded="rounded-full" /></div>
@@ -63,8 +64,10 @@ onMounted(async () => {
       <div class="card space-y-3 p-6"><AppSkeleton w="w-32" h="h-5" /><AppSkeleton v-for="j in 6" :key="j" /></div>
     </div>
   </div>
-  <div v-else-if="d" class="mx-auto max-w-4xl">
-    <RouterLink :to="{ name: 'disciples' }" class="mb-4 inline-block text-sm text-saffron-600 hover:underline">← К списку</RouterLink>
+  <div v-else-if="d" class="mx-auto max-w-6xl">
+    <RouterLink :to="{ name: 'disciples' }" class="btn-outline mb-4">
+      <AppIcon name="chevron" :size="16" class="rotate-90" /> К списку учеников
+    </RouterLink>
 
     <!-- Header -->
     <div class="card mb-6 p-6">

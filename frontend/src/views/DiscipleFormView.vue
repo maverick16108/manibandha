@@ -14,6 +14,8 @@ const route = useRoute()
 const router = useRouter()
 const id = computed(() => route.params.id)
 const isEdit = computed(() => !!id.value)
+// back to the disciple card when editing, otherwise to the list
+const backTo = computed(() => (isEdit.value ? { name: 'disciple', params: { id: id.value } } : { name: 'disciples' }))
 
 const mentors = ref([])
 const cities = ref([])
@@ -88,7 +90,7 @@ onMounted(async () => {
 
 <template>
   <div class="mx-auto max-w-3xl">
-    <RouterLink :to="{ name: 'disciples' }" class="mb-4 inline-block text-sm text-saffron-600 hover:underline">← К списку</RouterLink>
+    <RouterLink :to="backTo" class="btn-outline mb-4">← {{ isEdit ? 'К анкете' : 'К списку' }}</RouterLink>
     <h1 class="mb-6 font-display text-3xl font-semibold text-ink-900">
       {{ isEdit ? 'Редактировать ученика' : 'Новый ученик' }}
     </h1>
@@ -158,7 +160,7 @@ onMounted(async () => {
 
       <div class="flex gap-3">
         <button type="submit" class="btn-primary" :disabled="saving">{{ saving ? 'Сохранение…' : 'Сохранить' }}</button>
-        <RouterLink :to="{ name: 'disciples' }" class="btn-ghost">Отмена</RouterLink>
+        <RouterLink :to="backTo" class="btn-ghost">Отмена</RouterLink>
       </div>
     </form>
   </div>

@@ -24,6 +24,14 @@ const routes = [
 
 const router = createRouter({ history: createWebHistory(), routes })
 
+// After a deploy, chunk filenames change; a stale tab may fail to import a route
+// chunk. Reload once so it fetches the fresh assets instead of silently failing.
+router.onError((err) => {
+  if (/dynamically imported module|Importing a module script failed|Failed to fetch/i.test(err?.message || '')) {
+    window.location.reload()
+  }
+})
+
 router.beforeEach(async (to) => {
   const auth = useAuthStore()
   if (auth.token && !auth.user) {

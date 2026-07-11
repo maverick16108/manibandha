@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 
 // data: [{ period: 'YYYY-MM', pranama, harinama, brahman }]
 const props = defineProps({ data: { type: Array, default: () => [] } })
+const emit = defineEmits(['select'])
 
 const SERIES = [
   { key: 'pranama', label: 'Пранама', color: '#c8742a' },
@@ -23,7 +24,8 @@ const plotH = H - padT - padB
 
 const hover = ref(-1)
 
-// smooth curve through points (Catmull-Rom -> cubic bezier)
+// smooth curve through points (Catmull-Rom -> cubic bezier), clamped to the plot band
+const clampY = (v) => Math.max(padT, Math.min(padT + plotH, v))
 function smoothPath(pts) {
   if (!pts.length) return ''
   if (pts.length === 1) return `M ${pts[0].x},${pts[0].y}`
@@ -34,9 +36,9 @@ function smoothPath(pts) {
     const p2 = pts[i + 1]
     const p3 = pts[i + 2] || p2
     const c1x = p1.x + (p2.x - p0.x) / 6
-    const c1y = p1.y + (p2.y - p0.y) / 6
+    const c1y = clampY(p1.y + (p2.y - p0.y) / 6)
     const c2x = p2.x - (p3.x - p1.x) / 6
-    const c2y = p2.y - (p3.y - p1.y) / 6
+    const c2y = clampY(p2.y - (p3.y - p1.y) / 6)
     d += ` C ${c1x},${c1y} ${c2x},${c2y} ${p2.x},${p2.y}`
   }
   return d
@@ -100,7 +102,7 @@ const geom = computed(() => {
         <rect v-for="(d, i) in data" :key="'h' + i"
               :x="geom.x(i) - plotW / (2 * Math.max(1, geom.n))" :y="padT"
               :width="plotW / Math.max(1, geom.n)" :height="plotH" fill="transparent"
-              @mouseenter="hover = i" />
+              class="cursor-pointer" @mouseenter="hover = i" @click="emit('select', d.period)" />
       </g>
     </svg>
     <p v-else class="py-8 text-center text-sm text-ink-700/50">Нет данных по датам</p>

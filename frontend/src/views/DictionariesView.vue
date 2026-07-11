@@ -12,7 +12,7 @@ const active = ref('cities')
 </script>
 
 <template>
-  <div class="mx-auto max-w-4xl">
+  <div>
     <h1 class="mb-1 font-display text-3xl font-semibold text-ink-900">Справочники</h1>
     <p class="mb-6 text-ink-700/60">Города, области и страны для анкет и фильтров</p>
 

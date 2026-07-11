@@ -33,7 +33,7 @@ const segments = computed(() => {
 <template>
   <div class="flex flex-col items-center gap-5 sm:flex-row sm:items-center sm:gap-8">
     <div class="relative shrink-0" :style="{ width: size + 'px', height: size + 'px' }">
-      <svg :width="size" :height="size" :viewBox="`0 0 ${size} ${size}`" class="-rotate-90">
+      <svg :width="size" :height="size" :viewBox="`0 0 ${size} ${size}`" class="-rotate-90 overflow-visible">
         <circle :cx="size / 2" :cy="size / 2" :r="r" fill="none" stroke="currentColor"
                 class="text-parchment-200" :stroke-width="thickness" />
         <circle

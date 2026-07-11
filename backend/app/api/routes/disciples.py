@@ -1,5 +1,7 @@
+from datetime import date
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import or_
+from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session, joinedload
 
 from app.api.deps import get_current_user, scope_disciple_query, staff_user
@@ -37,6 +39,7 @@ def list_disciples(
     mentor_id: int | None = None,
     ready: bool | None = None,
     ready_pranama: bool | None = None,
+    event_month: str | None = Query(None, description="YYYY-MM — событие (пранама/инициация) в этом месяце"),
     sort: str = Query("material_name", description="material_name|spiritual_name|created_at|initiation_status"),
     skip: int = 0,
     limit: int = Query(50, le=500),
@@ -62,6 +65,18 @@ def list_disciples(
         query = query.filter(Disciple.ready_for_initiation.is_(ready))
     if ready_pranama is not None:
         query = query.filter(Disciple.ready_for_pranama.is_(ready_pranama))
+    if event_month:
+        try:
+            y, m = map(int, event_month.split("-"))
+            start = date(y, m, 1)
+            end = date(y + 1, 1, 1) if m == 12 else date(y, m + 1, 1)
+            query = query.filter(or_(
+                and_(Disciple.pranama_date >= start, Disciple.pranama_date < end),
+                and_(Disciple.harinama_date >= start, Disciple.harinama_date < end),
+                and_(Disciple.brahman_date >= start, Disciple.brahman_date < end),
+            ))
+        except (ValueError, TypeError):
+            pass
 
     total = query.count()
 

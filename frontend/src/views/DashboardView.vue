@@ -97,8 +97,8 @@ onMounted(async () => {
         <!-- Timeline: when disciples receive pranama / initiations -->
         <div class="card p-6">
           <h3 class="mb-1 font-display text-xl text-ink-900">Пранама и инициации по времени</h3>
-          <p class="mb-5 text-sm text-ink-700/60">Когда ученики получают пранаму и инициации (по месяцам)</p>
-          <TimeSeriesChart :data="timeline" />
+          <p class="mb-5 text-sm text-ink-700/60">Когда ученики получают пранаму и инициации (по месяцам) · нажмите на месяц</p>
+          <TimeSeriesChart :data="timeline" @select="(period) => go({ event_month: period })" />
         </div>
 
         <!-- Status donut -->

@@ -86,7 +86,7 @@ onMounted(load)
       <div v-if="loading" class="grid grid-cols-2 gap-px p-4 sm:grid-cols-3">
         <AppSkeleton v-for="i in 9" :key="i" w="w-24" />
       </div>
-      <div v-else class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+      <div v-else class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         <div v-for="it in items" :key="it.id"
              class="group flex items-center justify-between border-b border-parchment-100 px-4 py-3">
           <div>

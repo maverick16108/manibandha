@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, onBeforeUnmount } from 'vue'
 import { useRouter, useRoute, RouterLink } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 
@@ -26,6 +26,32 @@ const phoneError = ref('')
 const phoneLoading = ref(false)
 const resent = ref(false)
 
+// --- Resend cooldown ---
+const RESEND_COOLDOWN = 60
+const secondsLeft = ref(0)
+let cooldownTimer = null
+
+function stopCooldown() {
+  if (cooldownTimer) {
+    clearInterval(cooldownTimer)
+    cooldownTimer = null
+  }
+}
+
+function startCooldown() {
+  stopCooldown()
+  secondsLeft.value = RESEND_COOLDOWN
+  cooldownTimer = setInterval(() => {
+    secondsLeft.value -= 1
+    if (secondsLeft.value <= 0) {
+      secondsLeft.value = 0
+      stopCooldown()
+    }
+  }, 1000)
+}
+
+onBeforeUnmount(stopCooldown)
+
 function switchMode(m) {
   if (m === mode.value) return
   mode.value = m
@@ -33,6 +59,8 @@ function switchMode(m) {
   code.value = ''
   phoneError.value = ''
   resent.value = false
+  stopCooldown()
+  secondsLeft.value = 0
 }
 
 async function requestCode() {
@@ -49,6 +77,7 @@ async function requestCode() {
       return
     }
     step.value = 2
+    startCooldown()
   } catch (e) {
     phoneError.value = e.response?.data?.detail || 'Не удалось отправить код. Проверьте номер.'
   } finally {
@@ -57,12 +86,14 @@ async function requestCode() {
 }
 
 async function resendCode() {
+  if (secondsLeft.value > 0 || phoneLoading.value) return
   phoneError.value = ''
   resent.value = false
   phoneLoading.value = true
   try {
     await auth.requestPhoneCode(phone.value)
     resent.value = true
+    startCooldown()
   } catch (e) {
     phoneError.value = e.response?.data?.detail || 'Не удалось отправить код повторно.'
   } finally {
@@ -89,6 +120,8 @@ function editPhone() {
   code.value = ''
   phoneError.value = ''
   resent.value = false
+  stopCooldown()
+  secondsLeft.value = 0
 }
 
 // --- Admin email auth (скрытый вход) ---
@@ -136,7 +169,7 @@ function closeAdmin() {
       </RouterLink>
       <div class="w-full max-w-sm">
         <div class="mb-8 text-center">
-          <AppIcon name="lotus" :size="44" class="mx-auto mb-3 text-saffron-500" />
+          <img src="/lotus-mark.png" alt="" class="mx-auto mb-3 h-11 w-auto" />
           <h1 class="font-display text-3xl font-semibold text-ink-900">Вход в кабинет</h1>
           <p class="mt-2 text-sm text-ink-700/70">для учеников Манибандхи Прабху</p>
         </div>
@@ -226,8 +259,9 @@ function closeAdmin() {
               {{ phoneLoading ? 'Входим…' : 'Войти' }}
             </button>
 
-            <button type="button" class="btn-ghost w-full text-sm" :disabled="phoneLoading" @click="resendCode">
-              Отправить код повторно
+            <button type="button" class="btn-ghost w-full text-sm" :disabled="phoneLoading || secondsLeft > 0" @click="resendCode">
+              <template v-if="secondsLeft > 0">Отправить код повторно через {{ secondsLeft }} с</template>
+              <template v-else>Отправить код повторно</template>
             </button>
           </form>
         </template>

@@ -55,9 +55,7 @@ function logout() {
       :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full'"
     >
       <div class="flex h-16 shrink-0 items-center gap-2.5 border-b border-parchment-200 px-5">
-        <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-saffron-400 to-saffron-600 text-white shadow">
-          <AppIcon name="lotus-solid" :size="32" />
-        </span>
+        <img src="/lotus-mark.png" alt="" class="h-9 w-auto" />
         <span class="font-display text-2xl font-semibold leading-none text-ink-900">Манибандха</span>
       </div>
 

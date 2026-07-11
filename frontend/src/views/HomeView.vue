@@ -64,7 +64,7 @@ const service = [
     <!-- Top bar -->
     <header class="absolute inset-x-0 top-0 z-20">
       <div class="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-4 sm:px-6">
-        <AppIcon name="lotus" :size="30" class="drop-shadow-sm" :stroke="1.6" style="color:#c8742a" />
+        <img src="/lotus-iskcon.png" alt="ИСККОН" class="h-11 w-auto sm:h-12" />
         <RouterLink to="/login" class="btn whitespace-nowrap bg-white/90 text-ink-800 hover:bg-white">
           <span class="sm:hidden">Войти</span><span class="hidden sm:inline">Войти в кабинет</span>
         </RouterLink>
@@ -129,7 +129,8 @@ const service = [
         <div class="mt-12 grid gap-8 sm:grid-cols-3">
           <div v-for="s in service" :key="s.title" class="text-center">
             <div class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full border border-saffron-400/40 bg-saffron-400/10 text-saffron-400">
-              <AppIcon :name="s.icon" :size="28" :stroke="1.4" />
+              <img v-if="s.icon === 'lotus'" src="/lotus-mark.png" alt="" class="h-7 w-auto" />
+              <AppIcon v-else :name="s.icon" :size="28" :stroke="1.4" />
             </div>
             <h3 class="font-display text-2xl text-white">{{ s.title }}</h3>
             <p class="mt-2 font-serif text-parchment-200/80">{{ s.text }}</p>

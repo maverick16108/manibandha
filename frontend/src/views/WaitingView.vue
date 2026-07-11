@@ -39,7 +39,7 @@ function logout() {
 <template>
   <div class="mx-auto max-w-xl">
     <div class="card p-8 text-center">
-      <AppIcon name="lotus" :size="48" class="mx-auto mb-4 text-saffron-500" />
+      <img src="/lotus-mark.png" alt="" class="mx-auto mb-4 h-12 w-auto" />
       <h1 class="font-display text-2xl font-semibold text-ink-900">Спасибо за регистрацию!</h1>
       <p class="mt-3 font-serif text-ink-700/80">
         Ваш аккаунт создан и ожидает подтверждения (апрув) наставником.

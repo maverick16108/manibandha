@@ -6,6 +6,8 @@ import { useAuthStore } from '../stores/auth'
 import { confirmDialog } from '../composables/confirm'
 import AppSkeleton from '../components/AppSkeleton.vue'
 import AppIcon from '../components/AppIcon.vue'
+import AppDatePicker from '../components/AppDatePicker.vue'
+import EventsMap from '../components/EventsMap.vue'
 import { renderMarkdown } from '../lib/markdown'
 import { formatDate } from '../lib/format'
 import { usePageTitle } from '../composables/pageTitle'
@@ -17,11 +19,21 @@ onEscape(() => { if (selected.value) selected.value = null })
 const auth = useAuthStore()
 const events = ref([])
 const loading = ref(true)
-const mode = ref('list') // 'list' | 'calendar'
+const mode = ref('list') // 'list' | 'calendar' | 'map'
 const selected = ref(null)
 
 const now = new Date()
 const cursor = ref({ y: now.getFullYear(), m: now.getMonth() + 1 })
+
+// период карты — по умолчанию год вперёд
+const pad = (n) => String(n).padStart(2, '0')
+const isoToday = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
+const isoNextYear = `${now.getFullYear() + 1}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
+const mapFrom = ref(isoToday)
+const mapTo = ref(isoNextYear)
+const mapEvents = computed(() => events.value.filter(
+  (e) => e.starts_on && e.starts_on >= mapFrom.value && e.starts_on <= mapTo.value,
+))
 
 const MONTHS = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь']
 const WD = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
@@ -90,6 +102,10 @@ onMounted(load)
                   :class="mode === 'calendar' ? 'bg-saffron-500 text-white' : 'text-ink-700 hover:bg-parchment-100'" @click="mode = 'calendar'">
             <AppIcon name="calendar" :size="15" /> Календарь
           </button>
+          <button class="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm transition"
+                  :class="mode === 'map' ? 'bg-saffron-500 text-white' : 'text-ink-700 hover:bg-parchment-100'" @click="mode = 'map'">
+            <AppIcon name="pin" :size="15" /> Карта
+          </button>
         </div>
         <RouterLink v-if="auth.isStaff" :to="{ name: 'event-new' }" class="btn-primary">+ Событие</RouterLink>
       </div>
@@ -130,7 +146,7 @@ onMounted(load)
     </div>
 
     <!-- CALENDAR -->
-    <div v-else class="card p-4 sm:p-6">
+    <div v-else-if="mode === 'calendar'" class="card p-4 sm:p-6">
       <div class="mb-4 flex items-center justify-between">
         <button class="flex h-9 w-9 items-center justify-center rounded-full border border-parchment-300 text-ink-700 hover:bg-parchment-100" @click="prevMonth">
           <AppIcon name="chevron" :size="18" class="rotate-90" />
@@ -157,6 +173,22 @@ onMounted(load)
           </div>
         </template>
       </div>
+    </div>
+
+    <!-- MAP -->
+    <div v-else-if="mode === 'map'">
+      <div class="card mb-4 flex flex-wrap items-end gap-3 p-4">
+        <div>
+          <label class="label">С</label>
+          <div class="w-40"><AppDatePicker v-model="mapFrom" /></div>
+        </div>
+        <div>
+          <label class="label">По</label>
+          <div class="w-40"><AppDatePicker v-model="mapTo" /></div>
+        </div>
+        <p class="ml-auto text-sm text-ink-700/60">Маршрут гуру · событий: <b class="text-ink-900">{{ mapEvents.length }}</b></p>
+      </div>
+      <EventsMap :events="mapEvents" />
     </div>
 
     <!-- event modal (from calendar) -->

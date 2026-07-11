@@ -6,6 +6,7 @@ import { confirmDialog } from '../composables/confirm'
 import AppSelect from '../components/AppSelect.vue'
 import AppDatePicker from '../components/AppDatePicker.vue'
 import PhotoUpload from '../components/PhotoUpload.vue'
+import PhoneInput from '../components/PhoneInput.vue'
 import { STATUS_LABELS, STATUS_ORDER, MARITAL_LABELS } from '../lib/format'
 
 const maritalOptions = [{ value: '', label: '—' }, ...Object.entries(MARITAL_LABELS).map(([value, label]) => ({ value, label }))]
@@ -132,7 +133,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
       <section class="card p-6">
         <h3 class="mb-4 font-display text-xl text-ink-900">Контакты и место</h3>
         <div class="grid gap-4 sm:grid-cols-2">
-          <div><label class="label">Телефон</label><input v-model="form.phone" class="input" /></div>
+          <div><label class="label">Телефон</label><PhoneInput v-model="form.phone" /></div>
           <div><label class="label">Email</label><input v-model="form.email" type="email" class="input" /></div>
           <div><label class="label">Мессенджер</label><input v-model="form.messenger" class="input" /></div>
           <div><label class="label">Семейное положение</label>

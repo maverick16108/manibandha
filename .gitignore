@@ -11,6 +11,9 @@ frontend/dist/
 frontend/.env
 frontend/.env.local
 
+# Raw source photos (originals) — kept locally, not in git
+/assets/
+
 # Guru photos — real images are managed outside git (per-environment)
 frontend/public/guru/*.jpg
 frontend/public/guru/*.jpeg

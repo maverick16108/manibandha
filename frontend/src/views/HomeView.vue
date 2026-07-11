@@ -185,10 +185,11 @@ const service = [
 
     <!-- Footer -->
     <footer class="bg-ink-900 text-parchment-200/70">
-      <div class="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-6 py-8 sm:flex-row">
-        <span class="font-script text-2xl font-bold text-white">Манибандха</span>
+      <div class="mx-auto flex max-w-6xl flex-col items-center gap-5 px-6 py-9 text-center sm:flex-row sm:justify-between sm:text-left">
         <span class="text-sm">© {{ new Date().getFullYear() }} · Служение и ученическая преемственность</span>
-        <RouterLink to="/login" class="text-sm text-saffron-400 hover:text-saffron-500">Кабинет учеников →</RouterLink>
+        <RouterLink to="/login" class="btn border border-saffron-400/50 text-saffron-400 hover:bg-saffron-400/10">
+          Кабинет учеников →
+        </RouterLink>
       </div>
     </footer>
   </div>

@@ -68,8 +68,33 @@ function clean(obj) {
   return out
 }
 
+// обязательные поля (при самостоятельной регистрации — расширенный набор)
+const errors = reactive({})
+const REQUIRED_MSG = {
+  material_name: 'Укажите ФИО',
+  country: 'Выберите страну',
+  region: 'Выберите область',
+  city: 'Выберите город',
+  date_of_birth: 'Укажите дату рождения',
+  marital_status: 'Выберите семейное положение',
+}
+const requiredFields = computed(() => (selfFill.value
+  ? ['material_name', 'country', 'region', 'city', 'date_of_birth', 'marital_status']
+  : ['material_name']))
+const req = (f) => requiredFields.value.includes(f)
+function validate() {
+  Object.keys(errors).forEach((k) => delete errors[k])
+  for (const f of requiredFields.value) {
+    if (!String(form[f] ?? '').trim()) errors[f] = REQUIRED_MSG[f]
+  }
+  return Object.keys(errors).length === 0
+}
+// убирать ошибку поля, как только оно заполнено
+watch(form, () => { for (const k of Object.keys(errors)) if (String(form[k] ?? '').trim()) delete errors[k] })
+
 async function save() {
   error.value = ''
+  if (!validate()) { error.value = 'Заполните обязательные поля, отмеченные звёздочкой.'; return }
   saving.value = true
   try {
     const payload = clean(form)
@@ -137,11 +162,15 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
 
 <template>
   <div class="mx-auto max-w-6xl">
-    <form class="space-y-6" @submit.prevent="save">
+    <form class="space-y-6" novalidate @submit.prevent="save">
       <section class="card p-6">
         <h3 class="mb-4 font-display text-xl text-ink-900">Основное</h3>
         <div class="grid gap-4 sm:grid-cols-2">
-          <div><label class="label">ФИО *</label><input ref="nameInput" v-model="form.material_name" class="input" required /></div>
+          <div>
+            <label class="label">ФИО <span class="text-red-500">*</span></label>
+            <input ref="nameInput" v-model="form.material_name" class="input" :class="errors.material_name && 'border-red-400'" />
+            <p v-if="errors.material_name" class="mt-1 text-xs text-red-600">{{ errors.material_name }}</p>
+          </div>
           <div v-if="!selfFill"><label class="label">Духовное имя</label><input v-model="form.spiritual_name" class="input" /></div>
           <div class="sm:col-span-2"><label class="label">Фото</label><PhotoUpload v-model="form.photo_url" /></div>
         </div>
@@ -153,13 +182,31 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
           <div><label class="label">Телефон</label><PhoneInput v-model="form.phone" /></div>
           <div><label class="label">Email</label><input v-model="form.email" type="email" class="input" /></div>
           <div><label class="label">Мессенджер</label><input v-model="form.messenger" class="input" /></div>
-          <div><label class="label">Семейное положение</label>
+          <div>
+            <label class="label">Семейное положение <span v-if="req('marital_status')" class="text-red-500">*</span></label>
             <AppSelect v-model="form.marital_status" :options="maritalOptions" placeholder="—" />
+            <p v-if="errors.marital_status" class="mt-1 text-xs text-red-600">{{ errors.marital_status }}</p>
           </div>
-          <div><label class="label">Страна</label><AppSelect v-model="form.country" :options="countryOptions" placeholder="—" /></div>
-          <div><label class="label">Область</label><AppSelect v-model="form.region" :options="regionOptions" placeholder="—" /></div>
-          <div><label class="label">Город</label><AppSelect v-model="form.city" :options="cityOptions" placeholder="—" /></div>
-          <div><label class="label">Дата рождения</label><AppDatePicker v-model="form.date_of_birth" /></div>
+          <div>
+            <label class="label">Страна <span v-if="req('country')" class="text-red-500">*</span></label>
+            <AppSelect v-model="form.country" :options="countryOptions" placeholder="—" />
+            <p v-if="errors.country" class="mt-1 text-xs text-red-600">{{ errors.country }}</p>
+          </div>
+          <div>
+            <label class="label">Область <span v-if="req('region')" class="text-red-500">*</span></label>
+            <AppSelect v-model="form.region" :options="regionOptions" placeholder="—" />
+            <p v-if="errors.region" class="mt-1 text-xs text-red-600">{{ errors.region }}</p>
+          </div>
+          <div>
+            <label class="label">Город <span v-if="req('city')" class="text-red-500">*</span></label>
+            <AppSelect v-model="form.city" :options="cityOptions" placeholder="—" />
+            <p v-if="errors.city" class="mt-1 text-xs text-red-600">{{ errors.city }}</p>
+          </div>
+          <div>
+            <label class="label">Дата рождения <span v-if="req('date_of_birth')" class="text-red-500">*</span></label>
+            <AppDatePicker v-model="form.date_of_birth" />
+            <p v-if="errors.date_of_birth" class="mt-1 text-xs text-red-600">{{ errors.date_of_birth }}</p>
+          </div>
         </div>
       </section>
 

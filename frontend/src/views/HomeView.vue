@@ -78,7 +78,7 @@ const service = [
       <div class="absolute inset-0 bg-gradient-to-t from-ink-900 via-ink-900/65 to-ink-900/40 lg:via-ink-900/40 lg:to-ink-900/30"></div>
       <div class="absolute inset-0 hidden lg:block bg-gradient-to-l from-ink-900/85 via-ink-900/25 to-transparent"></div>
 
-      <div class="relative z-10 mx-auto flex min-h-[100svh] max-w-6xl flex-col justify-end px-5 pb-14 pt-24 text-white sm:px-6 lg:justify-center lg:pb-0">
+      <div class="relative z-10 mx-auto flex min-h-[100svh] max-w-6xl flex-col justify-end px-5 pb-[12vh] pt-24 text-white sm:px-6 lg:justify-end lg:pb-[15vh]">
         <div class="max-w-xl text-center lg:ml-auto lg:text-right">
           <p class="mb-3 text-xs uppercase tracking-[0.3em] text-parchment-200/90 sm:mb-4 sm:text-sm">Его Милость</p>
           <h1 class="font-display text-4xl font-semibold leading-tight sm:text-6xl lg:text-7xl">Манибандха Прабху</h1>

@@ -10,6 +10,7 @@ class Role(str, enum.Enum):
 
 class InitiationStatus(str, enum.Enum):
     aspirant = "aspirant"        # аспирант
+    pranama = "pranama"          # получил пранама-мантру
     recommended = "recommended"  # рекомендован
     harinama = "harinama"        # первая инициация (харинама)
     brahman = "brahman"          # вторая инициация (брахман)

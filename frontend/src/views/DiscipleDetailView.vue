@@ -107,6 +107,7 @@ onMounted(async () => {
       <div class="card p-6">
         <h3 class="mb-4 font-display text-xl text-ink-900">Инициация и служение</h3>
         <dl class="space-y-2 text-sm">
+          <div class="flex justify-between"><dt class="text-ink-700/60">Пранама-мантра</dt><dd class="text-ink-800">{{ formatDate(d.pranama_date) }}</dd></div>
           <div class="flex justify-between"><dt class="text-ink-700/60">Харинама</dt><dd class="text-ink-800">{{ formatDate(d.harinama_date) }}<span v-if="d.harinama_name"> · {{ d.harinama_name }}</span></dd></div>
           <div class="flex justify-between"><dt class="text-ink-700/60">Вторая инициация</dt><dd class="text-ink-800">{{ formatDate(d.brahman_date) }}</dd></div>
           <div class="flex justify-between"><dt class="text-ink-700/60">Кто рекомендовал</dt><dd class="text-ink-800">{{ d.recommended_by || '—' }}</dd></div>

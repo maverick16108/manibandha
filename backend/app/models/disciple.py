@@ -36,6 +36,7 @@ class Disciple(Base):
     initiation_status: Mapped[InitiationStatus] = mapped_column(
         Enum(InitiationStatus, native_enum=False), nullable=False, default=InitiationStatus.aspirant, index=True
     )
+    pranama_date: Mapped[date | None] = mapped_column(Date, nullable=True)  # дата получения пранама-мантры
     harinama_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     harinama_name: Mapped[str | None] = mapped_column(String(255), nullable=True)  # духовное имя на харинаме
     brahman_date: Mapped[date | None] = mapped_column(Date, nullable=True)

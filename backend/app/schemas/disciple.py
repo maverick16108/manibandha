@@ -26,6 +26,7 @@ class DiscipleBase(BaseModel):
     date_of_birth: date | None = None
 
     initiation_status: InitiationStatus = InitiationStatus.aspirant
+    pranama_date: date | None = None
     harinama_date: date | None = None
     harinama_name: str | None = None
     brahman_date: date | None = None
@@ -59,6 +60,7 @@ class DiscipleUpdate(BaseModel):
     marital_status: MaritalStatus | None = None
     date_of_birth: date | None = None
     initiation_status: InitiationStatus | None = None
+    pranama_date: date | None = None
     harinama_date: date | None = None
     harinama_name: str | None = None
     brahman_date: date | None = None

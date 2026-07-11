@@ -13,8 +13,10 @@ const cities = ref([])
 const regions = ref([])
 const loading = ref(true)
 
-// Sequential warm ramp for the ordered initiation stages (aspirant → brahman).
-const STATUS_COLORS = { aspirant: '#e0a24e', recommended: '#cf7d2b', harinama: '#a85e1f', brahman: '#6d3f16' }
+// Sequential warm ramp for the ordered initiation stages (кандидат → брахман).
+const STATUS_COLORS = {
+  aspirant: '#e6b15c', pranama: '#d98a3d', recommended: '#c8742a', harinama: '#a4551b', brahman: '#6d3f16',
+}
 
 const statusData = computed(() => {
   if (!summary.value) return []

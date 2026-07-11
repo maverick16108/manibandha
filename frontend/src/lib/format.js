@@ -1,14 +1,16 @@
 export const STATUS_LABELS = {
-  aspirant: 'Аспирант',
+  aspirant: 'Кандидат',
+  pranama: 'Пранама-мантра',
   recommended: 'Рекомендован',
   harinama: 'Харинама',
   brahman: 'Брахман',
 }
 
-export const STATUS_ORDER = ['aspirant', 'recommended', 'harinama', 'brahman']
+export const STATUS_ORDER = ['aspirant', 'pranama', 'recommended', 'harinama', 'brahman']
 
 export const STATUS_BADGE = {
   aspirant: 'bg-parchment-200 text-ink-700',
+  pranama: 'bg-orange-100 text-orange-800',
   recommended: 'bg-amber-100 text-amber-800',
   harinama: 'bg-saffron-500/15 text-saffron-700',
   brahman: 'bg-sage-500/20 text-sage-600',

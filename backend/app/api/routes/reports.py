@@ -24,7 +24,8 @@ from app.schemas.report import CountByKey, ReportSummary
 router = APIRouter(prefix="/reports", tags=["reports"])
 
 STATUS_LABELS = {
-    InitiationStatus.aspirant: "Аспирант",
+    InitiationStatus.aspirant: "Кандидат",
+    InitiationStatus.pranama: "Пранама-мантра",
     InitiationStatus.recommended: "Рекомендован",
     InitiationStatus.harinama: "Харинама",
     InitiationStatus.brahman: "Брахман",

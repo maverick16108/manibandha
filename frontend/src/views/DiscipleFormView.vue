@@ -39,7 +39,7 @@ const form = reactive({
   phone: '', email: '', messenger: '',
   country: '', region: '', city: '', temple_id: '',
   marital_status: '', date_of_birth: '',
-  initiation_status: 'aspirant', harinama_date: '', harinama_name: '', brahman_date: '',
+  initiation_status: 'aspirant', pranama_date: '', harinama_date: '', harinama_name: '', brahman_date: '',
   seva: '', current_activity: '',
   mentor_id: '', recommended_by: '', application_date: '', ready_for_initiation: false,
   notes: '',
@@ -132,7 +132,7 @@ onMounted(async () => {
           <div><label class="label">Статус</label>
             <AppSelect v-model="form.initiation_status" :options="statusOptions" />
           </div>
-          <div></div>
+          <div><label class="label">Дата получения пранама-мантры</label><AppDatePicker v-model="form.pranama_date" /></div>
           <div><label class="label">Дата харинамы</label><AppDatePicker v-model="form.harinama_date" /></div>
           <div><label class="label">Духовное имя (харинама)</label><input v-model="form.harinama_name" class="input" /></div>
           <div><label class="label">Дата второй инициации (брахман)</label><AppDatePicker v-model="form.brahman_date" /></div>

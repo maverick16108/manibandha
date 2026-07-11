@@ -7,7 +7,7 @@ import { confirmDialog } from '../composables/confirm'
 import AppSelect from '../components/AppSelect.vue'
 import AppSkeleton from '../components/AppSkeleton.vue'
 import AppIcon from '../components/AppIcon.vue'
-import { STATUS_LABELS, STATUS_ORDER, STATUS_BADGE, MARITAL_LABELS, formatDate, phoneList } from '../lib/format'
+import { STATUS_LABELS, STATUS_ORDER, STATUS_BADGE, MARITAL_LABELS, formatDate, formatPhone, phoneList } from '../lib/format'
 import { usePageTitle } from '../composables/pageTitle'
 
 const statusOptions = STATUS_ORDER.map((s) => ({ value: s, label: STATUS_LABELS[s] }))
@@ -22,7 +22,16 @@ const stats = ref(null)
 const loading = ref(true)
 const newItem = reactive({ title: '', target: 'harinama' })
 
-usePageTitle(() => (d.value ? (d.value.spiritual_name || d.value.material_name) : ''))
+// имя ученика; если не заполнено (напр. только что зарегистрировался) — показываем телефон
+const nameIsPhone = computed(() => !!d.value && !d.value.spiritual_name && !d.value.material_name)
+const displayName = computed(() => {
+  const v = d.value
+  if (!v) return ''
+  return v.spiritual_name || v.material_name || (v.phone ? formatPhone(v.phone) : '—')
+})
+const isSelf = computed(() => String(auth.user?.disciple_id || '') === String(d.value?.id || ''))
+
+usePageTitle(() => displayName.value)
 
 async function load() {
   const { data } = await client.get(`/disciples/${id.value}`)
@@ -74,6 +83,20 @@ onMounted(async () => {
   </div>
   <div v-else-if="d" class="mx-auto max-w-6xl">
 
+    <!-- Ожидание апрува (для самого кандидата) -->
+    <div v-if="isSelf && d.is_approved === false" class="card mb-6 border-saffron-400/50 bg-saffron-500/5 p-5">
+      <div class="flex items-start gap-3">
+        <AppIcon name="chat" :size="22" class="mt-0.5 shrink-0 text-saffron-600" />
+        <div>
+          <div class="font-medium text-ink-900">Заявка на рассмотрении</div>
+          <p class="mt-1 text-sm text-ink-700/80">
+            Ожидайте — с Вами свяжется куратор для общения и завершения регистрации.
+            Пока можно заполнить анкету и написать в чат.
+          </p>
+        </div>
+      </div>
+    </div>
+
     <!-- Header -->
     <div class="card mb-6 p-6">
       <div class="flex flex-wrap items-start gap-6">
@@ -82,7 +105,7 @@ onMounted(async () => {
           {{ (d.spiritual_name || d.material_name || '?')[0] }}
         </div>
         <div class="flex-1">
-          <h1 class="font-display text-3xl font-semibold text-ink-900">{{ d.spiritual_name || d.material_name }}</h1>
+          <h1 class="font-semibold text-ink-900" :class="nameIsPhone ? 'text-2xl tabular-nums' : 'font-display text-3xl'">{{ displayName }}</h1>
           <p v-if="d.spiritual_name" class="text-ink-700/70">{{ d.material_name }}</p>
           <div class="mt-3 flex flex-wrap items-center gap-2">
             <span class="badge" :class="STATUS_BADGE[d.initiation_status]">{{ STATUS_LABELS[d.initiation_status] }}</span>
@@ -95,7 +118,7 @@ onMounted(async () => {
             <span>Сообщений от ученика: <b class="text-ink-900">{{ stats.messages }}</b></span>
           </div>
         </div>
-        <div v-if="auth.canEdit" class="flex gap-2">
+        <div v-if="auth.canEdit || isSelf" class="flex gap-2">
           <RouterLink :to="{ name: 'disciple-edit', params: { id: d.id } }" class="btn-outline">Редактировать</RouterLink>
           <button v-if="auth.isStaff" class="btn border border-red-200 text-red-600 hover:bg-red-50" @click="remove">Удалить</button>
         </div>
@@ -142,24 +165,5 @@ onMounted(async () => {
       </div>
     </div>
 
-    <!-- Pipeline checklist -->
-    <div class="card mt-6 p-6">
-      <h3 class="mb-4 font-display text-xl text-ink-900">Путь аспиранта — чек-лист требований</h3>
-      <ul class="space-y-2">
-        <li v-for="item in d.checklist" :key="item.id" class="flex items-center gap-3 rounded-lg border border-parchment-200 px-3 py-2">
-          <input type="checkbox" :checked="item.is_done" :disabled="!auth.canEdit" @change="toggleItem(item)" />
-          <span class="flex-1 text-sm" :class="item.is_done ? 'text-ink-700/50 line-through' : 'text-ink-800'">{{ item.title }}</span>
-          <span class="badge bg-parchment-200 text-ink-700">{{ STATUS_LABELS[item.target] }}</span>
-          <button v-if="auth.isStaff" class="text-ink-700/40 hover:text-red-600" @click="removeItem(item)">✕</button>
-        </li>
-        <li v-if="!d.checklist.length" class="text-sm text-ink-700/50">Пунктов пока нет</li>
-      </ul>
-
-      <form v-if="auth.canEdit" class="mt-4 flex flex-wrap gap-2" @submit.prevent="addItem">
-        <input v-model="newItem.title" class="input flex-1" placeholder="Новое требование (напр. «Стаж 1 год», «Обеты»)" />
-        <div class="w-40"><AppSelect v-model="newItem.target" :options="statusOptions" /></div>
-        <button class="btn-primary">Добавить</button>
-      </form>
-    </div>
   </div>
 </template>

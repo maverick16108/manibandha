@@ -62,9 +62,10 @@ def phone_verify(phone: str = Body(...), code: str = Body(...), db: Session = De
         db.commit()
         return _token_for(user)
 
-    # регистрация: создаём связанную пару пользователь + анкета (ждёт апрува)
+    # регистрация: создаём связанную пару пользователь + анкета (ждёт апрува).
+    # Имя пустое — кандидат заполнит сам; телефон сохраняем для идентификации.
     disciple = Disciple(
-        material_name=f"+{ph}", phone=f"+{ph}",
+        material_name="", phone=f"+{ph}",
         initiation_status=InitiationStatus.recommended, is_approved=False,
     )
     db.add(disciple)

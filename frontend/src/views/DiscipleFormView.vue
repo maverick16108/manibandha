@@ -1,7 +1,8 @@
 <script setup>
-import { ref, reactive, onMounted, onBeforeUnmount, computed } from 'vue'
+import { ref, reactive, onMounted, onBeforeUnmount, computed, nextTick } from 'vue'
 import { useRoute, useRouter, RouterLink, onBeforeRouteLeave } from 'vue-router'
 import client from '../api/client'
+import { useAuthStore } from '../stores/auth'
 import { confirmDialog } from '../composables/confirm'
 import AppSelect from '../components/AppSelect.vue'
 import AppDatePicker from '../components/AppDatePicker.vue'
@@ -15,8 +16,12 @@ const statusOptions = STATUS_ORDER.map((s) => ({ value: s, label: STATUS_LABELS[
 
 const route = useRoute()
 const router = useRouter()
+const auth = useAuthStore()
 const id = computed(() => route.params.id)
 const isEdit = computed(() => !!id.value)
+// самостоятельное заполнение анкеты кандидатом (не персонал, своя анкета) — при регистрации
+const selfFill = computed(() => !auth.isStaff && String(auth.user?.disciple_id || '') === String(id.value))
+const nameInput = ref(null)
 // back to the disciple card when editing, otherwise to the list
 const backTo = computed(() => (isEdit.value ? { name: 'disciple', params: { id: id.value } } : { name: 'disciples' }))
 
@@ -101,6 +106,8 @@ onMounted(async () => {
     }
   }
   snapshot = JSON.stringify(form) // baseline for unsaved-changes detection
+  // при самостоятельном заполнении — пустое имя в фокусе
+  if (selfFill.value && !form.material_name) nextTick(() => nameInput.value?.focus())
 })
 
 // Warn on leaving with unsaved changes
@@ -127,8 +134,8 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
       <section class="card p-6">
         <h3 class="mb-4 font-display text-xl text-ink-900">Основное</h3>
         <div class="grid gap-4 sm:grid-cols-2">
-          <div><label class="label">Мирское имя *</label><input v-model="form.material_name" class="input" required /></div>
-          <div><label class="label">Духовное имя</label><input v-model="form.spiritual_name" class="input" /></div>
+          <div><label class="label">Мирское имя *</label><input ref="nameInput" v-model="form.material_name" class="input" required /></div>
+          <div v-if="!selfFill"><label class="label">Духовное имя</label><input v-model="form.spiritual_name" class="input" /></div>
           <div class="sm:col-span-2"><label class="label">Фото</label><PhotoUpload v-model="form.photo_url" /></div>
         </div>
       </section>
@@ -149,7 +156,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
         </div>
       </section>
 
-      <section class="card p-6">
+      <section v-if="!selfFill" class="card p-6">
         <h3 class="mb-4 font-display text-xl text-ink-900">Инициация</h3>
         <div class="grid gap-4 sm:grid-cols-2">
           <div><label class="label">Статус</label>
@@ -162,7 +169,14 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
         </div>
       </section>
 
-      <section class="card p-6">
+      <!-- при самостоятельной регистрации — только комментарий куратору -->
+      <section v-if="selfFill" class="card p-6">
+        <h3 class="mb-4 font-display text-xl text-ink-900">Комментарий для куратора</h3>
+        <textarea v-model="form.notes" rows="5" class="input min-h-[7rem] resize-y"
+                  placeholder="Напишите пару слов о себе или вопрос куратору (необязательно)"></textarea>
+      </section>
+
+      <section v-if="!selfFill" class="card p-6">
         <h3 class="mb-4 font-display text-xl text-ink-900">Путь аспиранта и служение</h3>
         <div class="grid gap-4 sm:grid-cols-2">
           <div><label class="label">Наставник</label>

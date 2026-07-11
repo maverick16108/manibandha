@@ -17,6 +17,12 @@ const loading = ref(true)
 const body = ref('')
 const sending = ref(false)
 const scroller = ref(null)
+const atBottom = ref(true)
+let resizeObs = null
+function onScroll() {
+  const el = scroller.value
+  if (el) atBottom.value = el.scrollHeight - el.scrollTop - el.clientHeight < 48
+}
 
 let ws = null
 const typingName = ref('')
@@ -110,8 +116,17 @@ async function toggleLike(m) {
 
 onMounted(async () => {
   try { await load(); connectWs() } finally { loading.value = false }
+  await nextTick()
+  const el = scroller.value
+  if (el) {
+    // при изменении высоты скроллера (поле ввода расширилось) — держим низ, если были внизу
+    resizeObs = new ResizeObserver(() => {
+      if (atBottom.value && scroller.value) scroller.value.scrollTop = scroller.value.scrollHeight
+    })
+    resizeObs.observe(el)
+  }
 })
-onBeforeUnmount(() => { if (ws) ws.close(); clearTimeout(typingTimer) })
+onBeforeUnmount(() => { if (ws) ws.close(); clearTimeout(typingTimer); if (resizeObs) resizeObs.disconnect() })
 </script>
 
 <template>
@@ -126,7 +141,7 @@ onBeforeUnmount(() => { if (ws) ws.close(); clearTimeout(typingTimer) })
         <span class="badge bg-saffron-500/15 text-saffron-700">{{ periodLabel }}</span>
       </div>
 
-      <div ref="scroller" class="card flex-1 space-y-3 overflow-y-auto p-5">
+      <div ref="scroller" class="card flex-1 space-y-3 overflow-y-auto p-5" @scroll="onScroll">
         <div v-for="m in thread.messages" :key="m.id"
              class="flex flex-col" :class="m.author_id === auth.user?.id ? 'items-end' : 'items-start'">
           <div class="max-w-[85%] rounded-2xl px-4 py-2.5"
@@ -147,7 +162,7 @@ onBeforeUnmount(() => { if (ws) ws.close(); clearTimeout(typingTimer) })
       <div class="mt-2 shrink-0">
         <div class="h-5 text-sm text-saffron-700/80"><span v-if="typingName">{{ typingName }} печатает…</span></div>
         <MarkdownEditor v-model="body" :rows="3" submit-on-enter type-anywhere :draft-scope="`thread:${id}`" placeholder="Написать сообщение…" @submit="send" />
-        <div class="-mt-7 flex justify-end pr-1">
+        <div class="mt-2 flex justify-end">
           <button class="btn-primary" :disabled="sending || !body.trim()" @click="send">{{ sending ? '…' : 'Отправить' }}</button>
         </div>
       </div>

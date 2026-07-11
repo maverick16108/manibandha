@@ -9,8 +9,10 @@ import AppIcon from '../components/AppIcon.vue'
 import { renderMarkdown } from '../lib/markdown'
 import { formatDate } from '../lib/format'
 import { usePageTitle } from '../composables/pageTitle'
+import { onEscape } from '../composables/useEscape'
 
 usePageTitle('Календарь событий')
+onEscape(() => { if (selected.value) selected.value = null })
 
 const auth = useAuthStore()
 const events = ref([])

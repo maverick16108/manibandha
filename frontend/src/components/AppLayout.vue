@@ -4,6 +4,7 @@ import { RouterLink, RouterView, useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { ROLE_LABELS } from '../lib/format'
 import { pageTitle } from '../composables/pageTitle'
+import { onEscape } from '../composables/useEscape'
 import AppIcon from './AppIcon.vue'
 
 const auth = useAuthStore()
@@ -11,6 +12,7 @@ const router = useRouter()
 const route = useRoute()
 const sidebarOpen = ref(false)
 const profileMenu = ref(false)
+onEscape(() => { profileMenu.value = false; sidebarOpen.value = false })
 
 const nav = [
   { name: 'dashboard', label: 'Обзор', icon: 'overview' },

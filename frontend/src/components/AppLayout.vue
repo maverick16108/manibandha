@@ -32,7 +32,7 @@ function logout() {
     >
       <div class="flex h-16 items-center gap-2.5 border-b border-parchment-200 px-5">
         <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-saffron-400 to-saffron-600 text-white shadow">
-          <AppIcon name="lotus-solid" :size="24" />
+          <AppIcon name="lotus-solid" :size="32" />
         </span>
         <span class="font-script text-3xl font-bold leading-none text-ink-900">Манибандха</span>
       </div>

@@ -13,9 +13,10 @@ const auth = useAuthStore()
 const router = useRouter()
 const route = useRoute()
 
-// 'login' | 'register' — обе вкладки работают по SMS. Админский вход скрыт.
+// 'login' | 'register' — обе вкладки работают по SMS.
+// Админский вход (email+пароль) скрыт — доступен только по адресу /login?admin
 const mode = ref('login')
-const adminMode = ref(false)
+const adminMode = ref(route.query.admin !== undefined)
 
 // --- Phone auth ---
 const phone = ref('')
@@ -109,14 +110,10 @@ async function submit() {
   }
 }
 
-function openAdmin() {
-  adminMode.value = true
-  error.value = ''
-}
-
 function closeAdmin() {
   adminMode.value = false
   error.value = ''
+  router.replace({ path: '/login' })
 }
 </script>
 
@@ -133,7 +130,10 @@ function closeAdmin() {
     </div>
 
     <!-- Right: login form -->
-    <div class="flex w-full items-center justify-center bg-parchment-100 px-6 lg:w-1/2">
+    <div class="relative flex w-full items-center justify-center bg-parchment-100 px-6 lg:w-1/2">
+      <RouterLink to="/" class="absolute left-5 top-5 inline-flex items-center gap-1 text-sm text-ink-700/70 transition hover:text-saffron-700">
+        <AppIcon name="chevron" :size="16" class="rotate-90" /> На главную
+      </RouterLink>
       <div class="w-full max-w-sm">
         <div class="mb-8 text-center">
           <AppIcon name="lotus" :size="44" class="mx-auto mb-3 text-saffron-500" />
@@ -232,19 +232,6 @@ function closeAdmin() {
           </form>
         </template>
 
-        <RouterLink to="/" class="mt-6 block text-center text-sm text-saffron-600 hover:text-saffron-700">
-          ← На главную
-        </RouterLink>
-
-        <!-- Hidden admin entrance -->
-        <button
-          v-if="!adminMode"
-          type="button"
-          class="mt-4 block w-full text-center text-xs text-ink-700/50 transition hover:text-ink-700"
-          @click="openAdmin"
-        >
-          Вход для администратора
-        </button>
       </div>
     </div>
   </div>

@@ -61,10 +61,20 @@ const router = createRouter({
   history: createWebHistory(),
   routes,
   scrollBehavior(to, from, savedPosition) {
-    if (savedPosition) return savedPosition // браузерный «Назад»
     if (to.hash) return { el: to.hash, behavior: 'smooth' }
-    if (to.name === 'home' && homeScroll) return { top: homeScroll } // возврат на главную кнопкой «Главная»
-    return { top: 0 }
+    const pos = savedPosition || (to.name === 'home' && homeScroll ? { top: homeScroll } : null)
+    if (!pos) return { top: 0 }
+    // дождаться, пока страница станет достаточно высокой (ленивый чанк + раскладка), затем прокрутить — без рывка
+    return new Promise((resolve) => {
+      let tries = 0
+      const target = pos.top || 0
+      const tick = () => {
+        const maxScroll = document.documentElement.scrollHeight - window.innerHeight
+        if (maxScroll >= target - 2 || tries > 40) resolve(pos)
+        else { tries += 1; requestAnimationFrame(tick) }
+      }
+      requestAnimationFrame(tick)
+    })
   },
 })
 

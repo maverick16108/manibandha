@@ -46,3 +46,61 @@
     filter: grayscale(1) contrast(1.05) brightness(1.02);
   }
 }
+
+/* ── Голосовое сообщение (компактная кнопка внутри пузыря) ── */
+.voice-msg {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  max-width: 15rem;
+  margin: 0.15rem 0;
+  padding: 0.35rem 0.7rem 0.35rem 0.5rem;
+  border-radius: 9999px;
+  background: rgba(0, 0, 0, 0.06);
+  color: inherit;
+  font-size: 0.85rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+.voice-msg:hover { background: rgba(0, 0, 0, 0.1); }
+.bg-saffron-500 .voice-msg { background: rgba(255, 255, 255, 0.18); }
+.bg-saffron-500 .voice-msg:hover { background: rgba(255, 255, 255, 0.28); }
+.voice-msg__ico {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 9999px;
+  background: currentColor;
+  flex: none;
+}
+.voice-msg .vm-i {
+  color: #fff;
+  font-size: 0.7rem;
+  line-height: 1;
+}
+.bg-saffron-500 .voice-msg .vm-i { color: #c8742a; }
+.voice-msg .vm-pause { display: none; }
+.voice-msg.is-playing .vm-play { display: none; }
+.voice-msg.is-playing .vm-pause { display: inline; }
+.voice-msg__track {
+  position: relative;
+  width: 4.5rem;
+  height: 3px;
+  border-radius: 9999px;
+  background: rgba(0, 0, 0, 0.18);
+  flex: none;
+}
+.bg-saffron-500 .voice-msg__track { background: rgba(255, 255, 255, 0.4); }
+.voice-msg__fill {
+  position: absolute;
+  left: 0; top: 0;
+  height: 100%;
+  width: 0;
+  border-radius: inherit;
+  background: currentColor;
+  opacity: 0.85;
+}
+.voice-msg__label { white-space: nowrap; opacity: 0.9; }

@@ -280,7 +280,7 @@ onBeforeUnmount(() => { if (recording.value) { recCanceled = true; stopRec() } c
         </button>
         <button v-if="recording" type="button" class="md-btn text-ink-700/50" title="Отменить запись" @click="cancelRec">✕</button>
       </template>
-      <button type="button" class="md-btn ml-auto inline-flex items-center gap-1"
+      <button type="button" class="md-btn inline-flex items-center gap-1 sm:ml-auto"
               :class="showPreview && 'bg-saffron-500/15 text-saffron-700'"
               title="Предпросмотр" @click="showPreview = !showPreview">
         <AppIcon name="eye" :size="16" /> {{ showPreview ? 'Редактор' : 'Превью' }}

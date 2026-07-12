@@ -11,6 +11,7 @@ import { extractImageUrls, preloadImages } from '../lib/preload'
 import { usePageTitle } from '../composables/pageTitle'
 import { backTarget } from '../composables/backTarget'
 import { confirmDialog } from '../composables/confirm'
+import { player, playAudio } from '../composables/audioPlayer'
 
 const route = useRoute()
 const auth = useAuthStore()
@@ -105,6 +106,7 @@ async function load() {
   await preloadImages(data.messages.flatMap((m) => extractImageUrls(m.body))) // фото вперёд — без скачков
   thread.value = data
   await scrollDown()
+  nextTick(syncVoiceButtons)
 }
 
 function connectWs() {
@@ -177,6 +179,25 @@ async function react(m, emoji) {
     m.reactions = data.reactions
   } catch { /* игнор */ }
 }
+// клик по компактной кнопке голосового — запустить общий плеер сверху
+function onScrollerClick(e) {
+  const btn = e.target.closest('.voice-msg')
+  if (!btn) return
+  e.preventDefault()
+  const ctx = btn.closest('[data-audio-label]')
+  playAudio(btn.dataset.audio, ctx?.dataset.audioLabel || 'Голосовое сообщение')
+}
+// подсветка играющей кнопки и полоса прогресса внутри неё
+function syncVoiceButtons() {
+  document.querySelectorAll('.voice-msg').forEach((b) => {
+    const cur = b.dataset.audio === player.src
+    b.classList.toggle('is-playing', cur && player.playing)
+    const fill = b.querySelector('.voice-msg__fill')
+    if (fill) fill.style.width = (cur && player.duration ? (player.currentTime / player.duration) * 100 : 0) + '%'
+  })
+}
+watch(() => [player.src, player.playing, player.currentTime, player.duration], () => nextTick(syncVoiceButtons))
+
 function onContext(e, m) {
   const own = m.author_id === auth.user?.id
   if (own && !canModify(m)) return // свои просроченные — обычное меню браузера
@@ -246,7 +267,7 @@ onBeforeUnmount(() => { if (ws) ws.close(); clearTimeout(typingTimer); clearInte
         <span class="badge bg-saffron-500/15 text-saffron-700">{{ periodLabel }}</span>
       </div>
 
-      <div ref="scroller" class="flex-1 space-y-3 overflow-y-auto pt-3 pb-1 pl-1 pr-4" @scroll="onScroll">
+      <div ref="scroller" class="flex-1 space-y-3 overflow-y-auto pt-3 pb-1 pl-1 pr-4" @scroll="onScroll" @click="onScrollerClick">
         <template v-for="(m, i) in thread.messages" :key="m.id">
           <div v-if="daySep(i)" class="flex justify-center py-1">
             <span class="rounded-full bg-white px-3 py-1 text-xs font-medium text-ink-700/60 ring-1 ring-parchment-200">{{ daySep(i) }}</span>
@@ -268,7 +289,7 @@ onBeforeUnmount(() => { if (ws) ws.close(); clearTimeout(typingTimer); clearInte
                           :disabled="savingEdit || !editText.trim()" @click="saveEdit(m)">Сохранить</button>
                 </div>
               </div>
-              <div v-else class="markdown-body break-words" v-html="renderMarkdown(m.body)"></div>
+              <div v-else class="markdown-body break-words" :data-audio-label="`${m.author_name || 'Голосовое'} · ${fmtTime(m.created_at)}`" v-html="renderMarkdown(m.body)"></div>
 
               <!-- реакции (в стиле Telegram) — пилюли внизу сообщения -->
               <div v-if="editingId !== m.id && m.reactions && m.reactions.length" class="mt-1.5 flex flex-wrap gap-1">

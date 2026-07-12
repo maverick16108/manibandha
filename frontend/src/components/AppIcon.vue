@@ -182,6 +182,46 @@ defineProps({
       <path d="M9 9.5h.01M15 9.5h.01" />
     </template>
 
+    <!-- play -->
+    <template v-else-if="name === 'play'">
+      <path d="M7 5.5v13l11-6.5-11-6.5Z" />
+    </template>
+
+    <!-- pause -->
+    <template v-else-if="name === 'pause'">
+      <rect x="6.5" y="5" width="3.5" height="14" rx="1" />
+      <rect x="14" y="5" width="3.5" height="14" rx="1" />
+    </template>
+
+    <!-- rewind (перемотать назад) -->
+    <template v-else-if="name === 'rewind'">
+      <path d="M11 6 4.5 12 11 18V6Z" />
+      <path d="M19.5 6 13 12l6.5 6V6Z" />
+    </template>
+
+    <!-- forward (перемотать вперёд) -->
+    <template v-else-if="name === 'forward'">
+      <path d="M13 6l6.5 6L13 18V6Z" />
+      <path d="M4.5 6 11 12l-6.5 6V6Z" />
+    </template>
+
+    <!-- volume -->
+    <template v-else-if="name === 'volume'">
+      <path d="M4 9.5v5h3.5L12 18V6L7.5 9.5H4Z" />
+      <path d="M15.5 9a4 4 0 0 1 0 6" />
+    </template>
+
+    <!-- volume-x (без звука) -->
+    <template v-else-if="name === 'volume-x'">
+      <path d="M4 9.5v5h3.5L12 18V6L7.5 9.5H4Z" />
+      <path d="m16 9.5 4 4m0-4-4 4" />
+    </template>
+
+    <!-- close (крестик) -->
+    <template v-else-if="name === 'close'">
+      <path d="m6 6 12 12M18 6 6 18" />
+    </template>
+
     <!-- Медитация / логотип (lotus) -->
     <template v-else-if="name === 'lotus'">
       <path d="M12 13.4c-1.7-1.4-2.6-3.4-2.6-5.4 0-1.8 1-3.6 2.6-5 1.6 1.4 2.6 3.2 2.6 5 0 2-.9 4-2.6 5.4Z" />

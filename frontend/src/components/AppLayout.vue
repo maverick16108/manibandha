@@ -8,6 +8,7 @@ import { onEscape } from '../composables/useEscape'
 import { navCounts, refreshNavCounts } from '../composables/navCounts'
 import { backTarget } from '../composables/backTarget'
 import AppIcon from './AppIcon.vue'
+import AudioBar from './AudioBar.vue'
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -67,6 +68,7 @@ function logout() {
 
 <template>
   <div class="min-h-screen bg-parchment-100">
+    <AudioBar />
     <!-- Sidebar (скрыт для незаапрувленного кандидата) -->
     <aside
       v-if="showSidebar"

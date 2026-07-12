@@ -14,10 +14,11 @@ const ev = ref(null)
 const loading = ref(true)
 const notFound = ref(false)
 
-// откуда пришли: 'calendar' (сетка) | 'map' (карта) | undefined (с главной)
+// откуда пришли: 'calendar' (сетка) | 'list' (лента) | 'map' (карта) | undefined (с главной)
 const middleCrumb = computed(() => {
   if (route.query.from === 'map') return { label: 'Карта', path: '/calendar?view=map' }
-  if (route.query.from === 'calendar') return { label: 'Календарь', path: '/calendar' }
+  if (route.query.from === 'list') return { label: 'Список', path: '/calendar?view=list' }
+  if (route.query.from === 'calendar') return { label: 'Календарь', path: '/calendar?view=calendar' }
   return null
 })
 function goHome() {

@@ -8,6 +8,7 @@ import AppSkeleton from '../components/AppSkeleton.vue'
 import AppIcon from '../components/AppIcon.vue'
 import AppDatePicker from '../components/AppDatePicker.vue'
 import EventsMap from '../components/EventsMap.vue'
+import EventsFastScroll from '../components/EventsFastScroll.vue'
 import { renderMarkdown } from '../lib/markdown'
 import { extractImageUrls, preloadImages } from '../lib/preload'
 import { formatDate } from '../lib/format'
@@ -87,40 +88,13 @@ async function remove(e) {
   await load()
 }
 
-// ── навигатор по месяцам (режим «Список») ──
-const monthGroups = computed(() => {
-  const seen = new Map() // key 'YYYY-MM' → id первого события месяца (в порядке ленты)
-  for (const e of events.value) {
-    if (!e.starts_on) continue
-    const key = e.starts_on.slice(0, 7)
-    if (!seen.has(key)) seen.set(key, e.id)
-  }
-  return [...seen.entries()].map(([key, firstId]) => {
-    const [y, m] = key.split('-')
-    return { key, label: `${MONTHS[+m - 1]} ${y}`, firstId }
-  })
-})
-const activeMonth = ref('')
-function scrollToMonth(g) {
-  const el = document.getElementById(`ev-${g.firstId}`)
-  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-}
-function onWinScroll() {
-  let active = monthGroups.value[0]?.key || ''
-  for (const g of monthGroups.value) {
-    const el = document.getElementById(`ev-${g.firstId}`)
-    if (el && el.getBoundingClientRect().top - 110 <= 0) active = g.key
-  }
-  activeMonth.value = active
-}
-watch([() => mode.value, () => events.value.length], () => { if (mode.value === 'list') nextTick(onWinScroll) })
+// ── быстрый скроллер по датам (режим «Список») ──
+const feedPoints = computed(() => events.value.filter((e) => e.starts_on).map((e) => {
+  const [y, m] = e.starts_on.split('-')
+  return { id: `ev-${e.id}`, label: `${MONTHS[+m - 1]} ${y}` }
+}))
 
-onMounted(async () => {
-  await load()
-  window.addEventListener('scroll', onWinScroll, { passive: true })
-  nextTick(onWinScroll)
-})
-onBeforeUnmount(() => window.removeEventListener('scroll', onWinScroll))
+onMounted(load)
 </script>
 
 <template>
@@ -182,15 +156,9 @@ onBeforeUnmount(() => window.removeEventListener('scroll', onWinScroll))
         <div v-if="!events.length" class="card p-8 text-center text-ink-700/50">Событий пока нет</div>
       </div>
 
-      <!-- навигатор по месяцам: клик — прокрутка ленты -->
-      <aside v-if="monthGroups.length" class="hidden w-44 shrink-0 lg:block">
-        <div class="month-rail sticky top-20 max-h-[24rem] overflow-y-auto rounded-xl border border-parchment-200 bg-white p-2">
-          <div class="px-2 pb-1.5 pt-1 text-xs font-semibold uppercase tracking-wide text-ink-700/50">Месяцы</div>
-          <button v-for="g in monthGroups" :key="g.key"
-                  class="block w-full rounded-lg px-3 py-2 text-left text-sm transition"
-                  :class="activeMonth === g.key ? 'bg-saffron-500 text-white' : 'text-ink-700 hover:bg-parchment-100'"
-                  @click="scrollToMonth(g)">{{ g.label }}</button>
-        </div>
+      <!-- быстрый скроллер по датам -->
+      <aside v-if="feedPoints.length > 3" class="sticky top-20 hidden h-[calc(100vh-6rem)] w-8 shrink-0 lg:block">
+        <EventsFastScroll :points="feedPoints" />
       </aside>
     </div>
 

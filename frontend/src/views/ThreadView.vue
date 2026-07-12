@@ -406,7 +406,7 @@ onBeforeUnmount(() => { if (ws) ws.close(); clearTimeout(typingTimer); clearInte
             <AppIcon name="close" :size="16" />
           </button>
         </div>
-        <MarkdownEditor v-model="body" :rows="3" submit-on-enter type-anywhere hide-hint :voice="auth.isGuru" :draft-scope="`thread:${id}`" placeholder="Написать сообщение…" @submit="send" />
+        <MarkdownEditor v-model="body" :rows="3" grip="top" submit-on-enter type-anywhere hide-hint :voice="auth.isGuru" :draft-scope="`thread:${id}`" placeholder="Написать сообщение…" @submit="send" />
         <div class="mt-1 flex justify-end gap-2">
           <button v-if="editingMsg" class="btn-ghost" @click="cancelEdit">Отмена</button>
           <button class="btn-primary" :disabled="sending || !body.trim()" @click="send">

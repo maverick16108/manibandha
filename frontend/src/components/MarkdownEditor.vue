@@ -18,6 +18,8 @@ const props = defineProps({
   heightClass: { type: String, default: '' },
   // разрешить запись голосовых сообщений (кнопка микрофона)
   voice: { type: Boolean, default: false },
+  // где хват растягивания: 'bottom' (обычные формы) | 'top' (чат — поле растёт вверх)
+  grip: { type: String, default: 'bottom' },
 })
 const emit = defineEmits(['update:modelValue', 'submit'])
 
@@ -74,7 +76,7 @@ watch(() => props.modelValue, (v) => {
   scheduleDraftSave()
 })
 
-// ручное растягивание за верхний хват (тянуть вверх — поле выше)
+// ручное растягивание за хват (сверху — тянуть вверх, снизу — тянуть вниз)
 let resizing = false
 let startY = 0
 let startH = 0
@@ -83,7 +85,8 @@ function onResizeMove(e) {
   const y = e.touches ? e.touches[0].clientY : e.clientY
   const el = textarea.value
   if (!el) return
-  el.style.height = Math.max(64, Math.min(window.innerHeight * 0.85, startH + (startY - y))) + 'px'
+  const delta = props.grip === 'bottom' ? (y - startY) : (startY - y)
+  el.style.height = Math.max(64, Math.min(window.innerHeight * 0.85, startH + delta)) + 'px'
   if (e.cancelable) e.preventDefault()
 }
 function stopResize() {
@@ -291,8 +294,9 @@ onBeforeUnmount(() => { if (recording.value) { recCanceled = true; stopRec() } c
          class="markdown-body input min-h-[8rem] w-full overflow-auto bg-parchment-50"
          v-html="previewHtml() || '<span class=\'text-ink-700/40\'>Пусто</span>'"></div>
     <div v-show="!showPreview" class="relative">
-      <!-- хват сверху: тянуть, чтобы увеличить поле -->
-      <div class="absolute left-1/2 top-0 z-10 flex h-4 w-16 -translate-x-1/2 -translate-y-1/2 cursor-ns-resize items-center justify-center rounded-full bg-parchment-100 ring-1 ring-parchment-300 hover:bg-parchment-200"
+      <!-- хват растягивания: сверху (чат) или снизу (обычные формы) -->
+      <div class="absolute left-1/2 z-10 flex h-4 w-16 -translate-x-1/2 cursor-ns-resize items-center justify-center rounded-full bg-parchment-100 ring-1 ring-parchment-300 hover:bg-parchment-200"
+           :class="grip === 'bottom' ? 'bottom-0 translate-y-1/2' : 'top-0 -translate-y-1/2'"
            title="Потяните, чтобы изменить высоту"
            @mousedown="startResize" @touchstart.prevent="startResize">
         <span class="h-1 w-6 rounded-full bg-ink-700/30"></span>

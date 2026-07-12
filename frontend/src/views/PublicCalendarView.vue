@@ -90,7 +90,7 @@ onMounted(async () => {
     <nav class="mb-4 flex items-center gap-1.5 text-sm text-ink-700/60">
       <RouterLink to="/" class="hover:text-saffron-700">Главная</RouterLink>
       <span class="text-ink-700/30">/</span>
-      <span class="text-ink-800">Календарь</span>
+      <span class="text-ink-800">{{ mode === 'map' ? 'Карта' : 'Календарь' }}</span>
     </nav>
     <h1 class="mb-6 font-display text-3xl font-semibold text-ink-900 sm:text-4xl">Календарь событий</h1>
 

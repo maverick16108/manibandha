@@ -68,7 +68,7 @@ onMounted(load)
 </script>
 
 <template>
-  <div class="mx-auto max-w-6xl">
+  <div>
     <div class="mb-6">
       <p class="text-ink-700/60">Самостоятельно зарегистрированные ученики, ожидающие подтверждения</p>
     </div>

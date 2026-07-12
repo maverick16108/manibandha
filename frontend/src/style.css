@@ -118,3 +118,10 @@
 
 /* картинки в тексте — клик открывает на весь экран */
 .markdown-body img { cursor: zoom-in; }
+
+/* навигатор по месяцам — компактный скроллер */
+.month-rail { scrollbar-width: thin; scrollbar-color: rgba(200,116,42,0.5) transparent; }
+.month-rail::-webkit-scrollbar { width: 8px; }
+.month-rail::-webkit-scrollbar-track { background: transparent; }
+.month-rail::-webkit-scrollbar-thumb { background: rgba(200,116,42,0.45); border-radius: 9999px; }
+.month-rail::-webkit-scrollbar-thumb:hover { background: rgba(200,116,42,0.65); }

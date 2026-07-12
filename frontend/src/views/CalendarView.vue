@@ -184,7 +184,7 @@ onBeforeUnmount(() => window.removeEventListener('scroll', onWinScroll))
 
       <!-- навигатор по месяцам: клик — прокрутка ленты -->
       <aside v-if="monthGroups.length" class="hidden w-44 shrink-0 lg:block">
-        <div class="sticky top-20 max-h-[calc(100vh-6rem)] overflow-y-auto rounded-xl border border-parchment-200 bg-white p-2">
+        <div class="month-rail sticky top-20 max-h-[24rem] overflow-y-auto rounded-xl border border-parchment-200 bg-white p-2">
           <div class="px-2 pb-1.5 pt-1 text-xs font-semibold uppercase tracking-wide text-ink-700/50">Месяцы</div>
           <button v-for="g in monthGroups" :key="g.key"
                   class="block w-full rounded-lg px-3 py-2 text-left text-sm transition"

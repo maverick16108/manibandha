@@ -47,60 +47,75 @@
   }
 }
 
-/* ── Голосовое сообщение (компактная кнопка внутри пузыря) ── */
+/* ── Голосовое сообщение (кнопка-плеер внутри пузыря) ── */
 .voice-msg {
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
-  max-width: 15rem;
-  margin: 0.15rem 0;
-  padding: 0.35rem 0.7rem 0.35rem 0.5rem;
+  gap: 0.6rem;
+  width: 15rem;
+  max-width: 100%;
+  margin: 0.2rem 0;
+  padding: 0.4rem 0.85rem 0.4rem 0.4rem;
   border-radius: 9999px;
-  background: rgba(0, 0, 0, 0.06);
-  color: inherit;
   font-size: 0.85rem;
   line-height: 1;
   cursor: pointer;
   transition: background-color 0.15s ease;
+  /* контраст на белом пузыре — тёплая песочная заливка */
+  background: rgba(200, 116, 42, 0.12);
+  color: #2b2320;
 }
-.voice-msg:hover { background: rgba(0, 0, 0, 0.1); }
-.bg-saffron-500 .voice-msg { background: rgba(255, 255, 255, 0.18); }
-.bg-saffron-500 .voice-msg:hover { background: rgba(255, 255, 255, 0.28); }
+.voice-msg:hover { background: rgba(200, 116, 42, 0.2); }
+/* на своём (оранжевом) пузыре — светлая заливка */
+.bg-saffron-500 .voice-msg { background: rgba(255, 255, 255, 0.22); color: #fff; }
+.bg-saffron-500 .voice-msg:hover { background: rgba(255, 255, 255, 0.32); }
+
 .voice-msg__ico {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.6rem;
-  height: 1.6rem;
+  width: 2.1rem;
+  height: 2.1rem;
   border-radius: 9999px;
-  background: currentColor;
-  flex: none;
-}
-.voice-msg .vm-i {
+  background: #c8742a;
   color: #fff;
-  font-size: 0.7rem;
-  line-height: 1;
+  flex: none;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
 }
-.bg-saffron-500 .voice-msg .vm-i { color: #c8742a; }
+.bg-saffron-500 .voice-msg__ico { background: #fff; color: #c8742a; }
+.voice-msg .vm-i { font-size: 0.85rem; line-height: 1; }
 .voice-msg .vm-pause { display: none; }
 .voice-msg.is-playing .vm-play { display: none; }
 .voice-msg.is-playing .vm-pause { display: inline; }
+
 .voice-msg__track {
   position: relative;
-  width: 4.5rem;
-  height: 3px;
+  flex: 1 1 auto;
+  height: 6px;
   border-radius: 9999px;
-  background: rgba(0, 0, 0, 0.18);
-  flex: none;
+  background: rgba(200, 116, 42, 0.28);
+  cursor: pointer;
 }
-.bg-saffron-500 .voice-msg__track { background: rgba(255, 255, 255, 0.4); }
+.bg-saffron-500 .voice-msg__track { background: rgba(255, 255, 255, 0.45); }
 .voice-msg__fill {
   position: absolute;
   left: 0; top: 0;
   height: 100%;
   width: 0;
   border-radius: inherit;
-  background: currentColor;
-  opacity: 0.85;
+  background: #c8742a;
 }
-.voice-msg__label { white-space: nowrap; opacity: 0.9; }
+.bg-saffron-500 .voice-msg__fill { background: #fff; }
+.voice-msg__knob {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 12px;
+  height: 12px;
+  border-radius: 9999px;
+  background: #c8742a;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+.bg-saffron-500 .voice-msg__knob { background: #fff; }
+.voice-msg__time { flex: none; font-variant-numeric: tabular-nums; opacity: 0.75; min-width: 2.2rem; text-align: right; }

@@ -118,17 +118,17 @@ onMounted(async () => {
         </button>
       </div>
 
-      <div class="grid grid-cols-7 gap-1 text-center text-xs uppercase tracking-wide text-ink-700/50">
+      <div class="grid grid-cols-7 gap-1 text-center text-xs font-semibold uppercase tracking-wide text-ink-700/80">
         <div v-for="w in WD" :key="w" class="py-1">{{ w }}</div>
       </div>
       <div class="mt-1 grid grid-cols-7 gap-1">
         <template v-for="(week, wi) in weeks" :key="wi">
           <div v-for="(d, di) in week" :key="di"
                class="relative min-h-[44px] rounded-lg p-1 sm:min-h-[84px]"
-               :class="d ? 'border border-parchment-200 bg-white' : ''">
+               :class="d ? 'border border-parchment-300 bg-white' : ''">
             <template v-if="d">
-              <div class="mb-1 text-xs font-medium"
-                   :class="isToday(d) ? 'inline-flex h-5 w-5 items-center justify-center rounded-full bg-saffron-500 text-white' : 'text-ink-700/50'">{{ d }}</div>
+              <div class="mb-1 text-sm font-semibold"
+                   :class="isToday(d) ? 'inline-flex h-6 w-6 items-center justify-center rounded-full bg-saffron-500 text-white' : 'text-ink-800'">{{ d }}</div>
               <!-- десктоп: названия -->
               <button v-for="e in eventsOnDay(cursor.y, cursor.m, d)" :key="e.id"
                       class="relative z-10 mb-0.5 hidden w-full whitespace-normal break-words rounded bg-saffron-500/15 px-1 py-0.5 text-left text-[11px] leading-tight text-saffron-800 hover:bg-saffron-500/25 sm:block"

@@ -1,17 +1,18 @@
 <script setup>
-import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import client from '../api/client'
 import { useAuthStore } from '../stores/auth'
 import AppSkeleton from '../components/AppSkeleton.vue'
 import AppIcon from '../components/AppIcon.vue'
+import AudioBar from '../components/AudioBar.vue'
 import MarkdownEditor from '../components/MarkdownEditor.vue'
 import { renderMarkdown } from '../lib/markdown'
 import { extractImageUrls, preloadImages } from '../lib/preload'
 import { usePageTitle } from '../composables/pageTitle'
 import { backTarget } from '../composables/backTarget'
 import { confirmDialog } from '../composables/confirm'
-import { player, playAudio } from '../composables/audioPlayer'
+import { player, playAudio, seek, closePlayer } from '../composables/audioPlayer'
 
 const route = useRoute()
 const auth = useAuthStore()
@@ -25,6 +26,7 @@ const scroller = ref(null)
 const atBottom = ref(true)
 let resizeObs = null
 function onScroll() {
+  if (ctx.open) closeCtx() // меню у курсора устаревает при прокрутке
   const el = scroller.value
   if (el) atBottom.value = el.scrollHeight - el.scrollTop - el.clientHeight < 48
 }
@@ -48,10 +50,14 @@ let nowTimer = null
 const editingId = ref(null)
 const editText = ref('')
 const savingEdit = ref(false)
-const menuId = ref(null) // открытое меню действий у сообщения
-const pickerId = ref(null) // открытый выбор реакции
 const REACTIONS = ['❤️', '👍', '🙏', '🔥', '😂', '🎉']
-function closeMenus() { menuId.value = null; pickerId.value = null }
+// контекстное меню у курсора: mode 'edit' (своё) | 'react' (чужое)
+const ctx = reactive({ open: false, x: 0, y: 0, mode: '', m: null })
+function closeCtx() { ctx.open = false; ctx.m = null }
+const ctxStyle = computed(() => ({
+  left: Math.min(ctx.x, (typeof window !== 'undefined' ? window.innerWidth : 9999) - 190) + 'px',
+  top: Math.min(ctx.y, (typeof window !== 'undefined' ? window.innerHeight : 9999) - 150) + 'px',
+}))
 function canModify(m) {
   return m.author_id === auth.user?.id && (nowTs.value - new Date(m.created_at).getTime()) <= EDIT_WINDOW
 }
@@ -173,27 +179,40 @@ async function send() {
   }
 }
 async function react(m, emoji) {
-  pickerId.value = null
   try {
     const { data } = await client.post(`/threads/${id.value}/messages/${m.id}/react`, { emoji })
     m.reactions = data.reactions
   } catch { /* игнор */ }
 }
-// клик по компактной кнопке голосового — запустить общий плеер сверху
+function fmtSec(s) {
+  if (!s || !isFinite(s)) return '0:00'
+  return `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`
+}
+// клик по кнопке голосового — играть/пауза; клик по треку текущего — перемотать
 function onScrollerClick(e) {
   const btn = e.target.closest('.voice-msg')
   if (!btn) return
   e.preventDefault()
-  const ctx = btn.closest('[data-audio-label]')
-  playAudio(btn.dataset.audio, ctx?.dataset.audioLabel || 'Голосовое сообщение')
+  const src = btn.dataset.audio
+  const track = e.target.closest('.voice-msg__track')
+  if (track && player.src === src && player.duration) {
+    const rect = track.getBoundingClientRect()
+    const frac = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
+    seek(frac * player.duration)
+    return
+  }
+  const labelEl = btn.closest('[data-audio-label]')
+  playAudio(src, labelEl?.dataset.audioLabel || 'Голосовое сообщение')
 }
-// подсветка играющей кнопки и полоса прогресса внутри неё
+// подсветка играющей кнопки, прогресс/ползунок/время внутри неё
 function syncVoiceButtons() {
   document.querySelectorAll('.voice-msg').forEach((b) => {
     const cur = b.dataset.audio === player.src
     b.classList.toggle('is-playing', cur && player.playing)
-    const fill = b.querySelector('.voice-msg__fill')
-    if (fill) fill.style.width = (cur && player.duration ? (player.currentTime / player.duration) * 100 : 0) + '%'
+    const pct = cur && player.duration ? (player.currentTime / player.duration) * 100 : 0
+    const fill = b.querySelector('.voice-msg__fill'); if (fill) fill.style.width = pct + '%'
+    const knob = b.querySelector('.voice-msg__knob'); if (knob) knob.style.left = pct + '%'
+    const time = b.querySelector('.voice-msg__time'); if (time) time.textContent = cur ? fmtSec(player.currentTime) : '0:00'
   })
 }
 watch(() => [player.src, player.playing, player.currentTime, player.duration], () => nextTick(syncVoiceButtons))
@@ -202,15 +221,13 @@ function onContext(e, m) {
   const own = m.author_id === auth.user?.id
   if (own && !canModify(m)) return // свои просроченные — обычное меню браузера
   e.preventDefault()
-  if (own) {
-    pickerId.value = null
-    menuId.value = menuId.value === m.id ? null : m.id // своё сообщение — правка/удаление
-  } else {
-    menuId.value = null
-    pickerId.value = pickerId.value === m.id ? null : m.id // чужое — выбор реакции
-  }
+  ctx.x = e.clientX
+  ctx.y = e.clientY
+  ctx.mode = own ? 'edit' : 'react' // своё — правка/удаление, чужое — реакции
+  ctx.m = m
+  ctx.open = true
 }
-function startEdit(m) { editingId.value = m.id; editText.value = m.body; menuId.value = null }
+function startEdit(m) { editingId.value = m.id; editText.value = m.body; closeCtx() }
 function cancelEdit() { editingId.value = null; editText.value = '' }
 async function saveEdit(m) {
   const text = editText.value.trim()
@@ -252,7 +269,7 @@ onMounted(async () => {
     resizeObs.observe(el)
   }
 })
-onBeforeUnmount(() => { if (ws) ws.close(); clearTimeout(typingTimer); clearInterval(nowTimer); if (resizeObs) resizeObs.disconnect(); backTarget.value = null })
+onBeforeUnmount(() => { if (ws) ws.close(); clearTimeout(typingTimer); clearInterval(nowTimer); if (resizeObs) resizeObs.disconnect(); backTarget.value = null; closePlayer() })
 </script>
 
 <template>
@@ -266,6 +283,9 @@ onBeforeUnmount(() => { if (ws) ws.close(); clearTimeout(typingTimer); clearInte
       <div v-if="thread.period" class="mb-2 flex shrink-0 flex-wrap items-center gap-2">
         <span class="badge bg-saffron-500/15 text-saffron-700">{{ periodLabel }}</span>
       </div>
+
+      <!-- плеер голосовых — внутри чата, сверху -->
+      <AudioBar />
 
       <div ref="scroller" class="flex-1 space-y-3 overflow-y-auto pt-3 pb-1 pl-1 pr-4" @scroll="onScroll" @click="onScrollerClick">
         <template v-for="(m, i) in thread.messages" :key="m.id">
@@ -294,40 +314,41 @@ onBeforeUnmount(() => { if (ws) ws.close(); clearTimeout(typingTimer); clearInte
               <!-- реакции (в стиле Telegram) — пилюли внизу сообщения -->
               <div v-if="editingId !== m.id && m.reactions && m.reactions.length" class="mt-1.5 flex flex-wrap gap-1">
                 <button v-for="r in m.reactions" :key="r.emoji"
-                        class="flex items-center gap-1 rounded-full px-2 py-0.5 text-sm leading-none transition disabled:cursor-default"
+                        class="flex items-center gap-1 rounded-full px-2.5 py-1 leading-none transition disabled:cursor-default"
                         :class="m.author_id === auth.user?.id
                           ? 'bg-white/20 hover:bg-white/25'
                           : (r.mine ? 'bg-saffron-500/25 text-saffron-800 ring-1 ring-saffron-400' : 'bg-saffron-500/10 text-ink-700 hover:bg-saffron-500/20')"
                         :disabled="m.author_id === auth.user?.id"
                         @click.stop="react(m, r.emoji)">
-                  <span>{{ r.emoji }}</span><span v-if="r.count > 1" class="text-xs font-semibold">{{ r.count }}</span>
+                  <span class="text-xl leading-none">{{ r.emoji }}</span><span v-if="r.count > 1" class="text-sm font-semibold">{{ r.count }}</span>
                 </button>
               </div>
             </div>
 
-            <!-- меню действий (своё сообщение) — открывается правым кликом -->
-            <div v-if="menuId === m.id"
-                 class="absolute right-0 top-full z-30 mt-1 w-36 overflow-hidden rounded-lg border border-parchment-200 bg-white py-1 shadow-lg">
-              <button class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-ink-700 hover:bg-parchment-100" @click="startEdit(m)">
-                <AppIcon name="edit" :size="15" /> Изменить
-              </button>
-              <button class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50" @click="menuId = null; removeMessage(m)">
-                <AppIcon name="trash" :size="15" /> Удалить
-              </button>
-            </div>
-            <!-- выбор реакции (чужое сообщение) — открывается правым кликом -->
-            <div v-if="pickerId === m.id"
-                 class="absolute left-2 top-full z-30 mt-1 flex gap-0.5 rounded-full border border-parchment-200 bg-white px-1.5 py-1 shadow-lg">
-              <button v-for="e in REACTIONS" :key="e"
-                      class="rounded-full px-1.5 py-0.5 text-xl leading-none transition-transform hover:scale-125"
-                      @click="react(m, e)">{{ e }}</button>
-            </div>
           </div>
         </template>
         <div v-if="!thread.messages.length" class="text-center text-sm text-ink-700/50">Сообщений пока нет</div>
       </div>
-      <!-- клик вне меню/пикера — закрыть -->
-      <div v-if="menuId !== null || pickerId !== null" class="fixed inset-0 z-20" @click="closeMenus"></div>
+
+      <!-- контекстное меню у курсора (правый клик по сообщению) -->
+      <template v-if="ctx.open">
+        <div class="fixed inset-0 z-40" @click="closeCtx" @contextmenu.prevent="closeCtx"></div>
+        <!-- своё сообщение: правка/удаление -->
+        <div v-if="ctx.mode === 'edit'" class="fixed z-50 w-44 overflow-hidden rounded-lg border border-parchment-200 bg-white py-1 shadow-xl" :style="ctxStyle">
+          <button class="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-ink-700 hover:bg-parchment-100" @click="startEdit(ctx.m)">
+            <AppIcon name="edit" :size="16" /> Изменить
+          </button>
+          <button class="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-red-600 hover:bg-red-50" @click="removeMessage(ctx.m); closeCtx()">
+            <AppIcon name="trash" :size="16" /> Удалить
+          </button>
+        </div>
+        <!-- чужое сообщение: выбор реакции -->
+        <div v-else class="fixed z-50 flex gap-1 rounded-full border border-parchment-200 bg-white px-2 py-1.5 shadow-xl" :style="ctxStyle">
+          <button v-for="e in REACTIONS" :key="e"
+                  class="rounded-full px-1 py-0.5 text-2xl leading-none transition-transform hover:scale-125"
+                  @click="react(ctx.m, e); closeCtx()">{{ e }}</button>
+        </div>
+      </template>
 
       <div class="mt-1 shrink-0 pb-4">
         <div class="h-5 text-sm text-saffron-700/80"><span v-if="typingName">{{ typingName }} печатает…</span></div>

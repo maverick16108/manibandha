@@ -35,6 +35,7 @@ def public_upcoming(db: Session = Depends(get_db)):
         db.query(Event)
         .filter((Event.ends_on >= today) | (Event.ends_on.is_(None) & (Event.starts_on >= today)))
         .order_by(Event.starts_on.asc())
+        .limit(8)
         .all()
     )
     return [_brief(e) for e in rows]

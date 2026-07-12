@@ -217,6 +217,12 @@ defineProps({
       <path d="m16 9.5 4 4m0-4-4 4" />
     </template>
 
+    <!-- reply (ответить) -->
+    <template v-else-if="name === 'reply'">
+      <path d="M9 8 4 12.5 9 17" />
+      <path d="M4.5 12.5H14a5 5 0 0 1 5 5V19" />
+    </template>
+
     <!-- close (крестик) -->
     <template v-else-if="name === 'close'">
       <path d="m6 6 12 12M18 6 6 18" />

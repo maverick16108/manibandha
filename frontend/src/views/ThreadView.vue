@@ -47,19 +47,25 @@ const periodLabel = computed(() => {
 const EDIT_WINDOW = 3600_000
 const nowTs = ref(Date.now())
 let nowTimer = null
-const editingId = ref(null)
-const editText = ref('')
-const savingEdit = ref(false)
+const editingMsg = ref(null) // редактируемое сообщение (правится в нижней форме)
+const replyTo = ref(null)    // сообщение, на которое отвечаем { id, author_name, body }
+let prevBody = ''            // черновик, сохранённый на время редактирования
 const REACTIONS = ['❤️', '👍', '🙏', '🔥', '😂', '🎉']
-// контекстное меню у курсора: mode 'edit' (своё) | 'react' (чужое)
-const ctx = reactive({ open: false, x: 0, y: 0, mode: '', m: null })
+// контекстное меню у курсора
+const ctx = reactive({ open: false, x: 0, y: 0, m: null })
 function closeCtx() { ctx.open = false; ctx.m = null }
 const ctxStyle = computed(() => ({
-  left: Math.min(ctx.x, (typeof window !== 'undefined' ? window.innerWidth : 9999) - 190) + 'px',
-  top: Math.min(ctx.y, (typeof window !== 'undefined' ? window.innerHeight : 9999) - 150) + 'px',
+  left: Math.min(ctx.x, (typeof window !== 'undefined' ? window.innerWidth : 9999) - 210) + 'px',
+  top: Math.min(ctx.y, (typeof window !== 'undefined' ? window.innerHeight : 9999) - 190) + 'px',
 }))
 function canModify(m) {
   return m.author_id === auth.user?.id && (nowTs.value - new Date(m.created_at).getTime()) <= EDIT_WINDOW
+}
+function snippetOf(b) {
+  return (b || '')
+    .replace(/@\[audio\]\([^)]*\)/g, '🎤 Голосовое сообщение')
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, '🖼 Фото')
+    .replace(/\s+/g, ' ').trim().slice(0, 100)
 }
 
 usePageTitle(() => {
@@ -162,18 +168,21 @@ function notifyTyping() {
 watch(body, (v) => { if (v) notifyTyping() })
 
 async function send() {
+  if (editingMsg.value) { await saveEdit(); return } // в режиме правки — сохраняем
   const text = body.value.trim()
   if (!text) return
+  const replyId = replyTo.value?.id || null
   sending.value = true
   try {
     if (ws && ws.readyState === 1) {
-      ws.send(JSON.stringify({ type: 'message', body: text }))
+      ws.send(JSON.stringify({ type: 'message', body: text, reply_to_id: replyId }))
       body.value = ''
     } else {
-      await client.post(`/threads/${id.value}/messages`, { body: text })
+      await client.post(`/threads/${id.value}/messages`, { body: text, reply_to_id: replyId })
       body.value = ''
       await load()
     }
+    replyTo.value = null
   } finally {
     sending.value = false
   }
@@ -188,15 +197,15 @@ function fmtSec(s) {
   if (!s || !isFinite(s)) return '0:00'
   return `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`
 }
-// клик по кнопке голосового — играть/пауза; клик по треку текущего — перемотать
+// клик по кнопке голосового — играть/пауза; клик по волне текущего — перемотать
 function onScrollerClick(e) {
   const btn = e.target.closest('.voice-msg')
   if (!btn) return
   e.preventDefault()
   const src = btn.dataset.audio
-  const track = e.target.closest('.voice-msg__track')
-  if (track && player.src === src && player.duration) {
-    const rect = track.getBoundingClientRect()
+  const wave = e.target.closest('.voice-msg__wave')
+  if (wave && player.src === src && player.duration) {
+    const rect = wave.getBoundingClientRect()
     const frac = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
     seek(frac * player.duration)
     return
@@ -204,45 +213,69 @@ function onScrollerClick(e) {
   const labelEl = btn.closest('[data-audio-label]')
   playAudio(src, labelEl?.dataset.audioLabel || 'Голосовое сообщение')
 }
-// подсветка играющей кнопки, прогресс/ползунок/время внутри неё
+// подсветка играющей кнопки + заполнение waveform по прогрессу
 function syncVoiceButtons() {
   document.querySelectorAll('.voice-msg').forEach((b) => {
     const cur = b.dataset.audio === player.src
     b.classList.toggle('is-playing', cur && player.playing)
     const pct = cur && player.duration ? (player.currentTime / player.duration) * 100 : 0
-    const fill = b.querySelector('.voice-msg__fill'); if (fill) fill.style.width = pct + '%'
-    const knob = b.querySelector('.voice-msg__knob'); if (knob) knob.style.left = pct + '%'
+    const played = b.querySelector('.vw-played'); if (played) played.style.clipPath = `inset(0 ${100 - pct}% 0 0)`
     const time = b.querySelector('.voice-msg__time'); if (time) time.textContent = cur ? fmtSec(player.currentTime) : '0:00'
   })
 }
 watch(() => [player.src, player.playing, player.currentTime, player.duration], () => nextTick(syncVoiceButtons))
+// прокрутка к процитированному сообщению
+function scrollToMessage(mid) {
+  const el = document.getElementById(`msg-${mid}`)
+  if (!el) return
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  el.classList.add('msg-flash')
+  setTimeout(() => el.classList.remove('msg-flash'), 1300)
+}
 
 function onContext(e, m) {
-  const own = m.author_id === auth.user?.id
-  if (own && !canModify(m)) return // свои просроченные — обычное меню браузера
   e.preventDefault()
   ctx.x = e.clientX
   ctx.y = e.clientY
-  ctx.mode = own ? 'edit' : 'react' // своё — правка/удаление, чужое — реакции
   ctx.m = m
   ctx.open = true
 }
-function startEdit(m) { editingId.value = m.id; editText.value = m.body; closeCtx() }
-function cancelEdit() { editingId.value = null; editText.value = '' }
-async function saveEdit(m) {
-  const text = editText.value.trim()
-  if (!text) return
-  savingEdit.value = true
+// ответ на сообщение — цитата появляется над формой ввода
+function startReply(m) {
+  editingMsg.value = null
+  replyTo.value = { id: m.id, author_name: m.author_name, body: snippetOf(m.body) }
+  closeCtx()
+}
+// правка своего сообщения — в нижней форме ввода
+function startEdit(m) {
+  replyTo.value = null
+  prevBody = body.value
+  editingMsg.value = m
+  body.value = m.body
+  closeCtx()
+}
+function cancelEdit() {
+  editingMsg.value = null
+  body.value = prevBody
+  prevBody = ''
+}
+async function saveEdit() {
+  const m = editingMsg.value
+  const text = body.value.trim()
+  if (!m || !text) return
+  sending.value = true
   try {
     const { data } = await client.patch(`/threads/${id.value}/messages/${m.id}`, { body: text })
     m.body = data.body
     m.edit_count = data.edit_count
-    editingId.value = null
+    editingMsg.value = null
+    body.value = prevBody
+    prevBody = ''
     await preloadImages(extractImageUrls(m.body))
   } catch (e) {
     alert(e.response?.data?.detail || 'Не удалось изменить сообщение')
   } finally {
-    savingEdit.value = false
+    sending.value = false
   }
 }
 async function removeMessage(m) {
@@ -287,32 +320,31 @@ onBeforeUnmount(() => { if (ws) ws.close(); clearTimeout(typingTimer); clearInte
       <!-- плеер голосовых — внутри чата, сверху -->
       <AudioBar />
 
-      <div ref="scroller" class="flex-1 space-y-3 overflow-y-auto pt-3 pb-1 pl-1 pr-4" @scroll="onScroll" @click="onScrollerClick">
+      <div ref="scroller" class="chat-scroll flex-1 space-y-3 overflow-y-auto pt-3 pb-1 pl-1 pr-3" @scroll="onScroll" @click="onScrollerClick">
         <template v-for="(m, i) in thread.messages" :key="m.id">
           <div v-if="daySep(i)" class="flex justify-center py-1">
             <span class="rounded-full bg-white px-3 py-1 text-xs font-medium text-ink-700/60 ring-1 ring-parchment-200">{{ daySep(i) }}</span>
           </div>
-          <div class="group relative flex flex-col" :class="m.author_id === auth.user?.id ? 'items-end' : 'items-start'">
+          <div :id="`msg-${m.id}`" class="group relative flex flex-col" :class="m.author_id === auth.user?.id ? 'items-end' : 'items-start'">
             <div class="max-w-[85%] rounded-2xl px-4 py-2.5"
-                 :class="[m.author_id === auth.user?.id ? 'bg-saffron-500 text-white' : 'bg-white text-ink-800 ring-1 ring-parchment-200', editingId === m.id && 'w-full']"
+                 :class="m.author_id === auth.user?.id ? 'bg-saffron-500 text-white' : 'bg-white text-ink-800 ring-1 ring-parchment-200'"
                  @contextmenu="onContext($event, m)">
               <div class="mb-0.5 flex flex-wrap items-center gap-x-1.5 text-xs opacity-70">
                 <span>{{ m.author_name || 'Аноним' }} · {{ fmtTime(m.created_at) }}</span>
                 <span v-if="m.edit_count" :title="`изменено раз: ${m.edit_count}`">· изменено{{ m.edit_count > 1 ? ` ×${m.edit_count}` : '' }}</span>
               </div>
-              <div v-if="editingId === m.id">
-                <textarea v-model="editText" rows="3"
-                          class="w-full resize-y rounded-lg border border-parchment-300 bg-white p-2 text-ink-800 focus:border-saffron-400 focus:outline-none"></textarea>
-                <div class="mt-1 flex justify-end gap-2">
-                  <button class="rounded-md px-2 py-1 text-xs text-ink-700/70 hover:bg-black/5" @click="cancelEdit">Отмена</button>
-                  <button class="rounded-md bg-white px-2 py-1 text-xs font-medium text-saffron-700 ring-1 ring-parchment-300 hover:bg-parchment-50 disabled:opacity-50"
-                          :disabled="savingEdit || !editText.trim()" @click="saveEdit(m)">Сохранить</button>
-                </div>
-              </div>
-              <div v-else class="markdown-body break-words" :data-audio-label="`${m.author_name || 'Голосовое'} · ${fmtTime(m.created_at)}`" v-html="renderMarkdown(m.body)"></div>
+              <!-- цитата: ответ на сообщение -->
+              <button v-if="m.reply_to" type="button"
+                      class="mb-1 block w-full rounded-md border-l-2 px-2 py-1 text-left transition"
+                      :class="m.author_id === auth.user?.id ? 'border-white/70 bg-white/15 hover:bg-white/25' : 'border-saffron-400 bg-saffron-500/10 hover:bg-saffron-500/20'"
+                      @click.stop="scrollToMessage(m.reply_to.id)">
+                <div class="text-xs font-semibold opacity-90">{{ m.reply_to.author_name || 'Сообщение' }}</div>
+                <div class="truncate text-xs opacity-75">{{ m.reply_to.body }}</div>
+              </button>
+              <div class="markdown-body break-words" :data-audio-label="`${m.author_name || 'Голосовое'} · ${fmtTime(m.created_at)}`" v-html="renderMarkdown(m.body)"></div>
 
               <!-- реакции (в стиле Telegram) — пилюли внизу сообщения -->
-              <div v-if="editingId !== m.id && m.reactions && m.reactions.length" class="mt-1.5 flex flex-wrap gap-1">
+              <div v-if="m.reactions && m.reactions.length" class="mt-1.5 flex flex-wrap gap-1">
                 <button v-for="r in m.reactions" :key="r.emoji"
                         class="flex items-center gap-1 rounded-full px-2.5 py-1 leading-none transition disabled:cursor-default"
                         :class="m.author_id === auth.user?.id
@@ -331,30 +363,48 @@ onBeforeUnmount(() => { if (ws) ws.close(); clearTimeout(typingTimer); clearInte
       </div>
 
       <!-- контекстное меню у курсора (правый клик по сообщению) -->
-      <template v-if="ctx.open">
+      <template v-if="ctx.open && ctx.m">
         <div class="fixed inset-0 z-40" @click="closeCtx" @contextmenu.prevent="closeCtx"></div>
-        <!-- своё сообщение: правка/удаление -->
-        <div v-if="ctx.mode === 'edit'" class="fixed z-50 w-44 overflow-hidden rounded-lg border border-parchment-200 bg-white py-1 shadow-xl" :style="ctxStyle">
-          <button class="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-ink-700 hover:bg-parchment-100" @click="startEdit(ctx.m)">
-            <AppIcon name="edit" :size="16" /> Изменить
+        <div class="fixed z-50 w-52 overflow-hidden rounded-xl border border-parchment-200 bg-white py-1 shadow-xl" :style="ctxStyle">
+          <!-- реакции (для чужих сообщений) -->
+          <div v-if="ctx.m.author_id !== auth.user?.id" class="mb-1 flex justify-between gap-0.5 border-b border-parchment-100 px-2 pb-1.5 pt-1">
+            <button v-for="e in REACTIONS" :key="e"
+                    class="rounded-full px-0.5 text-2xl leading-none transition-transform hover:scale-125"
+                    @click="react(ctx.m, e); closeCtx()">{{ e }}</button>
+          </div>
+          <button class="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-ink-700 hover:bg-parchment-100" @click="startReply(ctx.m)">
+            <AppIcon name="reply" :size="16" /> Ответить
           </button>
-          <button class="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-red-600 hover:bg-red-50" @click="removeMessage(ctx.m); closeCtx()">
-            <AppIcon name="trash" :size="16" /> Удалить
-          </button>
-        </div>
-        <!-- чужое сообщение: выбор реакции -->
-        <div v-else class="fixed z-50 flex gap-1 rounded-full border border-parchment-200 bg-white px-2 py-1.5 shadow-xl" :style="ctxStyle">
-          <button v-for="e in REACTIONS" :key="e"
-                  class="rounded-full px-1 py-0.5 text-2xl leading-none transition-transform hover:scale-125"
-                  @click="react(ctx.m, e); closeCtx()">{{ e }}</button>
+          <template v-if="canModify(ctx.m)">
+            <button class="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-ink-700 hover:bg-parchment-100" @click="startEdit(ctx.m)">
+              <AppIcon name="edit" :size="16" /> Изменить
+            </button>
+            <button class="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-red-600 hover:bg-red-50" @click="removeMessage(ctx.m); closeCtx()">
+              <AppIcon name="trash" :size="16" /> Удалить
+            </button>
+          </template>
         </div>
       </template>
 
       <div class="mt-1 shrink-0 pb-4">
         <div class="h-5 text-sm text-saffron-700/80"><span v-if="typingName">{{ typingName }} печатает…</span></div>
+        <!-- ответ / редактирование -->
+        <div v-if="replyTo || editingMsg" class="mb-1 flex items-center gap-2 rounded-lg border-l-2 border-saffron-400 bg-parchment-100 px-3 py-1.5">
+          <AppIcon :name="editingMsg ? 'edit' : 'reply'" :size="16" class="shrink-0 text-saffron-600" />
+          <div class="min-w-0 flex-1">
+            <div class="text-xs font-semibold text-saffron-700">{{ editingMsg ? 'Редактирование сообщения' : `Ответ · ${replyTo.author_name || ''}` }}</div>
+            <div v-if="replyTo" class="truncate text-xs text-ink-700/70">{{ replyTo.body }}</div>
+          </div>
+          <button class="shrink-0 rounded-full p-1 text-ink-700/50 hover:bg-parchment-200 hover:text-ink-700" @click="editingMsg ? cancelEdit() : (replyTo = null)">
+            <AppIcon name="close" :size="16" />
+          </button>
+        </div>
         <MarkdownEditor v-model="body" :rows="3" submit-on-enter type-anywhere hide-hint :voice="auth.isGuru" :draft-scope="`thread:${id}`" placeholder="Написать сообщение…" @submit="send" />
-        <div class="mt-1 flex justify-end">
-          <button class="btn-primary" :disabled="sending || !body.trim()" @click="send">{{ sending ? '…' : 'Отправить' }}</button>
+        <div class="mt-1 flex justify-end gap-2">
+          <button v-if="editingMsg" class="btn-ghost" @click="cancelEdit">Отмена</button>
+          <button class="btn-primary" :disabled="sending || !body.trim()" @click="send">
+            {{ editingMsg ? (sending ? '…' : 'Сохранить') : (sending ? '…' : 'Отправить') }}
+          </button>
         </div>
       </div>
     </template>
@@ -366,4 +416,17 @@ onBeforeUnmount(() => { if (ws) ws.close(); clearTimeout(typingTimer); clearInte
 .markdown-body :deep(ul) { margin: 0.25rem 0; padding-left: 1.25rem; list-style: disc; }
 .markdown-body :deep(ol) { margin: 0.25rem 0; padding-left: 1.35rem; list-style: decimal; }
 .markdown-body :deep(img) { max-height: 18rem; border-radius: 0.5rem; }
+
+/* скроллбар ленты — без белой полосы, в тон странице */
+.chat-scroll { scrollbar-width: thin; scrollbar-color: rgba(75, 60, 50, 0.3) transparent; }
+.chat-scroll::-webkit-scrollbar { width: 8px; }
+.chat-scroll::-webkit-scrollbar-track { background: transparent; }
+.chat-scroll::-webkit-scrollbar-thumb { background: rgba(75, 60, 50, 0.28); border-radius: 9999px; }
+
+/* мигание при переходе к процитированному сообщению */
+.msg-flash > div { animation: msgflash 1.3s ease; border-radius: 1rem; }
+@keyframes msgflash {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(234, 140, 42, 0); }
+  30% { box-shadow: 0 0 0 3px rgba(234, 140, 42, 0.6); }
+}
 </style>

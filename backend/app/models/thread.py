@@ -40,9 +40,12 @@ class ThreadMessage(Base):
     # редактирование в течение часа: отметка и число правок
     edited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     edit_count: Mapped[int] = mapped_column(default=0, server_default="0", nullable=False)
+    # ответ на сообщение (цитирование)
+    reply_to_id: Mapped[int | None] = mapped_column(ForeignKey("thread_messages.id", ondelete="SET NULL"), nullable=True)
 
     thread = relationship("Thread", back_populates="messages")
     author = relationship("User")
+    reply_to = relationship("ThreadMessage", remote_side=[id], foreign_keys=[reply_to_id], uselist=False)
     likes = relationship("MessageLike", back_populates="message", cascade="all, delete-orphan")
 
 

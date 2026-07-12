@@ -7,12 +7,19 @@ from app.core.enums import ThreadKind
 
 class MessageCreate(BaseModel):
     body: str
+    reply_to_id: int | None = None
 
 
 class Reaction(BaseModel):
     emoji: str
     count: int
     mine: bool = False
+
+
+class ReplyPreview(BaseModel):
+    id: int
+    author_name: str | None = None
+    body: str
 
 
 class MessageOut(BaseModel):
@@ -24,6 +31,7 @@ class MessageOut(BaseModel):
     created_at: datetime
     edit_count: int = 0
     reactions: list[Reaction] = []
+    reply_to: ReplyPreview | None = None
 
 
 class ThreadCreate(BaseModel):

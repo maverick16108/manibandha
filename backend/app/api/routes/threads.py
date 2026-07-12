@@ -47,12 +47,30 @@ def _reactions_of(m: ThreadMessage, user_id: int) -> list[dict]:
     return [{"emoji": e, "count": c, "mine": e == mine} for e, c in ordered]
 
 
+def _snippet(body: str) -> str:
+    """Короткая текстовая выжимка сообщения для цитаты."""
+    import re
+    s = body or ""
+    s = re.sub(r"@\[audio\]\([^)]*\)", "🎤 Голосовое сообщение", s)
+    s = re.sub(r"!\[[^\]]*\]\([^)]*\)", "🖼 Фото", s)
+    s = re.sub(r"\s+", " ", s).strip()
+    return s[:100]
+
+
+def _reply_dict(m: ThreadMessage) -> dict | None:
+    r = getattr(m, "reply_to", None)
+    if not r:
+        return None
+    return {"id": r.id, "author_name": r.author.full_name if r.author else None, "body": _snippet(r.body)}
+
+
 def _msg_out(m: ThreadMessage, user_id: int) -> MessageOut:
     return MessageOut(
         id=m.id, author_id=m.author_id,
         author_name=m.author.full_name if m.author else None,
         body=m.body, created_at=m.created_at, edit_count=m.edit_count or 0,
         reactions=_reactions_of(m, user_id),
+        reply_to=_reply_dict(m),
     )
 
 
@@ -254,7 +272,12 @@ def add_message(thread_id: int, payload: MessageCreate, db: Session = Depends(ge
     t = _get_accessible_thread(db, user, thread_id)
     if not payload.body.strip():
         raise HTTPException(status_code=400, detail="Пустое сообщение")
-    msg = ThreadMessage(thread_id=t.id, author_id=user.id, body=payload.body.strip())
+    reply_to_id = None
+    if payload.reply_to_id:
+        parent = db.get(ThreadMessage, payload.reply_to_id)
+        if parent and parent.thread_id == t.id:  # отвечать можно только на сообщение этой ветки
+            reply_to_id = parent.id
+    msg = ThreadMessage(thread_id=t.id, author_id=user.id, body=payload.body.strip(), reply_to_id=reply_to_id)
     db.add(msg)
     t.updated_at = func.now()  # поднять ветку наверх по последней активности
     _mark_staff_seen(db, user, t)  # если пишет сторона-получатель — ветка просмотрена

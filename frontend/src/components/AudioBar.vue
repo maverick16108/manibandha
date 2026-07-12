@@ -1,7 +1,11 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, onMounted, onBeforeUnmount } from 'vue'
 import AppIcon from './AppIcon.vue'
 import { player, togglePlay, skip, seek, cycleRate, toggleMute, closePlayer } from '../composables/audioPlayer'
+
+function onKey(e) { if (e.key === 'Escape' && player.visible) { e.preventDefault(); closePlayer() } }
+onMounted(() => document.addEventListener('keydown', onKey))
+onBeforeUnmount(() => document.removeEventListener('keydown', onKey))
 
 function fmt(s) {
   if (!s || !isFinite(s)) return '0:00'

@@ -184,7 +184,10 @@ let mediaRecorder = null
 let recChunks = []
 let recStream = null
 let recTimer = null
+let recStart = 0
 let recCanceled = false
+
+function onRecEscape(e) { if (e.key === 'Escape' && recording.value) { e.preventDefault(); e.stopPropagation(); cancelRec() } }
 
 function fmtRec(s) {
   const m = Math.floor(s / 60)
@@ -210,10 +213,18 @@ async function startRec() {
   mediaRecorder.start()
   recording.value = true
   recSeconds.value = 0
-  recTimer = setInterval(() => { recSeconds.value += 1; if (recSeconds.value >= 300) stopRec() }, 1000)
+  recStart = Date.now()
+  clearInterval(recTimer)
+  // счёт от метки времени — не зависит от числа тиков (никаких «скачков по 2»)
+  recTimer = setInterval(() => {
+    recSeconds.value = Math.floor((Date.now() - recStart) / 1000)
+    if (recSeconds.value >= 300) stopRec()
+  }, 250)
+  document.addEventListener('keydown', onRecEscape, true) // Esc — отменить запись
 }
 function cleanupRec() {
   clearInterval(recTimer); recTimer = null
+  document.removeEventListener('keydown', onRecEscape, true)
   recording.value = false
   if (recStream) { recStream.getTracks().forEach((t) => t.stop()); recStream = null }
 }

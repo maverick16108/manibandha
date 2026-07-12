@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import client from '../api/client'
 import { useAuthStore } from '../stores/auth'
@@ -25,8 +25,8 @@ const MONTHS = ['Январь', 'Февраль', 'Март', 'Апрель', '�
 const showFilter = computed(() => !auth.user?.disciple_id)
 const discipleOptions = computed(() => [{ value: '', label: 'Все ученики' }, ...disciples.value.map((d) => ({ value: d.id, label: d.spiritual_name || d.material_name }))])
 
-async function load() {
-  loading.value = true
+async function load(silent = false) {
+  if (!silent) loading.value = true
   try {
     const params = { kind: kind.value }
     if (filterDisciple.value) params.disciple_id = filterDisciple.value
@@ -36,7 +36,16 @@ async function load() {
     loading.value = false
   }
 }
-watch([kind, filterDisciple], load)
+watch([kind, filterDisciple], () => load())
+
+// живое обновление списка (новые вопросы/отчёты появляются сразу)
+let poll = null
+function onVisible() { if (document.visibilityState === 'visible') load(true) }
+onMounted(() => {
+  poll = setInterval(() => load(true), 15000)
+  document.addEventListener('visibilitychange', onVisible)
+})
+onBeforeUnmount(() => { clearInterval(poll); document.removeEventListener('visibilitychange', onVisible) })
 
 function periodLabel(p) {
   if (!p) return ''

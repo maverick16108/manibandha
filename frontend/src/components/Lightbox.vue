@@ -13,11 +13,12 @@ function onDocClick(e) {
 }
 function onKey(e) { if (e.key === 'Escape' && lightboxSrc.value) closeLightbox() }
 onMounted(() => {
-  document.addEventListener('click', onDocClick)
+  // capture: сработает раньше любых обработчиков, которые могут остановить всплытие
+  document.addEventListener('click', onDocClick, true)
   document.addEventListener('keydown', onKey)
 })
 onBeforeUnmount(() => {
-  document.removeEventListener('click', onDocClick)
+  document.removeEventListener('click', onDocClick, true)
   document.removeEventListener('keydown', onKey)
 })
 </script>

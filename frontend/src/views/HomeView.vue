@@ -4,8 +4,11 @@ import { RouterLink } from 'vue-router'
 import AppIcon from '../components/AppIcon.vue'
 import client from '../api/client'
 
-// Публичное расписание — где сейчас Гуру
-const events = ref([])
+let eventsCache = [] // сохраняется между заходами на страницу в рамках сессии
+
+// Публичное расписание — где сейчас Гуру.
+// Кеш на уровне модуля: при возврате на главную события уже есть — без «прыжка» галереи.
+const events = ref(eventsCache)
 const MON = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек']
 function fmtDay(iso) { const [, m, d] = iso.split('-'); return `${+d} ${MON[+m - 1]}` }
 function eventDates(e) {
@@ -14,7 +17,11 @@ function eventDates(e) {
   return e.ends_on && e.ends_on !== e.starts_on ? `${s} — ${fmtDay(e.ends_on)}` : s
 }
 onMounted(async () => {
-  try { const { data } = await client.get('/events/public/upcoming'); events.value = data } catch { /* тихо */ }
+  try {
+    const { data } = await client.get('/events/public/upcoming')
+    events.value = data
+    eventsCache = data // запомнить для следующего возврата на страницу
+  } catch { /* тихо */ }
 })
 
 // Guru photos live in /public/guru/. Bound via :src so Vite serves them from /public.

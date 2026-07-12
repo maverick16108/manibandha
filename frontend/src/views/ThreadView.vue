@@ -54,6 +54,12 @@ const REACTIONS = ['❤️', '👍', '🙏', '🔥', '😂', '🎉']
 // контекстное меню у курсора
 const ctx = reactive({ open: false, x: 0, y: 0, m: null })
 function closeCtx() { ctx.open = false; ctx.m = null }
+function onEsc(e) {
+  if (e.key !== 'Escape') return
+  if (ctx.open) { closeCtx() }
+  else if (editingMsg.value) { cancelEdit() }
+  else if (replyTo.value) { replyTo.value = null }
+}
 const ctxStyle = computed(() => ({
   left: Math.min(ctx.x, (typeof window !== 'undefined' ? window.innerWidth : 9999) - 210) + 'px',
   top: Math.min(ctx.y, (typeof window !== 'undefined' ? window.innerHeight : 9999) - 190) + 'px',
@@ -292,6 +298,7 @@ async function removeMessage(m) {
 onMounted(async () => {
   try { await load(); connectWs() } finally { loading.value = false }
   nowTimer = setInterval(() => { nowTs.value = Date.now() }, 20000) // прячет «Изменить/Удалить» после часа
+  document.addEventListener('keydown', onEsc)
   await nextTick()
   const el = scroller.value
   if (el) {
@@ -302,7 +309,7 @@ onMounted(async () => {
     resizeObs.observe(el)
   }
 })
-onBeforeUnmount(() => { if (ws) ws.close(); clearTimeout(typingTimer); clearInterval(nowTimer); if (resizeObs) resizeObs.disconnect(); backTarget.value = null; closePlayer() })
+onBeforeUnmount(() => { if (ws) ws.close(); clearTimeout(typingTimer); clearInterval(nowTimer); document.removeEventListener('keydown', onEsc); if (resizeObs) resizeObs.disconnect(); backTarget.value = null; closePlayer() })
 </script>
 
 <template>

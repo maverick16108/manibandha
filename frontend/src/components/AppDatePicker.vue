@@ -84,7 +84,7 @@ onBeforeUnmount(() => { document.removeEventListener('mousedown', onDoc); docume
 
     <transition enter-active-class="transition duration-100 ease-out" enter-from-class="opacity-0 -translate-y-1"
       leave-active-class="transition duration-75 ease-in" leave-to-class="opacity-0 -translate-y-1">
-      <div v-if="open" class="absolute z-40 mt-1 w-72 rounded-lg border border-parchment-300 bg-white p-3 shadow-lg">
+      <div v-if="open" class="absolute z-[2000] mt-1 w-72 rounded-lg border border-parchment-300 bg-white p-3 shadow-lg">
         <!-- header -->
         <div class="mb-2 flex items-center justify-between">
           <button type="button" class="rounded p-1 text-ink-700 hover:bg-parchment-100" @click="view === 'days' ? prevMonth() : (viewY -= 12)">

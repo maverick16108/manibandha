@@ -50,14 +50,16 @@ function logout() {
         Как только заявку одобрят, откроется полный доступ к кабинету.
       </p>
 
-      <p v-if="loaded" class="mt-4 flex items-center gap-2 rounded-lg px-4 py-3 text-sm font-medium ring-1"
-         :class="formFilled ? 'bg-emerald-50 text-emerald-700 ring-emerald-200' : 'bg-saffron-500/10 text-saffron-800 ring-saffron-300'">
-        <AppIcon :name="formFilled ? 'check' : 'chat'" :size="18" class="shrink-0" />
-        <span>{{ formFilled
-          ? 'Анкета заполнена. Ожидайте — с Вами свяжется куратор для завершения регистрации.'
-          : 'Обязательно заполните анкету — только после этого заявку рассмотрят и откроется доступ. Без анкеты заявку не одобрят.' }}</span>
+      <p class="mt-4 flex min-h-[5.5rem] items-center gap-2 rounded-lg px-4 py-3 text-sm font-medium ring-1"
+         :class="!loaded ? 'animate-pulse bg-parchment-100 ring-parchment-200'
+           : (formFilled ? 'bg-emerald-50 text-emerald-700 ring-emerald-200' : 'bg-saffron-500/10 text-saffron-800 ring-saffron-300')">
+        <template v-if="loaded">
+          <AppIcon :name="formFilled ? 'check' : 'chat'" :size="18" class="shrink-0" />
+          <span>{{ formFilled
+            ? 'Анкета заполнена. Ожидайте — с Вами свяжется куратор для завершения регистрации.'
+            : 'Обязательно заполните анкету — только после этого заявку рассмотрят и откроется доступ. Без анкеты заявку не одобрят.' }}</span>
+        </template>
       </p>
-      <div v-else class="mt-4 h-12 animate-pulse rounded-lg bg-parchment-100"></div>
 
       <div class="mt-6 flex flex-col gap-3">
         <button class="btn-primary w-full" :disabled="!loaded" @click="fillForm">

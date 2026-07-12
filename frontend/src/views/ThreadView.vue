@@ -173,14 +173,14 @@ onBeforeUnmount(() => { if (ws) ws.close(); clearTimeout(typingTimer); if (resiz
         <span class="badge bg-saffron-500/15 text-saffron-700">{{ periodLabel }}</span>
       </div>
 
-      <div ref="scroller" class="card flex-1 space-y-3 overflow-y-auto p-5" @scroll="onScroll">
+      <div ref="scroller" class="flex-1 space-y-3 overflow-y-auto py-3 pr-1" @scroll="onScroll">
         <template v-for="(m, i) in thread.messages" :key="m.id">
           <div v-if="daySep(i)" class="flex justify-center py-1">
-            <span class="rounded-full bg-parchment-100 px-3 py-1 text-xs font-medium text-ink-700/60">{{ daySep(i) }}</span>
+            <span class="rounded-full bg-white px-3 py-1 text-xs font-medium text-ink-700/60 ring-1 ring-parchment-200">{{ daySep(i) }}</span>
           </div>
           <div class="flex flex-col" :class="m.author_id === auth.user?.id ? 'items-end' : 'items-start'">
             <div class="max-w-[85%] rounded-2xl px-4 py-2.5"
-                 :class="m.author_id === auth.user?.id ? 'bg-saffron-500 text-white' : 'bg-parchment-100 text-ink-800'">
+                 :class="m.author_id === auth.user?.id ? 'bg-saffron-500 text-white' : 'bg-white text-ink-800 ring-1 ring-parchment-200'">
               <div class="mb-0.5 text-xs opacity-70">{{ m.author_name || 'Аноним' }} · {{ fmtTime(m.created_at) }}</div>
               <div class="markdown-body break-words" v-html="renderMarkdown(m.body)"></div>
             </div>

@@ -208,6 +208,7 @@ onBeforeUnmount(() => { if (ws) ws.close(); clearTimeout(typingTimer); if (resiz
 
 <style scoped>
 .markdown-body :deep(a) { text-decoration: underline; }
-.markdown-body :deep(ul) { margin: 0.25rem 0; }
+.markdown-body :deep(ul) { margin: 0.25rem 0; padding-left: 1.25rem; list-style: disc; }
+.markdown-body :deep(ol) { margin: 0.25rem 0; padding-left: 1.35rem; list-style: decimal; }
 .markdown-body :deep(img) { max-height: 18rem; border-radius: 0.5rem; }
 </style>

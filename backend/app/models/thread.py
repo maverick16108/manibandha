@@ -20,6 +20,8 @@ class Thread(Base):
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    # когда сторона-получатель (с правами) последний раз смотрела ветку — общий счётчик «непросмотренных»
+    staff_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     disciple = relationship("Disciple")
     messages = relationship(

@@ -8,7 +8,7 @@ import jwt
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 from sqlalchemy import func
 
-from app.api.routes.threads import _accessible, _mark_read
+from app.api.routes.threads import _accessible, _mark_read, _mark_staff_seen
 from app.core.database import SessionLocal
 from app.core.security import decode_access_token
 from app.models import Thread, ThreadMessage, User
@@ -72,6 +72,7 @@ async def ws_thread(websocket: WebSocket, thread_id: int, token: str = Query(...
                     db.add(msg)
                     t = db.get(Thread, thread_id)
                     t.updated_at = func.now()
+                    _mark_staff_seen(db, user, t)
                     db.commit()
                     db.refresh(msg)
                     _mark_read(db, user, thread_id)

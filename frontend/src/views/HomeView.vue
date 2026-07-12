@@ -147,7 +147,15 @@ const service = [
       <div class="mx-auto max-w-4xl px-6 py-20">
         <p class="mb-3 text-center text-sm uppercase tracking-[0.25em] text-saffron-600">Расписание</p>
         <h2 class="text-center font-display text-4xl font-semibold text-ink-900">Где сейчас Гуру</h2>
-        <div class="mt-12 space-y-3">
+        <div class="mt-8 flex flex-wrap justify-center gap-3">
+          <RouterLink to="/calendar" class="btn-outline">
+            <AppIcon name="calendar" :size="16" /> Открыть календарь
+          </RouterLink>
+          <RouterLink to="/calendar?view=map" class="btn-outline">
+            <AppIcon name="pin" :size="16" /> Карта
+          </RouterLink>
+        </div>
+        <div class="mt-8 space-y-3">
           <RouterLink v-for="e in events" :key="e.id" :to="{ name: 'public-event', params: { id: e.id } }"
                class="group flex flex-col gap-2 rounded-2xl border border-parchment-300 bg-white/70 px-6 py-5 transition hover:border-saffron-300 hover:bg-white hover:shadow-sm sm:flex-row sm:items-center sm:gap-6">
             <div class="flex w-40 shrink-0 items-center gap-2 text-saffron-700">
@@ -161,11 +169,6 @@ const service = [
               </p>
             </div>
             <AppIcon name="chevron" :size="18" class="hidden shrink-0 -rotate-90 text-ink-700/30 transition group-hover:text-saffron-600 sm:block" />
-          </RouterLink>
-        </div>
-        <div class="mt-8 text-center">
-          <RouterLink to="/calendar" class="btn-outline">
-            <AppIcon name="calendar" :size="16" /> Открыть календарь
           </RouterLink>
         </div>
       </div>

@@ -1,13 +1,30 @@
 <script setup>
 import { ref, computed, onMounted, nextTick } from 'vue'
-import { useRouter, RouterLink } from 'vue-router'
+import { useRouter, useRoute, RouterLink } from 'vue-router'
 import client from '../api/client'
 import PublicShell from '../components/PublicShell.vue'
 import AppIcon from '../components/AppIcon.vue'
+import AppDatePicker from '../components/AppDatePicker.vue'
+import EventsMap from '../components/EventsMap.vue'
 
 const router = useRouter()
+const route = useRoute()
 const events = ref([])
 const cursor = ref({ y: 2026, m: 7 })
+
+// вид: календарь или карта маршрута
+const mode = ref(route.query.view === 'map' ? 'map' : 'calendar')
+
+// период карты — по умолчанию год вперёд
+const pad = (n) => String(n).padStart(2, '0')
+const nowMap = new Date()
+const isoToday = `${nowMap.getFullYear()}-${pad(nowMap.getMonth() + 1)}-${pad(nowMap.getDate())}`
+const isoNextYear = `${nowMap.getFullYear() + 1}-${pad(nowMap.getMonth() + 1)}-${pad(nowMap.getDate())}`
+const mapFrom = ref(isoToday)
+const mapTo = ref(isoNextYear)
+const mapEvents = computed(() => events.value.filter(
+  (e) => e.starts_on && e.starts_on >= mapFrom.value && e.starts_on <= mapTo.value,
+))
 
 const MONTHS = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь']
 const WD = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
@@ -77,6 +94,19 @@ onMounted(async () => {
     </nav>
     <h1 class="mb-6 font-display text-3xl font-semibold text-ink-900 sm:text-4xl">Календарь событий</h1>
 
+    <!-- переключатель вида -->
+    <div class="mb-6 flex rounded-lg border border-parchment-300 p-0.5 sm:w-max">
+      <button class="flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm transition sm:flex-none"
+              :class="mode === 'calendar' ? 'bg-saffron-500 text-white' : 'text-ink-700 hover:bg-parchment-100'" @click="mode = 'calendar'">
+        <AppIcon name="calendar" :size="15" /> Календарь
+      </button>
+      <button class="flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm transition sm:flex-none"
+              :class="mode === 'map' ? 'bg-saffron-500 text-white' : 'text-ink-700 hover:bg-parchment-100'" @click="mode = 'map'">
+        <AppIcon name="pin" :size="15" /> Карта
+      </button>
+    </div>
+
+    <template v-if="mode === 'calendar'">
     <div class="card p-4 sm:p-6">
       <div class="mb-4 flex items-center justify-between">
         <button class="flex h-9 w-9 items-center justify-center rounded-full border border-parchment-300 text-ink-700 hover:bg-parchment-100" @click="prevMonth">
@@ -134,5 +164,22 @@ onMounted(async () => {
       </button>
     </div>
     <p v-else class="mt-6 text-center text-ink-700/50">В этом месяце событий нет</p>
+    </template>
+
+    <!-- карта маршрута -->
+    <template v-else-if="mode === 'map'">
+      <div class="card mb-4 flex flex-wrap items-end gap-3 p-4">
+        <div>
+          <label class="label">С</label>
+          <div class="w-40"><AppDatePicker v-model="mapFrom" /></div>
+        </div>
+        <div>
+          <label class="label">По</label>
+          <div class="w-40"><AppDatePicker v-model="mapTo" /></div>
+        </div>
+        <p class="ml-auto text-sm text-ink-700/60">Маршрут гуру · событий: <b class="text-ink-900">{{ mapEvents.length }}</b></p>
+      </div>
+      <EventsMap :events="mapEvents" />
+    </template>
   </PublicShell>
 </template>

@@ -87,6 +87,49 @@ def _mark_read(db: Session, user: User, thread_id: int):
     db.commit()
 
 
+def _is_recipient(caps: set, kind: ThreadKind) -> bool:
+    """Сторона-получатель ветки (кому адресованы вопросы/отчёты/заявки)."""
+    if kind == ThreadKind.question:
+        return "questions.answer" in caps or "questions.view_all" in caps
+    if kind == ThreadKind.report:
+        return "reports.read_all" in caps
+    if kind == ThreadKind.approval:
+        return "disciples.approve" in caps
+    return False
+
+
+def _mark_staff_seen(db: Session, user: User, thread: Thread):
+    """Отметить, что сторона-получатель видела ветку (общий счётчик непросмотренных)."""
+    from app.core.capabilities import user_capabilities
+    if _is_recipient(user_capabilities(db, user), thread.kind):
+        thread.staff_seen_at = func.now()
+
+
+@router.get("/nav-counts")
+def nav_counts(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """Счётчики для меню: непросмотренные вопросы/отчёты (общие) и неодобренные заявки."""
+    from sqlalchemy import or_
+    from app.core.capabilities import user_capabilities
+    caps = user_capabilities(db, user)
+    res = {"questions": 0, "reports": 0, "approvals": 0}
+
+    def unread(kind: ThreadKind) -> int:
+        return (
+            _accessible(db, user)
+            .filter(Thread.kind == kind)
+            .filter(or_(Thread.staff_seen_at.is_(None), Thread.updated_at > Thread.staff_seen_at))
+            .count()
+        )
+
+    if _is_recipient(caps, ThreadKind.question):
+        res["questions"] = unread(ThreadKind.question)
+    if _is_recipient(caps, ThreadKind.report):
+        res["reports"] = unread(ThreadKind.report)
+    if "disciples.approve" in caps:
+        res["approvals"] = db.query(Disciple).filter(Disciple.is_approved.is_(False)).count()
+    return res
+
+
 @router.get("/stats")
 def thread_stats(disciple_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     """Сколько у ученика вопросов, отчётов и написанных им сообщений."""
@@ -116,6 +159,7 @@ def _get_accessible_thread(db: Session, user: User, thread_id: int) -> Thread:
 @router.get("/{thread_id}", response_model=ThreadOut)
 def get_thread(thread_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     t = _get_accessible_thread(db, user, thread_id)
+    _mark_staff_seen(db, user, t)  # общий счётчик непросмотренных для стороны-получателя
     _mark_read(db, user, t.id)
     return ThreadOut(
         id=t.id, kind=t.kind, disciple_id=t.disciple_id,
@@ -167,6 +211,7 @@ def add_message(thread_id: int, payload: MessageCreate, db: Session = Depends(ge
     msg = ThreadMessage(thread_id=t.id, author_id=user.id, body=payload.body.strip())
     db.add(msg)
     t.updated_at = func.now()  # поднять ветку наверх по последней активности
+    _mark_staff_seen(db, user, t)  # если пишет сторона-получатель — ветка просмотрена
     db.commit()
     db.refresh(msg)
     _mark_read(db, user, t.id)  # автор только что видел ветку

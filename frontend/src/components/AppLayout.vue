@@ -1,10 +1,11 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { RouterLink, RouterView, useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { ROLE_LABELS } from '../lib/format'
 import { pageTitle } from '../composables/pageTitle'
 import { onEscape } from '../composables/useEscape'
+import { navCounts, refreshNavCounts } from '../composables/navCounts'
 import AppIcon from './AppIcon.vue'
 
 const auth = useAuthStore()
@@ -41,6 +42,19 @@ function canShow(item) {
   return (item.caps || []).some((c) => auth.can(c))
 }
 
+// бейджи непросмотренного в меню
+function badgeFor(name) {
+  if (name === 'questions') return navCounts.questions
+  if (name === 'service-reports') return navCounts.reports
+  if (name === 'approvals') return navCounts.approvals
+  return 0
+}
+let countsTimer = null
+onMounted(() => { refreshNavCounts(); countsTimer = setInterval(refreshNavCounts, 30000) })
+onBeforeUnmount(() => clearInterval(countsTimer))
+// обновлять при переходах (в т.ч. после просмотра ветки — счётчик у всех уменьшается)
+watch(() => route.fullPath, refreshNavCounts)
+
 const initials = computed(() => (auth.user?.full_name || '?').trim()[0]?.toUpperCase() || '?')
 
 function logout() {
@@ -71,7 +85,12 @@ function logout() {
             active-class="bg-saffron-500/10 text-saffron-700"
             @click="sidebarOpen = false"
           >
-            <AppIcon :name="item.icon" :size="18" />{{ item.label }}
+            <AppIcon :name="item.icon" :size="18" />
+            <span class="flex-1">{{ item.label }}</span>
+            <span v-if="badgeFor(item.name) > 0"
+                  class="inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-saffron-500 px-1.5 text-xs font-semibold text-white">
+              {{ badgeFor(item.name) }}
+            </span>
           </RouterLink>
         </template>
       </nav>

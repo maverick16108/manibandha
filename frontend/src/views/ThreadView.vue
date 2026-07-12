@@ -55,7 +55,27 @@ watch(thread, (t) => {
 })
 
 function fmtTime(iso) {
-  return new Date(iso).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+  return new Date(iso).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
+}
+function dayKey(iso) {
+  const d = new Date(iso)
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
+}
+function dayLabel(iso) {
+  const d = new Date(iso)
+  const now = new Date()
+  const yesterday = new Date(now); yesterday.setDate(now.getDate() - 1)
+  if (dayKey(iso) === dayKey(now)) return 'Сегодня'
+  if (dayKey(iso) === dayKey(yesterday)) return 'Вчера'
+  const opts = { day: 'numeric', month: 'long' }
+  if (d.getFullYear() !== now.getFullYear()) opts.year = 'numeric'
+  return d.toLocaleDateString('ru-RU', opts)
+}
+// разделитель дня: показывать перед первым сообщением дня
+function daySep(i) {
+  const msgs = thread.value?.messages || []
+  if (i === 0) return msgs[0] ? dayLabel(msgs[0].created_at) : null
+  return dayKey(msgs[i].created_at) !== dayKey(msgs[i - 1].created_at) ? dayLabel(msgs[i].created_at) : null
 }
 async function scrollDown() {
   await nextTick()
@@ -154,20 +174,24 @@ onBeforeUnmount(() => { if (ws) ws.close(); clearTimeout(typingTimer); if (resiz
       </div>
 
       <div ref="scroller" class="card flex-1 space-y-3 overflow-y-auto p-5" @scroll="onScroll">
-        <div v-for="m in thread.messages" :key="m.id"
-             class="flex flex-col" :class="m.author_id === auth.user?.id ? 'items-end' : 'items-start'">
-          <div class="max-w-[85%] rounded-2xl px-4 py-2.5"
-               :class="m.author_id === auth.user?.id ? 'bg-saffron-500 text-white' : 'bg-parchment-100 text-ink-800'">
-            <div class="mb-0.5 text-xs opacity-70">{{ m.author_name || 'Аноним' }} · {{ fmtTime(m.created_at) }}</div>
-            <div class="markdown-body break-words" v-html="renderMarkdown(m.body)"></div>
+        <template v-for="(m, i) in thread.messages" :key="m.id">
+          <div v-if="daySep(i)" class="flex justify-center py-1">
+            <span class="rounded-full bg-parchment-100 px-3 py-1 text-xs font-medium text-ink-700/60">{{ daySep(i) }}</span>
           </div>
-          <button v-if="thread.kind === 'report'"
-                  class="mt-1 flex items-center gap-1 rounded-full px-2 py-0.5 text-sm transition-colors"
-                  :class="[m.liked ? 'text-red-500' : 'text-ink-700/40', canLike ? 'cursor-pointer hover:bg-parchment-100' : 'cursor-default']"
-                  :disabled="!canLike" @click="toggleLike(m)">
-            <span>{{ m.liked ? '❤' : '♡' }}</span><span v-if="m.likes" class="text-xs">{{ m.likes }}</span>
-          </button>
-        </div>
+          <div class="flex flex-col" :class="m.author_id === auth.user?.id ? 'items-end' : 'items-start'">
+            <div class="max-w-[85%] rounded-2xl px-4 py-2.5"
+                 :class="m.author_id === auth.user?.id ? 'bg-saffron-500 text-white' : 'bg-parchment-100 text-ink-800'">
+              <div class="mb-0.5 text-xs opacity-70">{{ m.author_name || 'Аноним' }} · {{ fmtTime(m.created_at) }}</div>
+              <div class="markdown-body break-words" v-html="renderMarkdown(m.body)"></div>
+            </div>
+            <button v-if="thread.kind === 'report'"
+                    class="mt-1 flex items-center gap-1 rounded-full px-2 py-0.5 text-sm transition-colors"
+                    :class="[m.liked ? 'text-red-500' : 'text-ink-700/40', canLike ? 'cursor-pointer hover:bg-parchment-100' : 'cursor-default']"
+                    :disabled="!canLike" @click="toggleLike(m)">
+              <span>{{ m.liked ? '❤' : '♡' }}</span><span v-if="m.likes" class="text-xs">{{ m.likes }}</span>
+            </button>
+          </div>
+        </template>
         <div v-if="!thread.messages.length" class="text-center text-sm text-ink-700/50">Сообщений пока нет</div>
       </div>
 

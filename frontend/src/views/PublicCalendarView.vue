@@ -1,19 +1,20 @@
 <script setup>
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRouter, useRoute, RouterLink } from 'vue-router'
 import client from '../api/client'
 import PublicShell from '../components/PublicShell.vue'
 import AppIcon from '../components/AppIcon.vue'
 import AppDatePicker from '../components/AppDatePicker.vue'
 import EventsMap from '../components/EventsMap.vue'
+import { renderMarkdown } from '../lib/markdown'
 
 const router = useRouter()
 const route = useRoute()
 const events = ref([])
 const cursor = ref({ y: 2026, m: 7 })
 
-// вид: календарь или карта маршрута
-const mode = ref(route.query.view === 'map' ? 'map' : 'calendar')
+// вид: список, календарь или карта маршрута
+const mode = ref(route.query.view === 'map' ? 'map' : route.query.view === 'list' ? 'list' : 'calendar')
 
 // период карты — по умолчанию год вперёд
 const pad = (n) => String(n).padStart(2, '0')
@@ -79,10 +80,40 @@ function focusDay(y, m, d) {
   setTimeout(() => { if (highlightIds.value === ids) highlightIds.value = [] }, 2000)
 }
 
+// ── лента и навигатор по месяцам (режим «Список») ──
+const feed = computed(() => [...events.value].sort((a, b) => (a.starts_on || '').localeCompare(b.starts_on || '')))
+const monthGroups = computed(() => {
+  const seen = new Map()
+  for (const e of feed.value) {
+    if (!e.starts_on) continue
+    const key = e.starts_on.slice(0, 7)
+    if (!seen.has(key)) seen.set(key, e.id)
+  }
+  return [...seen.entries()].map(([key, firstId]) => {
+    const [y, m] = key.split('-')
+    return { key, label: `${MONTHS[+m - 1]} ${y}`, firstId }
+  })
+})
+const activeMonth = ref('')
+function scrollToMonth(g) {
+  document.getElementById('evl-' + g.firstId)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+function onWinScroll() {
+  let active = monthGroups.value[0]?.key || ''
+  for (const g of monthGroups.value) {
+    const el = document.getElementById('evl-' + g.firstId)
+    if (el && el.getBoundingClientRect().top - 90 <= 0) active = g.key
+  }
+  activeMonth.value = active
+}
+
 onMounted(async () => {
   cursor.value = { y: today.getFullYear(), m: today.getMonth() + 1 }
   try { const { data } = await client.get('/events/public'); events.value = data } catch { /* пусто */ }
+  window.addEventListener('scroll', onWinScroll, { passive: true })
+  nextTick(onWinScroll)
 })
+onBeforeUnmount(() => window.removeEventListener('scroll', onWinScroll))
 </script>
 
 <template>
@@ -90,12 +121,16 @@ onMounted(async () => {
     <nav class="mb-4 flex items-center gap-1.5 text-sm text-ink-700/60">
       <RouterLink to="/" class="hover:text-saffron-700">Главная</RouterLink>
       <span class="text-ink-700/30">/</span>
-      <span class="text-ink-800">{{ mode === 'map' ? 'Карта' : 'Календарь' }}</span>
+      <span class="text-ink-800">{{ mode === 'map' ? 'Карта' : mode === 'list' ? 'Список' : 'Календарь' }}</span>
     </nav>
     <h1 class="mb-6 font-display text-3xl font-semibold text-ink-900 sm:text-4xl">Календарь событий</h1>
 
     <!-- переключатель вида -->
     <div class="mb-6 flex rounded-lg border border-parchment-300 p-0.5 sm:w-max">
+      <button class="flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm transition sm:flex-none"
+              :class="mode === 'list' ? 'bg-saffron-500 text-white' : 'text-ink-700 hover:bg-parchment-100'" @click="mode = 'list'">
+        <AppIcon name="reports" :size="15" /> Список
+      </button>
       <button class="flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm transition sm:flex-none"
               :class="mode === 'calendar' ? 'bg-saffron-500 text-white' : 'text-ink-700 hover:bg-parchment-100'" @click="mode = 'calendar'">
         <AppIcon name="calendar" :size="15" /> Календарь
@@ -105,6 +140,29 @@ onMounted(async () => {
         <AppIcon name="pin" :size="15" /> Карта
       </button>
     </div>
+
+    <!-- ЛЕНТА событий с навигатором по месяцам -->
+    <template v-if="mode === 'list'">
+      <div class="lg:flex lg:items-start lg:gap-6">
+        <div class="min-w-0 flex-1 space-y-4">
+          <article v-for="e in feed" :id="'evl-' + e.id" :key="e.id" class="card scroll-mt-20 p-5">
+            <h3 class="font-display text-xl font-semibold text-ink-900">{{ e.title }}</h3>
+            <div class="mt-0.5 text-sm text-ink-700/70"><span v-if="e.location">📍 {{ e.location }} · </span>{{ range(e) }}</div>
+            <div v-if="e.description" class="markdown-body mt-3 text-ink-700" v-html="renderMarkdown(e.description)"></div>
+          </article>
+          <p v-if="!feed.length" class="card p-8 text-center text-ink-700/50">Событий пока нет</p>
+        </div>
+        <aside v-if="monthGroups.length" class="hidden w-44 shrink-0 lg:block">
+          <div class="sticky top-6 max-h-[calc(100vh-3rem)] overflow-y-auto rounded-xl border border-parchment-200 bg-white p-2">
+            <div class="px-2 pb-1.5 pt-1 text-xs font-semibold uppercase tracking-wide text-ink-700/50">Месяцы</div>
+            <button v-for="g in monthGroups" :key="g.key"
+                    class="block w-full rounded-lg px-3 py-2 text-left text-sm transition"
+                    :class="activeMonth === g.key ? 'bg-saffron-500 text-white' : 'text-ink-700 hover:bg-parchment-100'"
+                    @click="scrollToMonth(g)">{{ g.label }}</button>
+          </div>
+        </aside>
+      </div>
+    </template>
 
     <template v-if="mode === 'calendar'">
     <div class="card p-4 sm:p-6">
@@ -183,3 +241,11 @@ onMounted(async () => {
     </template>
   </PublicShell>
 </template>
+
+<style scoped>
+.markdown-body :deep(img) { max-width: 100%; border-radius: 0.75rem; margin: 0.5rem 0; }
+.markdown-body :deep(a) { text-decoration: underline; }
+.markdown-body :deep(ul) { list-style: disc; padding-left: 1.25rem; margin: 0.5rem 0; }
+.markdown-body :deep(ol) { list-style: decimal; padding-left: 1.35rem; margin: 0.5rem 0; }
+.markdown-body :deep(p) { margin: 0.5rem 0; }
+</style>

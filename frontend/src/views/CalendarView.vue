@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { RouterLink } from 'vue-router'
 import client from '../api/client'
 import { useAuthStore } from '../stores/auth'
@@ -86,11 +86,45 @@ async function remove(e) {
   selected.value = null
   await load()
 }
-onMounted(load)
+
+// ── навигатор по месяцам (режим «Список») ──
+const monthGroups = computed(() => {
+  const seen = new Map() // key 'YYYY-MM' → id первого события месяца (в порядке ленты)
+  for (const e of events.value) {
+    if (!e.starts_on) continue
+    const key = e.starts_on.slice(0, 7)
+    if (!seen.has(key)) seen.set(key, e.id)
+  }
+  return [...seen.entries()].map(([key, firstId]) => {
+    const [y, m] = key.split('-')
+    return { key, label: `${MONTHS[+m - 1]} ${y}`, firstId }
+  })
+})
+const activeMonth = ref('')
+function scrollToMonth(g) {
+  const el = document.getElementById(`ev-${g.firstId}`)
+  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+function onWinScroll() {
+  let active = monthGroups.value[0]?.key || ''
+  for (const g of monthGroups.value) {
+    const el = document.getElementById(`ev-${g.firstId}`)
+    if (el && el.getBoundingClientRect().top - 110 <= 0) active = g.key
+  }
+  activeMonth.value = active
+}
+watch([() => mode.value, () => events.value.length], () => { if (mode.value === 'list') nextTick(onWinScroll) })
+
+onMounted(async () => {
+  await load()
+  window.addEventListener('scroll', onWinScroll, { passive: true })
+  nextTick(onWinScroll)
+})
+onBeforeUnmount(() => window.removeEventListener('scroll', onWinScroll))
 </script>
 
 <template>
-  <div class="mx-auto max-w-5xl">
+  <div class="mx-auto max-w-6xl">
     <div class="mb-6 flex flex-wrap items-center justify-between gap-3">
       <p class="text-ink-700/60">Где находится гуру и что происходит</p>
       <div class="flex items-center gap-2">
@@ -125,26 +159,39 @@ onMounted(load)
     </div>
 
     <!-- LIST -->
-    <div v-else-if="mode === 'list'" class="space-y-4">
-      <div v-for="e in events" :key="e.id" class="card p-5" :class="isNow(e) && 'border-saffron-400/50'">
-        <div class="flex items-start justify-between gap-3">
-          <div>
-            <div class="flex flex-wrap items-center gap-2">
-              <h3 class="font-display text-xl font-semibold text-ink-900">{{ e.title }}</h3>
-              <span v-if="isNow(e)" class="badge bg-saffron-500 text-white">Сейчас</span>
+    <div v-else-if="mode === 'list'" class="lg:flex lg:items-start lg:gap-6">
+      <div class="min-w-0 flex-1 space-y-4">
+        <div v-for="e in events" :id="`ev-${e.id}`" :key="e.id" class="card scroll-mt-24 p-5" :class="isNow(e) && 'border-saffron-400/50'">
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <div class="flex flex-wrap items-center gap-2">
+                <h3 class="font-display text-xl font-semibold text-ink-900">{{ e.title }}</h3>
+                <span v-if="isNow(e)" class="badge bg-saffron-500 text-white">Сейчас</span>
+              </div>
+              <div class="mt-0.5 text-sm text-ink-700/70">
+                <span v-if="e.location">📍 {{ e.location }} · </span>{{ dateRange(e) }}
+              </div>
             </div>
-            <div class="mt-0.5 text-sm text-ink-700/70">
-              <span v-if="e.location">📍 {{ e.location }} · </span>{{ dateRange(e) }}
+            <div v-if="auth.isStaff" class="flex shrink-0 gap-2">
+              <RouterLink :to="{ name: 'event-edit', params: { id: e.id } }" class="btn-ghost">Изменить</RouterLink>
+              <button class="text-ink-700/40 hover:text-red-600" @click="remove(e)">✕</button>
             </div>
           </div>
-          <div v-if="auth.isStaff" class="flex shrink-0 gap-2">
-            <RouterLink :to="{ name: 'event-edit', params: { id: e.id } }" class="btn-ghost">Изменить</RouterLink>
-            <button class="text-ink-700/40 hover:text-red-600" @click="remove(e)">✕</button>
-          </div>
+          <div v-if="e.description" class="markdown-body mt-3 text-ink-700" v-html="renderMarkdown(e.description)"></div>
         </div>
-        <div v-if="e.description" class="markdown-body mt-3 text-ink-700" v-html="renderMarkdown(e.description)"></div>
+        <div v-if="!events.length" class="card p-8 text-center text-ink-700/50">Событий пока нет</div>
       </div>
-      <div v-if="!events.length" class="card p-8 text-center text-ink-700/50">Событий пока нет</div>
+
+      <!-- навигатор по месяцам: клик — прокрутка ленты -->
+      <aside v-if="monthGroups.length" class="hidden w-44 shrink-0 lg:block">
+        <div class="sticky top-20 max-h-[calc(100vh-6rem)] overflow-y-auto rounded-xl border border-parchment-200 bg-white p-2">
+          <div class="px-2 pb-1.5 pt-1 text-xs font-semibold uppercase tracking-wide text-ink-700/50">Месяцы</div>
+          <button v-for="g in monthGroups" :key="g.key"
+                  class="block w-full rounded-lg px-3 py-2 text-left text-sm transition"
+                  :class="activeMonth === g.key ? 'bg-saffron-500 text-white' : 'text-ink-700 hover:bg-parchment-100'"
+                  @click="scrollToMonth(g)">{{ g.label }}</button>
+        </div>
+      </aside>
     </div>
 
     <!-- CALENDAR -->

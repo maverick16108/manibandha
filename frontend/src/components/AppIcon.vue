@@ -162,6 +162,26 @@ defineProps({
       <path d="m9 11.5 2 2 4-4" />
     </template>
 
+    <!-- edit (карандаш) -->
+    <template v-else-if="name === 'edit'">
+      <path d="M4 20h4L18.5 9.5a2 2 0 0 0-2.8-2.8L5 17.2 4 20Z" />
+      <path d="m14 8 2.8 2.8" />
+    </template>
+
+    <!-- trash (удалить) -->
+    <template v-else-if="name === 'trash'">
+      <path d="M4 6.5h16M9 6.5V5a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 15 5v1.5" />
+      <path d="M6.5 6.5 7.5 19a1.5 1.5 0 0 0 1.5 1.4h6a1.5 1.5 0 0 0 1.5-1.4l1-12.5" />
+      <path d="M10 10v6.5M14 10v6.5" />
+    </template>
+
+    <!-- react (смайл — добавить реакцию) -->
+    <template v-else-if="name === 'react'">
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M8.5 14.5s1.3 1.8 3.5 1.8 3.5-1.8 3.5-1.8" />
+      <path d="M9 9.5h.01M15 9.5h.01" />
+    </template>
+
     <!-- Медитация / логотип (lotus) -->
     <template v-else-if="name === 'lotus'">
       <path d="M12 13.4c-1.7-1.4-2.6-3.4-2.6-5.4 0-1.8 1-3.6 2.6-5 1.6 1.4 2.6 3.2 2.6 5 0 2-.9 4-2.6 5.4Z" />

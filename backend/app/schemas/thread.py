@@ -9,6 +9,12 @@ class MessageCreate(BaseModel):
     body: str
 
 
+class Reaction(BaseModel):
+    emoji: str
+    count: int
+    mine: bool = False
+
+
 class MessageOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
@@ -17,8 +23,7 @@ class MessageOut(BaseModel):
     body: str
     created_at: datetime
     edit_count: int = 0
-    likes: int = 0
-    liked: bool = False
+    reactions: list[Reaction] = []
 
 
 class ThreadCreate(BaseModel):

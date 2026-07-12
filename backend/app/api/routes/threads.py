@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
@@ -35,12 +35,24 @@ def _accessible(db: Session, user: User):
     return q.filter(or_(*conds))
 
 
+# 6 доступных реакций
+REACTIONS = ["❤️", "👍", "🙏", "🔥", "😂", "🎉"]
+
+
+def _reactions_of(m: ThreadMessage, user_id: int) -> list[dict]:
+    from collections import Counter
+    counts = Counter(l.emoji for l in m.likes)
+    mine = next((l.emoji for l in m.likes if l.user_id == user_id), None)
+    ordered = sorted(counts.items(), key=lambda kv: (-kv[1], REACTIONS.index(kv[0]) if kv[0] in REACTIONS else 99))
+    return [{"emoji": e, "count": c, "mine": e == mine} for e, c in ordered]
+
+
 def _msg_out(m: ThreadMessage, user_id: int) -> MessageOut:
     return MessageOut(
         id=m.id, author_id=m.author_id,
         author_name=m.author.full_name if m.author else None,
         body=m.body, created_at=m.created_at, edit_count=m.edit_count or 0,
-        likes=len(m.likes), liked=any(l.user_id == user_id for l in m.likes),
+        reactions=_reactions_of(m, user_id),
     )
 
 
@@ -291,9 +303,14 @@ async def delete_message(thread_id: int, message_id: int, db: Session = Depends(
     await _broadcast(thread_id, {"type": "delete", "message_id": message_id})
 
 
-@router.post("/{thread_id}/messages/{message_id}/like")
-def toggle_like(thread_id: int, message_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    _get_accessible_thread(db, user, thread_id)  # проверка доступа к ветке
+@router.post("/{thread_id}/messages/{message_id}/react")
+async def react(thread_id: int, message_id: int, payload: dict = Body(...),
+                db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """Поставить/сменить/снять реакцию-эмодзи (одна на пользователя на сообщение)."""
+    emoji = (payload or {}).get("emoji")
+    if emoji not in REACTIONS:
+        raise HTTPException(status_code=400, detail="Недопустимая реакция")
+    _get_accessible_thread(db, user, thread_id)
     msg = db.get(ThreadMessage, message_id)
     if not msg or msg.thread_id != thread_id:
         raise HTTPException(status_code=404, detail="Сообщение не найдено")
@@ -301,11 +318,14 @@ def toggle_like(thread_id: int, message_id: int, db: Session = Depends(get_db), 
         MessageLike.message_id == message_id, MessageLike.user_id == user.id
     ).first()
     if existing:
-        db.delete(existing)
-        liked = False
+        if existing.emoji == emoji:
+            db.delete(existing)  # тот же эмодзи — снять реакцию
+        else:
+            existing.emoji = emoji  # сменить на другой
     else:
-        db.add(MessageLike(message_id=message_id, user_id=user.id))
-        liked = True
+        db.add(MessageLike(message_id=message_id, user_id=user.id, emoji=emoji))
     db.commit()
-    likes = db.query(MessageLike).filter(MessageLike.message_id == message_id).count()
-    return {"likes": likes, "liked": liked}
+    db.refresh(msg)
+    reactions = _reactions_of(msg, user.id)
+    await _broadcast(thread_id, {"type": "react", "message_id": message_id, "reactions": reactions})
+    return {"reactions": reactions}

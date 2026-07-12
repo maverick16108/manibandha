@@ -4,6 +4,7 @@ import { useRoute } from 'vue-router'
 import client from '../api/client'
 import { useAuthStore } from '../stores/auth'
 import AppSkeleton from '../components/AppSkeleton.vue'
+import AppIcon from '../components/AppIcon.vue'
 import MarkdownEditor from '../components/MarkdownEditor.vue'
 import { renderMarkdown } from '../lib/markdown'
 import { extractImageUrls, preloadImages } from '../lib/preload'
@@ -46,6 +47,10 @@ let nowTimer = null
 const editingId = ref(null)
 const editText = ref('')
 const savingEdit = ref(false)
+const menuId = ref(null) // открытое меню действий у сообщения
+const pickerId = ref(null) // открытый выбор реакции
+const REACTIONS = ['❤️', '👍', '🙏', '🔥', '😂', '🎉']
+function closeMenus() { menuId.value = null; pickerId.value = null }
 function canModify(m) {
   return m.author_id === auth.user?.id && (nowTs.value - new Date(m.created_at).getTime()) <= EDIT_WINDOW
 }
@@ -124,6 +129,13 @@ function connectWs() {
       }
     } else if (data.type === 'delete') {
       if (thread.value) thread.value.messages = thread.value.messages.filter((x) => x.id !== data.message_id)
+    } else if (data.type === 'react') {
+      const m = thread.value?.messages.find((x) => x.id === data.message_id)
+      if (m) {
+        // «моя» реакция считается локально (в broadcast mine относится к автору действия)
+        const myEmoji = (m.reactions || []).find((r) => r.mine)?.emoji
+        m.reactions = data.reactions.map((r) => ({ ...r, mine: r.emoji === myEmoji }))
+      }
     } else if (data.type === 'typing' && data.user_id !== auth.user?.id) {
       typingName.value = data.name
       clearTimeout(typingTimer)
@@ -158,12 +170,19 @@ async function send() {
     sending.value = false
   }
 }
-async function toggleLike(m) {
-  const { data } = await client.post(`/threads/${id.value}/messages/${m.id}/like`)
-  m.likes = data.likes
-  m.liked = data.liked
+async function react(m, emoji) {
+  pickerId.value = null
+  try {
+    const { data } = await client.post(`/threads/${id.value}/messages/${m.id}/react`, { emoji })
+    m.reactions = data.reactions
+  } catch { /* игнор */ }
 }
-function startEdit(m) { editingId.value = m.id; editText.value = m.body }
+function onContext(e, m) {
+  if (!canModify(m)) return // чужие/просроченные — обычное контекстное меню браузера
+  e.preventDefault()
+  menuId.value = menuId.value === m.id ? null : m.id
+}
+function startEdit(m) { editingId.value = m.id; editText.value = m.body; menuId.value = null }
 function cancelEdit() { editingId.value = null; editText.value = '' }
 async function saveEdit(m) {
   const text = editText.value.trim()
@@ -227,7 +246,8 @@ onBeforeUnmount(() => { if (ws) ws.close(); clearTimeout(typingTimer); clearInte
           </div>
           <div class="group flex flex-col" :class="m.author_id === auth.user?.id ? 'items-end' : 'items-start'">
             <div class="max-w-[85%] rounded-2xl px-4 py-2.5"
-                 :class="[m.author_id === auth.user?.id ? 'bg-saffron-500 text-white' : 'bg-white text-ink-800 ring-1 ring-parchment-200', editingId === m.id && 'w-full']">
+                 :class="[m.author_id === auth.user?.id ? 'bg-saffron-500 text-white' : 'bg-white text-ink-800 ring-1 ring-parchment-200', editingId === m.id && 'w-full']"
+                 @contextmenu="onContext($event, m)">
               <div class="mb-0.5 flex flex-wrap items-center gap-x-1.5 text-xs opacity-70">
                 <span>{{ m.author_name || 'Аноним' }} · {{ fmtTime(m.created_at) }}</span>
                 <span v-if="m.edit_count" :title="`изменено раз: ${m.edit_count}`">· изменено{{ m.edit_count > 1 ? ` ×${m.edit_count}` : '' }}</span>
@@ -244,23 +264,50 @@ onBeforeUnmount(() => { if (ws) ws.close(); clearTimeout(typingTimer); clearInte
               <div v-else class="markdown-body break-words" v-html="renderMarkdown(m.body)"></div>
             </div>
 
-            <div v-if="editingId !== m.id && (m.author_id !== auth.user?.id || canModify(m))"
-                 class="mt-1 flex items-center gap-1">
-              <button v-if="m.author_id !== auth.user?.id"
-                      class="flex items-center gap-1 rounded-full px-2 py-0.5 text-sm transition-colors"
-                      :class="m.liked ? 'text-red-500' : 'text-ink-700/40 hover:bg-parchment-100'"
-                      @click="toggleLike(m)">
-                <span>{{ m.liked ? '❤' : '♡' }}</span><span v-if="m.likes" class="text-xs">{{ m.likes }}</span>
+            <div v-if="editingId !== m.id && ((m.reactions && m.reactions.length) || m.author_id !== auth.user?.id || canModify(m))"
+                 class="mt-1 flex flex-wrap items-center gap-1">
+              <!-- поставленные реакции -->
+              <button v-for="r in m.reactions" :key="r.emoji"
+                      class="flex items-center gap-1 rounded-full px-2 py-0.5 text-sm ring-1 transition-colors disabled:cursor-default"
+                      :class="r.mine ? 'bg-saffron-500/15 text-saffron-700 ring-saffron-400' : 'bg-white text-ink-700 ring-parchment-200 hover:bg-parchment-100'"
+                      :disabled="m.author_id === auth.user?.id"
+                      @click="react(m, r.emoji)">
+                <span>{{ r.emoji }}</span><span class="text-xs">{{ r.count }}</span>
               </button>
-              <template v-if="canModify(m)">
-                <button class="rounded-full px-2 py-0.5 text-xs text-ink-700/50 transition-colors hover:bg-parchment-100 hover:text-ink-700" @click="startEdit(m)">Изменить</button>
-                <button class="rounded-full px-2 py-0.5 text-xs text-red-500/70 transition-colors hover:bg-red-50 hover:text-red-600" @click="removeMessage(m)">Удалить</button>
-              </template>
+              <!-- выбрать реакцию (чужие сообщения) -->
+              <div v-if="m.author_id !== auth.user?.id" class="relative">
+                <button class="rounded-full px-1.5 py-0.5 text-ink-700/40 transition-colors hover:bg-parchment-100 hover:text-ink-700"
+                        title="Реакция" @click.stop="menuId = null; pickerId = pickerId === m.id ? null : m.id">
+                  <AppIcon name="react" :size="17" />
+                </button>
+                <div v-if="pickerId === m.id"
+                     class="absolute left-0 top-full z-30 mt-1 flex gap-0.5 rounded-full border border-parchment-200 bg-white px-1.5 py-1 shadow-lg">
+                  <button v-for="e in REACTIONS" :key="e"
+                          class="rounded-full px-1.5 py-0.5 text-lg leading-none transition-transform hover:scale-125"
+                          @click="react(m, e)">{{ e }}</button>
+                </div>
+              </div>
+              <!-- меню действий (свои сообщения; правый клик тоже открывает) -->
+              <div v-if="canModify(m)" class="relative">
+                <button class="rounded-full px-2 py-0.5 text-base leading-none text-ink-700/50 transition-colors hover:bg-parchment-100 hover:text-ink-700"
+                        title="Действия (или правый клик по сообщению)" @click.stop="pickerId = null; menuId = menuId === m.id ? null : m.id">⋯</button>
+                <div v-if="menuId === m.id"
+                     class="absolute right-0 top-full z-30 mt-1 w-36 overflow-hidden rounded-lg border border-parchment-200 bg-white py-1 shadow-lg">
+                  <button class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-ink-700 hover:bg-parchment-100" @click="startEdit(m)">
+                    <AppIcon name="edit" :size="15" /> Изменить
+                  </button>
+                  <button class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50" @click="menuId = null; removeMessage(m)">
+                    <AppIcon name="trash" :size="15" /> Удалить
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </template>
         <div v-if="!thread.messages.length" class="text-center text-sm text-ink-700/50">Сообщений пока нет</div>
       </div>
+      <!-- клик вне меню/пикера — закрыть -->
+      <div v-if="menuId !== null || pickerId !== null" class="fixed inset-0 z-20" @click="closeMenus"></div>
 
       <div class="mt-1 shrink-0 pb-4">
         <div class="h-5 text-sm text-saffron-700/80"><span v-if="typingName">{{ typingName }} печатает…</span></div>

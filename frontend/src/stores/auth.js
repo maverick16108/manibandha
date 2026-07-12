@@ -16,7 +16,7 @@ export const useAuthStore = defineStore('auth', {
     // право-действие
     can: (s) => (cap) => s.caps.includes(cap),
     // производные (для совместимости с существующими проверками)
-    isGuru: (s) => s.roles.includes('guru'),
+    isGuru: (s) => s.roles.includes('guru') || s.user?.role === 'guru',
     isStaff: (s) => s.caps.includes('users.manage'),
     canEdit: (s) => s.caps.includes('disciples.edit'),
   },

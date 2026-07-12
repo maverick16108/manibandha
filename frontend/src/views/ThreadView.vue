@@ -173,7 +173,7 @@ onBeforeUnmount(() => { if (ws) ws.close(); clearTimeout(typingTimer); if (resiz
         <span class="badge bg-saffron-500/15 text-saffron-700">{{ periodLabel }}</span>
       </div>
 
-      <div ref="scroller" class="flex-1 space-y-3 overflow-y-auto pt-3 pb-1 pr-1" @scroll="onScroll">
+      <div ref="scroller" class="flex-1 space-y-3 overflow-y-auto pt-3 pb-1 pl-1 pr-4" @scroll="onScroll">
         <template v-for="(m, i) in thread.messages" :key="m.id">
           <div v-if="daySep(i)" class="flex justify-center py-1">
             <span class="rounded-full bg-white px-3 py-1 text-xs font-medium text-ink-700/60 ring-1 ring-parchment-200">{{ daySep(i) }}</span>
@@ -195,7 +195,7 @@ onBeforeUnmount(() => { if (ws) ws.close(); clearTimeout(typingTimer); if (resiz
         <div v-if="!thread.messages.length" class="text-center text-sm text-ink-700/50">Сообщений пока нет</div>
       </div>
 
-      <div class="mt-1 shrink-0 pb-3">
+      <div class="mt-1 shrink-0 pb-4">
         <div class="h-5 text-sm text-saffron-700/80"><span v-if="typingName">{{ typingName }} печатает…</span></div>
         <MarkdownEditor v-model="body" :rows="3" submit-on-enter type-anywhere hide-hint :voice="auth.isGuru" :draft-scope="`thread:${id}`" placeholder="Написать сообщение…" @submit="send" />
         <div class="mt-1 flex justify-end">

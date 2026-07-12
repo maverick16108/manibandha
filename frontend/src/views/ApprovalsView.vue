@@ -107,6 +107,9 @@ onMounted(load)
               <td class="px-4 py-3 text-ink-700">{{ formatDate(d.created_at) }}</td>
               <td class="px-4 py-3">
                 <div class="flex items-center justify-end gap-2">
+                  <button class="btn-outline" @click="openCard(d)">
+                    <AppIcon name="disciples" :size="16" /> Анкета
+                  </button>
                   <button
                     v-if="threadMap[d.id]"
                     class="btn-outline relative"

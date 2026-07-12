@@ -178,9 +178,16 @@ async function react(m, emoji) {
   } catch { /* игнор */ }
 }
 function onContext(e, m) {
-  if (!canModify(m)) return // чужие/просроченные — обычное контекстное меню браузера
+  const own = m.author_id === auth.user?.id
+  if (own && !canModify(m)) return // свои просроченные — обычное меню браузера
   e.preventDefault()
-  menuId.value = menuId.value === m.id ? null : m.id
+  if (own) {
+    pickerId.value = null
+    menuId.value = menuId.value === m.id ? null : m.id // своё сообщение — правка/удаление
+  } else {
+    menuId.value = null
+    pickerId.value = pickerId.value === m.id ? null : m.id // чужое — выбор реакции
+  }
 }
 function startEdit(m) { editingId.value = m.id; editText.value = m.body; menuId.value = null }
 function cancelEdit() { editingId.value = null; editText.value = '' }
@@ -244,7 +251,7 @@ onBeforeUnmount(() => { if (ws) ws.close(); clearTimeout(typingTimer); clearInte
           <div v-if="daySep(i)" class="flex justify-center py-1">
             <span class="rounded-full bg-white px-3 py-1 text-xs font-medium text-ink-700/60 ring-1 ring-parchment-200">{{ daySep(i) }}</span>
           </div>
-          <div class="group flex flex-col" :class="m.author_id === auth.user?.id ? 'items-end' : 'items-start'">
+          <div class="group relative flex flex-col" :class="m.author_id === auth.user?.id ? 'items-end' : 'items-start'">
             <div class="max-w-[85%] rounded-2xl px-4 py-2.5"
                  :class="[m.author_id === auth.user?.id ? 'bg-saffron-500 text-white' : 'bg-white text-ink-800 ring-1 ring-parchment-200', editingId === m.id && 'w-full']"
                  @contextmenu="onContext($event, m)">
@@ -262,45 +269,37 @@ onBeforeUnmount(() => { if (ws) ws.close(); clearTimeout(typingTimer); clearInte
                 </div>
               </div>
               <div v-else class="markdown-body break-words" v-html="renderMarkdown(m.body)"></div>
+
+              <!-- реакции (в стиле Telegram) — пилюли внизу сообщения -->
+              <div v-if="editingId !== m.id && m.reactions && m.reactions.length" class="mt-1.5 flex flex-wrap gap-1">
+                <button v-for="r in m.reactions" :key="r.emoji"
+                        class="flex items-center gap-1 rounded-full px-2 py-0.5 text-sm leading-none transition disabled:cursor-default"
+                        :class="m.author_id === auth.user?.id
+                          ? 'bg-white/20 hover:bg-white/25'
+                          : (r.mine ? 'bg-saffron-500/25 text-saffron-800 ring-1 ring-saffron-400' : 'bg-saffron-500/10 text-ink-700 hover:bg-saffron-500/20')"
+                        :disabled="m.author_id === auth.user?.id"
+                        @click.stop="react(m, r.emoji)">
+                  <span>{{ r.emoji }}</span><span v-if="r.count > 1" class="text-xs font-semibold">{{ r.count }}</span>
+                </button>
+              </div>
             </div>
 
-            <div v-if="editingId !== m.id && ((m.reactions && m.reactions.length) || m.author_id !== auth.user?.id || canModify(m))"
-                 class="mt-1 flex flex-wrap items-center gap-1">
-              <!-- поставленные реакции -->
-              <button v-for="r in m.reactions" :key="r.emoji"
-                      class="flex items-center gap-1 rounded-full px-2 py-0.5 text-sm ring-1 transition-colors disabled:cursor-default"
-                      :class="r.mine ? 'bg-saffron-500/15 text-saffron-700 ring-saffron-400' : 'bg-white text-ink-700 ring-parchment-200 hover:bg-parchment-100'"
-                      :disabled="m.author_id === auth.user?.id"
-                      @click="react(m, r.emoji)">
-                <span>{{ r.emoji }}</span><span class="text-xs">{{ r.count }}</span>
+            <!-- меню действий (своё сообщение) — открывается правым кликом -->
+            <div v-if="menuId === m.id"
+                 class="absolute right-0 top-full z-30 mt-1 w-36 overflow-hidden rounded-lg border border-parchment-200 bg-white py-1 shadow-lg">
+              <button class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-ink-700 hover:bg-parchment-100" @click="startEdit(m)">
+                <AppIcon name="edit" :size="15" /> Изменить
               </button>
-              <!-- выбрать реакцию (чужие сообщения) -->
-              <div v-if="m.author_id !== auth.user?.id" class="relative">
-                <button class="rounded-full px-1.5 py-0.5 text-ink-700/40 transition-colors hover:bg-parchment-100 hover:text-ink-700"
-                        title="Реакция" @click.stop="menuId = null; pickerId = pickerId === m.id ? null : m.id">
-                  <AppIcon name="react" :size="17" />
-                </button>
-                <div v-if="pickerId === m.id"
-                     class="absolute left-0 top-full z-30 mt-1 flex gap-0.5 rounded-full border border-parchment-200 bg-white px-1.5 py-1 shadow-lg">
-                  <button v-for="e in REACTIONS" :key="e"
-                          class="rounded-full px-1.5 py-0.5 text-lg leading-none transition-transform hover:scale-125"
-                          @click="react(m, e)">{{ e }}</button>
-                </div>
-              </div>
-              <!-- меню действий (свои сообщения; правый клик тоже открывает) -->
-              <div v-if="canModify(m)" class="relative">
-                <button class="rounded-full px-2 py-0.5 text-base leading-none text-ink-700/50 transition-colors hover:bg-parchment-100 hover:text-ink-700"
-                        title="Действия (или правый клик по сообщению)" @click.stop="pickerId = null; menuId = menuId === m.id ? null : m.id">⋯</button>
-                <div v-if="menuId === m.id"
-                     class="absolute right-0 top-full z-30 mt-1 w-36 overflow-hidden rounded-lg border border-parchment-200 bg-white py-1 shadow-lg">
-                  <button class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-ink-700 hover:bg-parchment-100" @click="startEdit(m)">
-                    <AppIcon name="edit" :size="15" /> Изменить
-                  </button>
-                  <button class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50" @click="menuId = null; removeMessage(m)">
-                    <AppIcon name="trash" :size="15" /> Удалить
-                  </button>
-                </div>
-              </div>
+              <button class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50" @click="menuId = null; removeMessage(m)">
+                <AppIcon name="trash" :size="15" /> Удалить
+              </button>
+            </div>
+            <!-- выбор реакции (чужое сообщение) — открывается правым кликом -->
+            <div v-if="pickerId === m.id"
+                 class="absolute left-2 top-full z-30 mt-1 flex gap-0.5 rounded-full border border-parchment-200 bg-white px-1.5 py-1 shadow-lg">
+              <button v-for="e in REACTIONS" :key="e"
+                      class="rounded-full px-1.5 py-0.5 text-xl leading-none transition-transform hover:scale-125"
+                      @click="react(m, e)">{{ e }}</button>
             </div>
           </div>
         </template>

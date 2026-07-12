@@ -162,7 +162,7 @@ const service = [
             <AppIcon name="reports" :size="16" /> События
           </RouterLink>
           <RouterLink to="/calendar?view=calendar" class="btn-outline">
-            <AppIcon name="calendar" :size="16" /> Открыть календарь
+            <AppIcon name="calendar" :size="16" /> Календарь
           </RouterLink>
           <RouterLink to="/calendar?view=map" class="btn-outline">
             <AppIcon name="pin" :size="16" /> Карта

@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import client from '../api/client'
 import AppIcon from '../components/AppIcon.vue'
@@ -25,8 +25,8 @@ function nameOf(d) {
   return d.spiritual_name || d.material_name || 'Без имени'
 }
 
-async function load() {
-  loading.value = true
+async function load(silent = false) {
+  if (!silent) loading.value = true
   try {
     const [disciplesRes, threadsRes] = await Promise.all([
       client.get('/disciples', { params: { pending: true, limit: 200 } }),
@@ -64,7 +64,15 @@ async function approve(d) {
   }
 }
 
-onMounted(load)
+// живое обновление: новые заявки появляются сразу
+let poll = null
+function onVisible() { if (document.visibilityState === 'visible') load(true) }
+onMounted(() => {
+  load()
+  poll = setInterval(() => load(true), 15000)
+  document.addEventListener('visibilitychange', onVisible)
+})
+onBeforeUnmount(() => { clearInterval(poll); document.removeEventListener('visibilitychange', onVisible) })
 </script>
 
 <template>
@@ -98,7 +106,7 @@ onMounted(load)
               <th class="px-4 py-3 text-right">Действия</th>
             </tr>
           </thead>
-          <tbody class="divide-y divide-parchment-100">
+          <TransitionGroup tag="tbody" name="flash" class="divide-y divide-parchment-100">
             <tr v-for="d in items" :key="d.id" class="hover:bg-parchment-50">
               <td class="px-4 py-3">
                 <button class="font-medium text-ink-900 hover:text-saffron-700 hover:underline" @click="openCard(d)">{{ nameOf(d) }}</button>
@@ -128,9 +136,22 @@ onMounted(load)
                 </div>
               </td>
             </tr>
-          </tbody>
+          </TransitionGroup>
         </table>
       </div>
     </div>
   </div>
 </template>
+
+<style scoped>
+/* новая заявка появляется сразу, с мягкой подсветкой строки */
+.flash-enter-active { animation: flash-row 1.2s ease; }
+.flash-enter-from { opacity: 0; }
+.flash-leave-active { transition: opacity 0.3s ease; }
+.flash-leave-to { opacity: 0; }
+.flash-move { transition: transform 0.4s ease; }
+@keyframes flash-row {
+  0%   { background-color: rgba(234, 140, 42, 0.28); }
+  100% { background-color: rgba(234, 140, 42, 0); }
+}
+</style>

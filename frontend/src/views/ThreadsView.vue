@@ -83,7 +83,7 @@ onMounted(async () => {
       <div v-for="i in 4" :key="i" class="card space-y-2 p-4"><AppSkeleton w="w-48" /><AppSkeleton w="w-full" h="h-3" /></div>
     </div>
 
-    <div v-else class="space-y-3">
+    <TransitionGroup v-else tag="div" name="flash" class="space-y-3">
       <RouterLink v-for="t in threads" :key="t.id" :to="{ name: 'thread', params: { id: t.id } }"
                   class="card block p-4 transition hover:border-saffron-400/50 hover:shadow">
         <div class="flex items-start justify-between gap-3">
@@ -103,9 +103,21 @@ onMounted(async () => {
           </div>
         </div>
       </RouterLink>
-      <div v-if="!threads.length" class="card p-8 text-center text-ink-700/50">
-        {{ isReport ? 'Отчётов пока нет' : 'Вопросов пока нет' }}
-      </div>
+    </TransitionGroup>
+    <div v-if="!loading && !threads.length" class="card p-8 text-center text-ink-700/50">
+      {{ isReport ? 'Отчётов пока нет' : 'Вопросов пока нет' }}
     </div>
   </div>
 </template>
+
+<style scoped>
+/* новый вопрос/отчёт появляется сразу, с мягкой вспышкой */
+.flash-enter-active { animation: flash-in 0.9s ease; }
+.flash-enter-from { opacity: 0; transform: translateY(-10px); }
+.flash-move { transition: transform 0.4s ease; }
+@keyframes flash-in {
+  0%   { box-shadow: 0 0 0 0 rgba(234, 140, 42, 0); }
+  25%  { box-shadow: 0 0 0 3px rgba(234, 140, 42, 0.45); }
+  100% { box-shadow: 0 0 0 0 rgba(234, 140, 42, 0); }
+}
+</style>

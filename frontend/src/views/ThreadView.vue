@@ -162,7 +162,7 @@ onBeforeUnmount(() => { if (ws) ws.close(); clearTimeout(typingTimer); if (resiz
 </script>
 
 <template>
-  <div class="mx-auto flex h-[calc(100dvh-7rem)] max-w-6xl flex-col -mb-1 sm:-mb-2 lg:-mb-3">
+  <div class="mx-auto flex h-[calc(100dvh-4rem)] max-w-6xl flex-col -mt-4 -mb-4 sm:-mt-6 sm:-mb-6 lg:-mt-8 lg:-mb-8">
     <div v-if="loading" class="space-y-4">
       <AppSkeleton w="w-40" h="h-9" />
       <div class="card space-y-4 p-6"><AppSkeleton v-for="i in 4" :key="i" h="h-10" /></div>
@@ -173,7 +173,7 @@ onBeforeUnmount(() => { if (ws) ws.close(); clearTimeout(typingTimer); if (resiz
         <span class="badge bg-saffron-500/15 text-saffron-700">{{ periodLabel }}</span>
       </div>
 
-      <div ref="scroller" class="flex-1 space-y-3 overflow-y-auto py-3 pr-1" @scroll="onScroll">
+      <div ref="scroller" class="flex-1 space-y-3 overflow-y-auto pt-3 pb-1 pr-1" @scroll="onScroll">
         <template v-for="(m, i) in thread.messages" :key="m.id">
           <div v-if="daySep(i)" class="flex justify-center py-1">
             <span class="rounded-full bg-white px-3 py-1 text-xs font-medium text-ink-700/60 ring-1 ring-parchment-200">{{ daySep(i) }}</span>
@@ -195,7 +195,7 @@ onBeforeUnmount(() => { if (ws) ws.close(); clearTimeout(typingTimer); if (resiz
         <div v-if="!thread.messages.length" class="text-center text-sm text-ink-700/50">Сообщений пока нет</div>
       </div>
 
-      <div class="mt-2 shrink-0">
+      <div class="mt-1 shrink-0">
         <div class="h-5 text-sm text-saffron-700/80"><span v-if="typingName">{{ typingName }} печатает…</span></div>
         <MarkdownEditor v-model="body" :rows="3" submit-on-enter type-anywhere hide-hint :draft-scope="`thread:${id}`" placeholder="Написать сообщение…" @submit="send" />
         <div class="mt-1 flex justify-end">

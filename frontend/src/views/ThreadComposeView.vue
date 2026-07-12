@@ -37,10 +37,11 @@ async function submit() {
   if (isReport.value) payload.period = `${form.year}-${String(form.month).padStart(2, '0')}`
   else payload.subject = form.subject.trim()
   try {
-    const { data } = await client.post('/threads', payload)
+    await client.post('/threads', payload)
     submitted.value = true
-    form.body = '' // очистит серверный черновик
-    router.push({ name: 'thread', params: { id: data.id } })
+    form.body = ''
+    try { await client.delete(`/drafts/new:${kind.value}`) } catch { /* игнор */ }
+    router.push(backTo.value) // в список вопросов/отчётов
   } catch (e) {
     error.value = e.response?.data?.detail || 'Не удалось отправить'
   } finally {

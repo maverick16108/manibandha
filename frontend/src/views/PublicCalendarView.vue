@@ -130,7 +130,7 @@ onMounted(async () => {
           </article>
           <p v-if="!feed.length" class="card p-8 text-center text-ink-700/50">Событий пока нет</p>
         </div>
-        <aside v-if="feedPoints.length > 3" class="sticky top-6 hidden h-[calc(100vh-3rem)] w-8 shrink-0 lg:block">
+        <aside v-if="feedPoints.length > 3" class="sticky top-20 hidden h-[calc(100vh-6rem)] w-8 shrink-0 lg:block">
           <EventsFastScroll :points="feedPoints" />
         </aside>
       </div>

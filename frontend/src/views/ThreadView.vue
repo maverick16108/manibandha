@@ -195,9 +195,9 @@ onBeforeUnmount(() => { if (ws) ws.close(); clearTimeout(typingTimer); if (resiz
         <div v-if="!thread.messages.length" class="text-center text-sm text-ink-700/50">Сообщений пока нет</div>
       </div>
 
-      <div class="mt-1 shrink-0">
+      <div class="mt-1 shrink-0 pb-3">
         <div class="h-5 text-sm text-saffron-700/80"><span v-if="typingName">{{ typingName }} печатает…</span></div>
-        <MarkdownEditor v-model="body" :rows="3" submit-on-enter type-anywhere hide-hint :draft-scope="`thread:${id}`" placeholder="Написать сообщение…" @submit="send" />
+        <MarkdownEditor v-model="body" :rows="3" submit-on-enter type-anywhere hide-hint :voice="auth.isGuru" :draft-scope="`thread:${id}`" placeholder="Написать сообщение…" @submit="send" />
         <div class="mt-1 flex justify-end">
           <button class="btn-primary" :disabled="sending || !body.trim()" @click="send">{{ sending ? '…' : 'Отправить' }}</button>
         </div>

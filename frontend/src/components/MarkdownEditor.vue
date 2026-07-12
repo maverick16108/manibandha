@@ -16,6 +16,8 @@ const props = defineProps({
   hideHint: { type: Boolean, default: false },
   // доп. класс высоты для поля (напр. 'min-h-[42vh]')
   heightClass: { type: String, default: '' },
+  // разрешить запись голосовых сообщений (кнопка микрофона)
+  voice: { type: Boolean, default: false },
 })
 const emit = defineEmits(['update:modelValue', 'submit'])
 
@@ -174,6 +176,73 @@ function onDrop(e) {
 function onKeydown(e) {
   if (props.submitOnEnter && e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); emit('submit') }
 }
+
+// ── запись голосовых ──
+const recording = ref(false)
+const recSeconds = ref(0)
+let mediaRecorder = null
+let recChunks = []
+let recStream = null
+let recTimer = null
+let recCanceled = false
+
+function fmtRec(s) {
+  const m = Math.floor(s / 60)
+  return `${m}:${String(s % 60).padStart(2, '0')}`
+}
+function pickMime() {
+  const cands = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg']
+  for (const c of cands) { if (window.MediaRecorder && MediaRecorder.isTypeSupported(c)) return c }
+  return ''
+}
+async function startRec() {
+  if (recording.value) return
+  if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) { alert('Запись не поддерживается этим браузером'); return }
+  try {
+    recStream = await navigator.mediaDevices.getUserMedia({ audio: true })
+  } catch { alert('Нет доступа к микрофону'); return }
+  recChunks = []
+  recCanceled = false
+  const mime = pickMime()
+  mediaRecorder = new MediaRecorder(recStream, mime ? { mimeType: mime } : undefined)
+  mediaRecorder.ondataavailable = (e) => { if (e.data && e.data.size) recChunks.push(e.data) }
+  mediaRecorder.onstop = onRecStop
+  mediaRecorder.start()
+  recording.value = true
+  recSeconds.value = 0
+  recTimer = setInterval(() => { recSeconds.value += 1; if (recSeconds.value >= 300) stopRec() }, 1000)
+}
+function cleanupRec() {
+  clearInterval(recTimer); recTimer = null
+  recording.value = false
+  if (recStream) { recStream.getTracks().forEach((t) => t.stop()); recStream = null }
+}
+async function onRecStop() {
+  const mime = mediaRecorder?.mimeType || 'audio/webm'
+  cleanupRec()
+  if (recCanceled || !recChunks.length) { recChunks = []; return }
+  const blob = new Blob(recChunks, { type: mime })
+  recChunks = []
+  uploading.value = true
+  try {
+    const ext = mime.includes('mp4') ? 'm4a' : mime.includes('ogg') ? 'ogg' : 'webm'
+    const fd = new FormData()
+    fd.append('files', blob, `voice.${ext}`)
+    const { data } = await client.post('/uploads', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+    const url = data.urls?.[0]
+    if (url) {
+      const base = props.modelValue ? props.modelValue.replace(/\s*$/, '') + '\n' : ''
+      emit('update:modelValue', base + `@[audio](${url})`)
+      nextTick(() => emit('submit')) // голосовое отправляется сразу
+    }
+  } finally {
+    uploading.value = false
+  }
+}
+function stopRec() { if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop() }
+function cancelRec() { recCanceled = true; stopRec() }
+function toggleRec() { if (recording.value) stopRec(); else startRec() }
+onBeforeUnmount(() => { if (recording.value) { recCanceled = true; stopRec() } cleanupRec() })
 </script>
 
 <template>
@@ -190,6 +259,16 @@ function onKeydown(e) {
       <button type="button" class="md-btn inline-flex items-center gap-1" title="Картинка" :disabled="uploading" @click="fileInput.click()">
         <AppIcon name="image" :size="16" /> {{ uploading ? '…' : 'Фото' }}
       </button>
+      <template v-if="voice">
+        <button type="button" class="md-btn inline-flex items-center gap-1"
+                :class="recording && 'animate-pulse bg-red-500/15 text-red-600 ring-1 ring-red-400'"
+                :title="recording ? 'Остановить и отправить' : 'Записать голосовое'"
+                :disabled="uploading" @click="toggleRec">
+          <AppIcon name="mic" :size="16" />
+          <span v-if="recording" class="tabular-nums">{{ fmtRec(recSeconds) }}</span>
+        </button>
+        <button v-if="recording" type="button" class="md-btn text-ink-700/50" title="Отменить запись" @click="cancelRec">✕</button>
+      </template>
       <button type="button" class="md-btn ml-auto inline-flex items-center gap-1"
               :class="showPreview && 'bg-saffron-500/15 text-saffron-700'"
               title="Предпросмотр" @click="showPreview = !showPreview">

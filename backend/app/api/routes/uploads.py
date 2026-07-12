@@ -9,8 +9,13 @@ from app.models import User
 
 router = APIRouter(prefix="/uploads", tags=["uploads"])
 
-ALLOWED = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp", "image/gif": ".gif"}
-MAX_BYTES = 8 * 1024 * 1024  # 8 MB per file
+ALLOWED = {
+    "image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp", "image/gif": ".gif",
+    # голосовые/аудио
+    "audio/webm": ".webm", "audio/ogg": ".ogg", "audio/mpeg": ".mp3",
+    "audio/mp4": ".m4a", "audio/x-m4a": ".m4a", "audio/wav": ".wav", "audio/x-wav": ".wav",
+}
+MAX_BYTES = 16 * 1024 * 1024  # 16 MB per file
 
 
 @router.post("")
@@ -18,7 +23,8 @@ async def upload(files: list[UploadFile] = File(...), _: User = Depends(get_curr
     os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
     urls = []
     for f in files:
-        ext = ALLOWED.get(f.content_type)
+        ctype = (f.content_type or "").split(";")[0].strip()  # отбросить ;codecs=opus и т.п.
+        ext = ALLOWED.get(ctype)
         if not ext:
             raise HTTPException(status_code=400, detail=f"Неподдерживаемый тип файла: {f.content_type}")
         data = await f.read()

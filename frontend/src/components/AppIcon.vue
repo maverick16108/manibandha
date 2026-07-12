@@ -137,6 +137,13 @@ defineProps({
       <path d="M14 10.2a3.6 3.6 0 0 0-5.1 0L6.5 12.6a3.6 3.6 0 1 0 5.1 5.1l1.3-1.3" />
     </template>
 
+    <!-- mic (голосовое) -->
+    <template v-else-if="name === 'mic'">
+      <rect x="9" y="3" width="6" height="11" rx="3" />
+      <path d="M5.5 11a6.5 6.5 0 0 0 13 0" />
+      <path d="M12 17.5V21m-3 0h6" />
+    </template>
+
     <!-- eye (preview) -->
     <template v-else-if="name === 'eye'">
       <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z" />

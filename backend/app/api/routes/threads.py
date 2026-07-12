@@ -223,12 +223,16 @@ def _get_accessible_thread(db: Session, user: User, thread_id: int) -> Thread:
 @router.get("/{thread_id}", response_model=ThreadOut)
 def get_thread(thread_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     t = _get_accessible_thread(db, user, thread_id)
+    # метка последнего прочтения ДО обновления — для разделителя «Непрочитанные»
+    prev = db.query(ThreadRead).filter(ThreadRead.thread_id == t.id, ThreadRead.user_id == user.id).first()
+    last_read_at = prev.last_seen_at if prev else None
     _mark_staff_seen(db, user, t)  # общий счётчик непросмотренных для стороны-получателя
     _mark_read(db, user, t.id)
     return ThreadOut(
         id=t.id, kind=t.kind, disciple_id=t.disciple_id,
         disciple_name=(t.disciple.spiritual_name or t.disciple.material_name) if t.disciple else "—",
         subject=t.subject, period=t.period, created_at=t.created_at, updated_at=t.updated_at,
+        last_read_at=last_read_at,
         messages=[_msg_out(m, user.id) for m in t.messages],
     )
 

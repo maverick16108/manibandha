@@ -64,4 +64,5 @@ class ThreadOut(BaseModel):
     period: str | None
     created_at: datetime
     updated_at: datetime
+    last_read_at: datetime | None = None
     messages: list[MessageOut]

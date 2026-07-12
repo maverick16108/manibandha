@@ -13,8 +13,8 @@ const route = useRoute()
 const events = ref([])
 const cursor = ref({ y: 2026, m: 7 })
 
-// вид: список, календарь или карта маршрута
-const mode = ref(route.query.view === 'map' ? 'map' : route.query.view === 'list' ? 'list' : 'calendar')
+// вид: список (по умолчанию — развёрнутая лента), календарь или карта маршрута
+const mode = ref(route.query.view === 'map' ? 'map' : route.query.view === 'calendar' ? 'calendar' : 'list')
 
 // период карты — по умолчанию год вперёд
 const pad = (n) => String(n).padStart(2, '0')

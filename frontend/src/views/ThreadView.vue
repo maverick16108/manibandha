@@ -88,6 +88,16 @@ watch(thread, (t) => {
     : { name: 'questions' }
 })
 
+// разделитель «Непрочитанные»: первое чужое сообщение после последнего прочтения
+const firstUnreadId = ref(null)
+let firstLoad = true
+function computeUnread(data) {
+  const lr = data.last_read_at ? new Date(data.last_read_at).getTime() : null
+  if (!lr) { firstUnreadId.value = null; return }
+  const first = data.messages.find((m) => m.author_id !== auth.user?.id && new Date(m.created_at).getTime() > lr)
+  firstUnreadId.value = first ? first.id : null
+}
+
 function fmtTime(iso) {
   return new Date(iso).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
 }
@@ -119,11 +129,23 @@ async function scrollDown() {
     if (el) el.scrollTop = el.scrollHeight
   }))
 }
+// при первом входе — прокрутить к разделителю «Непрочитанные», иначе вниз
+async function scrollInitial() {
+  await nextTick()
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    const el = scroller.value
+    if (!el) return
+    const target = firstUnreadId.value ? document.getElementById(`msg-${firstUnreadId.value}`) : null
+    if (target) el.scrollTop += target.getBoundingClientRect().top - el.getBoundingClientRect().top - 56
+    else el.scrollTop = el.scrollHeight
+  }))
+}
 async function load() {
   const { data } = await client.get(`/threads/${id.value}`)
   await preloadImages(data.messages.flatMap((m) => extractImageUrls(m.body))) // фото вперёд — без скачков
   thread.value = data
-  await scrollDown()
+  if (firstLoad) { computeUnread(data); firstLoad = false; await scrollInitial() }
+  else await scrollDown()
   nextTick(syncVoiceButtons)
 }
 
@@ -331,6 +353,11 @@ onBeforeUnmount(() => { if (ws) ws.close(); clearTimeout(typingTimer); clearInte
         <template v-for="(m, i) in thread.messages" :key="m.id">
           <div v-if="daySep(i)" class="flex justify-center py-1">
             <span class="rounded-full bg-white px-3 py-1 text-xs font-medium text-ink-700/60 ring-1 ring-parchment-200">{{ daySep(i) }}</span>
+          </div>
+          <div v-if="m.id === firstUnreadId" class="flex items-center gap-2 py-1">
+            <span class="h-px flex-1 bg-saffron-400/40"></span>
+            <span class="rounded-full bg-saffron-500/15 px-3 py-0.5 text-xs font-semibold text-saffron-700">Непрочитанные сообщения</span>
+            <span class="h-px flex-1 bg-saffron-400/40"></span>
           </div>
           <div :id="`msg-${m.id}`" class="group relative flex flex-col" :class="m.author_id === auth.user?.id ? 'items-end' : 'items-start'">
             <div class="max-w-[85%] rounded-2xl px-4 py-2.5"

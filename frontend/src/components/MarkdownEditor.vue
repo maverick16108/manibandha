@@ -14,6 +14,8 @@ const props = defineProps({
   draftScope: { type: String, default: '' },
   // скрыть подсказку про фото (для компактного чата)
   hideHint: { type: Boolean, default: false },
+  // доп. класс высоты для поля (напр. 'min-h-[42vh]')
+  heightClass: { type: String, default: '' },
 })
 const emit = defineEmits(['update:modelValue', 'submit'])
 
@@ -208,7 +210,7 @@ function onKeydown(e) {
       <textarea
         ref="textarea" :value="modelValue" :rows="rows" :placeholder="placeholder"
         class="input w-full resize-none transition-colors"
-        :class="dragOver && 'border-saffron-400 ring-1 ring-saffron-400'"
+        :class="[dragOver && 'border-saffron-400 ring-1 ring-saffron-400', heightClass]"
         @input="emit('update:modelValue', $event.target.value); autoGrow()"
         @paste="onPaste" @keydown="onKeydown"
         @dragover.prevent="dragOver = true" @dragleave="dragOver = false" @drop="onDrop"></textarea>

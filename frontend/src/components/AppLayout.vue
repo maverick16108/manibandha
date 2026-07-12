@@ -6,6 +6,7 @@ import { ROLE_LABELS } from '../lib/format'
 import { pageTitle } from '../composables/pageTitle'
 import { onEscape } from '../composables/useEscape'
 import { navCounts, refreshNavCounts } from '../composables/navCounts'
+import { backTarget } from '../composables/backTarget'
 import AppIcon from './AppIcon.vue'
 
 const auth = useAuthStore()
@@ -34,6 +35,7 @@ const nav = [
 const topLevel = new Set(nav.map((n) => n.name))
 const showBack = computed(() => route.name && !topLevel.has(route.name))
 function goBack() {
+  if (backTarget.value) { router.push(backTarget.value); return }
   if (window.history.length > 1) router.back()
   else router.push({ name: 'dashboard' })
 }
@@ -50,7 +52,7 @@ function badgeFor(name) {
   return 0
 }
 let countsTimer = null
-onMounted(() => { refreshNavCounts(); countsTimer = setInterval(refreshNavCounts, 30000) })
+onMounted(() => { refreshNavCounts(); countsTimer = setInterval(refreshNavCounts, 15000) })
 onBeforeUnmount(() => clearInterval(countsTimer))
 // обновлять при переходах (в т.ч. после просмотра ветки — счётчик у всех уменьшается)
 watch(() => route.fullPath, refreshNavCounts)

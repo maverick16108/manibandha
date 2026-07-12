@@ -8,6 +8,7 @@ import MarkdownEditor from '../components/MarkdownEditor.vue'
 import { renderMarkdown } from '../lib/markdown'
 import { extractImageUrls, preloadImages } from '../lib/preload'
 import { usePageTitle } from '../composables/pageTitle'
+import { backTarget } from '../composables/backTarget'
 
 const route = useRoute()
 const auth = useAuthStore()
@@ -44,6 +45,13 @@ usePageTitle(() => {
   if (!t) return ''
   const head = t.kind === 'report' ? 'Отчёт' : (t.subject || 'Вопрос')
   return `${head} · ${t.disciple_name}`
+})
+// «Назад» из ветки — в соответствующий список (а не в форму создания)
+watch(thread, (t) => {
+  if (!t) return
+  backTarget.value = t.kind === 'report' ? { name: 'service-reports' }
+    : t.kind === 'approval' ? { name: 'approvals' }
+    : { name: 'questions' }
 })
 
 function fmtTime(iso) {
@@ -130,7 +138,7 @@ onMounted(async () => {
     resizeObs.observe(el)
   }
 })
-onBeforeUnmount(() => { if (ws) ws.close(); clearTimeout(typingTimer); if (resizeObs) resizeObs.disconnect() })
+onBeforeUnmount(() => { if (ws) ws.close(); clearTimeout(typingTimer); if (resizeObs) resizeObs.disconnect(); backTarget.value = null })
 </script>
 
 <template>

@@ -107,24 +107,35 @@ def _mark_staff_seen(db: Session, user: User, thread: Thread):
 
 @router.get("/nav-counts")
 def nav_counts(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    """Счётчики для меню: непросмотренные вопросы/отчёты (общие) и неодобренные заявки."""
-    from sqlalchemy import or_
+    """Счётчики непросмотренного для меню.
+
+    Сторона-получатель (гуру/куратор) — общий счётчик по staff_seen_at.
+    Сторона-владелец (ученик) — личный счётчик по ThreadRead (ответы на его ветки).
+    Плюс неодобренные заявки для тех, кто может апрувить.
+    """
     from app.core.capabilities import user_capabilities
     caps = user_capabilities(db, user)
-    res = {"questions": 0, "reports": 0, "approvals": 0}
+    seen = {r.thread_id: r.last_seen_at for r in db.query(ThreadRead).filter(ThreadRead.user_id == user.id).all()}
 
-    def unread(kind: ThreadKind) -> int:
-        return (
-            _accessible(db, user)
-            .filter(Thread.kind == kind)
-            .filter(or_(Thread.staff_seen_at.is_(None), Thread.updated_at > Thread.staff_seen_at))
-            .count()
-        )
+    def count_unread(kind: ThreadKind) -> int:
+        recipient = _is_recipient(caps, kind)
+        threads = _accessible(db, user).filter(Thread.kind == kind).all()
+        c = 0
+        for t in threads:
+            if recipient:
+                unread = t.staff_seen_at is None or (t.updated_at and t.updated_at > t.staff_seen_at)
+            else:
+                ls = seen.get(t.id)
+                unread = ls is None or (t.updated_at and ls and t.updated_at > ls)
+            if unread:
+                c += 1
+        return c
 
-    if _is_recipient(caps, ThreadKind.question):
-        res["questions"] = unread(ThreadKind.question)
-    if _is_recipient(caps, ThreadKind.report):
-        res["reports"] = unread(ThreadKind.report)
+    res = {
+        "questions": count_unread(ThreadKind.question),
+        "reports": count_unread(ThreadKind.report),
+        "approvals": 0,
+    }
     if "disciples.approve" in caps:
         res["approvals"] = db.query(Disciple).filter(Disciple.is_approved.is_(False)).count()
     return res

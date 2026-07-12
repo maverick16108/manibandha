@@ -155,11 +155,11 @@ const service = [
         <p class="mb-3 text-center text-sm uppercase tracking-[0.25em] text-saffron-600">Расписание</p>
         <h2 class="text-center font-display text-4xl font-semibold text-ink-900">Где сейчас Гуру</h2>
         <div class="mt-8 flex flex-wrap justify-center gap-3">
-          <RouterLink to="/calendar?view=calendar" class="btn-outline">
-            <AppIcon name="calendar" :size="16" /> Открыть календарь
-          </RouterLink>
           <RouterLink to="/calendar?view=list" class="btn-outline">
             <AppIcon name="reports" :size="16" /> События
+          </RouterLink>
+          <RouterLink to="/calendar?view=calendar" class="btn-outline">
+            <AppIcon name="calendar" :size="16" /> Открыть календарь
           </RouterLink>
           <RouterLink to="/calendar?view=map" class="btn-outline">
             <AppIcon name="pin" :size="16" /> Карта

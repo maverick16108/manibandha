@@ -91,6 +91,7 @@ class DiscipleListItem(BaseModel):
     spiritual_name: str | None
     material_name: str
     photo_url: str | None
+    phone: str | None = None
     country: str | None
     region: str | None
     city: str | None
@@ -100,6 +101,7 @@ class DiscipleListItem(BaseModel):
     pranama_date: date | None = None
     harinama_date: date | None = None
     brahman_date: date | None = None
+    created_at: datetime | None = None
     temple: TempleOut | None = None
     mentor: MentorBrief | None = None
 

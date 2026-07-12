@@ -8,9 +8,13 @@ import { formatDate, formatPhone } from '../lib/format'
 import { confirmDialog } from '../composables/confirm'
 import { usePageTitle } from '../composables/pageTitle'
 
-usePageTitle('Заявки на апрув')
+usePageTitle('Заявки на регистрацию')
 
 const router = useRouter()
+
+function openCard(d) {
+  router.push({ name: 'disciple', params: { id: d.id } })
+}
 
 const items = ref([])
 const threadMap = ref({})
@@ -46,8 +50,8 @@ function openChat(d) {
 
 async function approve(d) {
   const ok = await confirmDialog({
-    message: `Одобрить регистрацию «${nameOf(d)}»? Ученику откроется доступ.`,
-    confirmText: 'Апрувить',
+    message: `Сделать «${nameOf(d)}» кандидатом? Откроется доступ к кабинету.`,
+    confirmText: 'В кандидаты',
     danger: false,
   })
   if (!ok) return
@@ -64,7 +68,7 @@ onMounted(load)
 </script>
 
 <template>
-  <div class="mx-auto max-w-5xl">
+  <div class="mx-auto max-w-6xl">
     <div class="mb-6">
       <p class="text-ink-700/60">Самостоятельно зарегистрированные ученики, ожидающие подтверждения</p>
     </div>
@@ -97,7 +101,7 @@ onMounted(load)
           <tbody class="divide-y divide-parchment-100">
             <tr v-for="d in items" :key="d.id" class="hover:bg-parchment-50">
               <td class="px-4 py-3">
-                <span class="font-medium text-ink-900">{{ nameOf(d) }}</span>
+                <button class="font-medium text-ink-900 hover:text-saffron-700 hover:underline" @click="openCard(d)">{{ nameOf(d) }}</button>
               </td>
               <td class="px-4 py-3 text-ink-700">{{ d.phone ? formatPhone(d.phone) : '—' }}</td>
               <td class="px-4 py-3 text-ink-700">{{ formatDate(d.created_at) }}</td>
@@ -115,8 +119,8 @@ onMounted(load)
                       title="Новое сообщение"
                     ></span>
                   </button>
-                  <button class="btn-primary" :disabled="approving === d.id" @click="approve(d)">
-                    {{ approving === d.id ? 'Апрувим…' : 'Апрувить' }}
+                  <button class="btn-primary whitespace-nowrap" :disabled="approving === d.id" @click="approve(d)">
+                    {{ approving === d.id ? '…' : 'В кандидаты' }}
                   </button>
                 </div>
               </td>

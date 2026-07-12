@@ -21,6 +21,7 @@ def _brief(e: Event) -> dict:
         "id": e.id,
         "title": e.title,
         "location": e.location,
+        "description": e.description,  # для развёрнутой ленты (грид/карта игнорируют)
         "starts_on": e.starts_on.isoformat() if e.starts_on else None,
         "ends_on": e.ends_on.isoformat() if e.ends_on else None,
     }

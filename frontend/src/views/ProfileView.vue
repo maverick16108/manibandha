@@ -1,8 +1,8 @@
 <script setup>
-import { reactive, ref } from 'vue'
+import { reactive, ref, computed } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { usePageTitle } from '../composables/pageTitle'
-import { ROLE_LABELS } from '../lib/format'
+import { ROLE_LABELS, formatPhone } from '../lib/format'
 import PhotoUpload from '../components/PhotoUpload.vue'
 import AppIcon from '../components/AppIcon.vue'
 
@@ -15,6 +15,14 @@ const form = reactive({
 })
 const saving = ref(false)
 const saved = ref(false)
+
+// контакт: для телефонных аккаунтов — телефон, синтетический email @phone.local не показываем
+const contact = computed(() => {
+  const u = auth.user
+  if (!u) return ''
+  if (u.email && u.email.endsWith('@phone.local')) return u.phone ? formatPhone(u.phone) : ''
+  return u.email || (u.phone ? formatPhone(u.phone) : '')
+})
 
 async function save() {
   saving.value = true
@@ -38,7 +46,7 @@ async function save() {
         </span>
         <div>
           <div class="font-display text-2xl font-semibold text-ink-900">{{ auth.user?.full_name }}</div>
-          <div class="text-sm text-ink-700/60">{{ ROLE_LABELS[auth.user?.role] || auth.user?.role }} · {{ auth.user?.email }}</div>
+          <div class="text-sm text-ink-700/60">{{ ROLE_LABELS[auth.user?.role] || auth.user?.role }}<span v-if="contact"> · {{ contact }}</span></div>
         </div>
       </div>
 

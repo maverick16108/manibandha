@@ -54,12 +54,16 @@ const ROUTE_CAPS = {
 }
 const LANDING_ORDER = ['dashboard', 'calendar', 'disciples', 'questions', 'service-reports', 'dictionaries', 'users']
 
+// запоминаем прокрутку главной, чтобы вернуться на то же место после календаря/событий/карты
+let homeScroll = 0
+
 const router = createRouter({
   history: createWebHistory(),
   routes,
   scrollBehavior(to, from, savedPosition) {
-    if (savedPosition) return savedPosition
+    if (savedPosition) return savedPosition // браузерный «Назад»
     if (to.hash) return { el: to.hash, behavior: 'smooth' }
+    if (to.name === 'home' && homeScroll) return { top: homeScroll } // возврат на главную кнопкой «Главная»
     return { top: 0 }
   },
 })
@@ -72,7 +76,9 @@ router.onError((err) => {
   }
 })
 
-router.beforeEach(async (to) => {
+router.beforeEach(async (to, from) => {
+  // запомнить позицию главной перед уходом (для возврата на то же место)
+  if (from.name === 'home') homeScroll = window.scrollY || document.documentElement.scrollTop || 0
   const auth = useAuthStore()
   if (auth.token && !auth.user) {
     try {

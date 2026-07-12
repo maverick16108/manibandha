@@ -1,10 +1,13 @@
+<script>
+// кеш событий между заходами на страницу (модульная область, вне setup)
+let eventsCache = []
+</script>
+
 <script setup>
 import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { RouterLink } from 'vue-router'
 import AppIcon from '../components/AppIcon.vue'
 import client from '../api/client'
-
-let eventsCache = [] // сохраняется между заходами на страницу в рамках сессии
 
 // Публичное расписание — где сейчас Гуру.
 // Кеш на уровне модуля: при возврате на главную события уже есть — без «прыжка» галереи.

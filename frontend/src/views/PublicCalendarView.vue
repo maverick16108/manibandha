@@ -1,5 +1,10 @@
+<script>
+// живёт между заходами на страницу (модульная область, вне setup)
+let savedMonth = null
+</script>
+
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, computed, watch, onMounted, nextTick } from 'vue'
 import { useRouter, useRoute, RouterLink } from 'vue-router'
 import client from '../api/client'
 import PublicShell from '../components/PublicShell.vue'
@@ -13,6 +18,8 @@ const router = useRouter()
 const route = useRoute()
 const events = ref([])
 const cursor = ref({ y: 2026, m: 7 })
+// последний просмотренный месяц календаря — сохраняется между заходами (возврат на тот же месяц)
+watch(cursor, (v) => { savedMonth = { ...v } }, { deep: true })
 
 // вид: список (по умолчанию — развёрнутая лента), календарь или карта маршрута
 const mode = ref(route.query.view === 'map' ? 'map' : route.query.view === 'calendar' ? 'calendar' : 'list')
@@ -89,7 +96,8 @@ const feedPoints = computed(() => feed.value.filter((e) => e.starts_on).map((e) 
 }))
 
 onMounted(async () => {
-  cursor.value = { y: today.getFullYear(), m: today.getMonth() + 1 }
+  // вернуться на последний просмотренный месяц (после захода в событие и назад)
+  cursor.value = savedMonth ? { ...savedMonth } : { y: today.getFullYear(), m: today.getMonth() + 1 }
   try { const { data } = await client.get('/events/public'); events.value = data } catch { /* пусто */ }
 })
 </script>

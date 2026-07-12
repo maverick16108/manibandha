@@ -17,9 +17,10 @@ const notFound = ref(false)
 const fromCalendar = computed(() => route.query.from === 'calendar')
 // клик по крошке: если пришли оттуда — назад (сохранит позицию), иначе прямой переход
 function goCrumb(target) {
+  // «Календарь» всегда открывает сетку календаря (без режима карты)
+  if (target === 'calendar') { router.push('/calendar'); return }
   const back = window.history.length > 1
-  if (target === 'calendar') fromCalendar.value && back ? router.back() : router.push('/calendar')
-  else (!fromCalendar.value && back) ? router.back() : router.push('/')
+  ;(!fromCalendar.value && back) ? router.back() : router.push('/')
 }
 
 const MON = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря']

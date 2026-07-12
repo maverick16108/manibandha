@@ -179,7 +179,7 @@ onMounted(async () => {
         </div>
         <p class="ml-auto text-sm text-ink-700/60">Маршрут гуру · событий: <b class="text-ink-900">{{ mapEvents.length }}</b></p>
       </div>
-      <EventsMap :events="mapEvents" />
+      <EventsMap :events="mapEvents" @open="openEvent($event.id)" />
     </template>
   </PublicShell>
 </template>

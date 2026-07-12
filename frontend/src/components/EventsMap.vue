@@ -7,6 +7,7 @@ import { geocode } from '../lib/geo'
 const props = defineProps({
   events: { type: Array, default: () => [] },
 })
+const emit = defineEmits(['open'])
 
 const mapEl = ref(null)
 let map = null
@@ -62,12 +63,17 @@ function render() {
   }
   // точки
   pts.forEach((p, i) => {
-    L.marker(p.c, { icon: numberIcon(i + 1) })
+    const marker = L.marker(p.c, { icon: numberIcon(i + 1) })
       .addTo(layer)
       .bindPopup(
         `<div style="font:600 13px/1.3 system-ui;color:#2b2320">${p.e.title}</div>` +
-        `<div style="font:12px/1.4 system-ui;color:#8a7a6a;margin-top:2px">${range(p.e)}${p.e.location ? ' · ' + p.e.location : ''}</div>`,
+        `<div style="font:12px/1.4 system-ui;color:#8a7a6a;margin-top:2px">${range(p.e)}${p.e.location ? ' · ' + p.e.location : ''}</div>` +
+        `<button class="evmap-open" style="margin-top:8px;color:#c8742a;font:600 12px system-ui;cursor:pointer;background:none;border:0;padding:0">Открыть событие →</button>`,
       )
+    marker.on('popupopen', (ev) => {
+      const btn = ev.popup.getElement()?.querySelector('.evmap-open')
+      if (btn) btn.onclick = () => emit('open', p.e)
+    })
   })
   map.fitBounds(L.latLngBounds(latlngs).pad(0.25))
 }

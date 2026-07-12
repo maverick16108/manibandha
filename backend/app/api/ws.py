@@ -81,7 +81,7 @@ async def ws_thread(websocket: WebSocket, thread_id: int, token: str = Query(...
                         "message": {
                             "id": msg.id, "author_id": user.id, "author_name": user.full_name,
                             "body": msg.body, "created_at": msg.created_at.isoformat(),
-                            "likes": 0, "liked": False,
+                            "edit_count": 0, "likes": 0, "liked": False,
                         },
                     }
                 await manager.broadcast(thread_id, payload)

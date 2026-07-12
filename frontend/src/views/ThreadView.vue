@@ -9,6 +9,7 @@ import { renderMarkdown } from '../lib/markdown'
 import { extractImageUrls, preloadImages } from '../lib/preload'
 import { usePageTitle } from '../composables/pageTitle'
 import { backTarget } from '../composables/backTarget'
+import { confirmDialog } from '../composables/confirm'
 
 const route = useRoute()
 const auth = useAuthStore()
@@ -38,7 +39,16 @@ const periodLabel = computed(() => {
   const [y, m] = p.split('-')
   return `${MONTHS[+m - 1]} ${y}`
 })
-const canLike = computed(() => auth.isGuru || auth.user?.role === 'curator')
+// редактирование/удаление своих сообщений — в течение часа
+const EDIT_WINDOW = 3600_000
+const nowTs = ref(Date.now())
+let nowTimer = null
+const editingId = ref(null)
+const editText = ref('')
+const savingEdit = ref(false)
+function canModify(m) {
+  return m.author_id === auth.user?.id && (nowTs.value - new Date(m.created_at).getTime()) <= EDIT_WINDOW
+}
 
 usePageTitle(() => {
   const t = thread.value
@@ -105,6 +115,15 @@ function connectWs() {
           scrollDown()
         })
       }
+    } else if (data.type === 'edit') {
+      const m = thread.value?.messages.find((x) => x.id === data.message.id)
+      if (m) {
+        m.body = data.message.body
+        m.edit_count = data.message.edit_count
+        preloadImages(extractImageUrls(m.body))
+      }
+    } else if (data.type === 'delete') {
+      if (thread.value) thread.value.messages = thread.value.messages.filter((x) => x.id !== data.message_id)
     } else if (data.type === 'typing' && data.user_id !== auth.user?.id) {
       typingName.value = data.name
       clearTimeout(typingTimer)
@@ -140,14 +159,42 @@ async function send() {
   }
 }
 async function toggleLike(m) {
-  if (!canLike.value) return
   const { data } = await client.post(`/threads/${id.value}/messages/${m.id}/like`)
   m.likes = data.likes
   m.liked = data.liked
 }
+function startEdit(m) { editingId.value = m.id; editText.value = m.body }
+function cancelEdit() { editingId.value = null; editText.value = '' }
+async function saveEdit(m) {
+  const text = editText.value.trim()
+  if (!text) return
+  savingEdit.value = true
+  try {
+    const { data } = await client.patch(`/threads/${id.value}/messages/${m.id}`, { body: text })
+    m.body = data.body
+    m.edit_count = data.edit_count
+    editingId.value = null
+    await preloadImages(extractImageUrls(m.body))
+  } catch (e) {
+    alert(e.response?.data?.detail || 'Не удалось изменить сообщение')
+  } finally {
+    savingEdit.value = false
+  }
+}
+async function removeMessage(m) {
+  const ok = await confirmDialog({ message: 'Удалить сообщение? Это действие необратимо.', confirmText: 'Удалить', danger: true })
+  if (!ok) return
+  try {
+    await client.delete(`/threads/${id.value}/messages/${m.id}`)
+    thread.value.messages = thread.value.messages.filter((x) => x.id !== m.id)
+  } catch (e) {
+    alert(e.response?.data?.detail || 'Не удалось удалить сообщение')
+  }
+}
 
 onMounted(async () => {
   try { await load(); connectWs() } finally { loading.value = false }
+  nowTimer = setInterval(() => { nowTs.value = Date.now() }, 20000) // прячет «Изменить/Удалить» после часа
   await nextTick()
   const el = scroller.value
   if (el) {
@@ -158,7 +205,7 @@ onMounted(async () => {
     resizeObs.observe(el)
   }
 })
-onBeforeUnmount(() => { if (ws) ws.close(); clearTimeout(typingTimer); if (resizeObs) resizeObs.disconnect(); backTarget.value = null })
+onBeforeUnmount(() => { if (ws) ws.close(); clearTimeout(typingTimer); clearInterval(nowTimer); if (resizeObs) resizeObs.disconnect(); backTarget.value = null })
 </script>
 
 <template>
@@ -178,18 +225,38 @@ onBeforeUnmount(() => { if (ws) ws.close(); clearTimeout(typingTimer); if (resiz
           <div v-if="daySep(i)" class="flex justify-center py-1">
             <span class="rounded-full bg-white px-3 py-1 text-xs font-medium text-ink-700/60 ring-1 ring-parchment-200">{{ daySep(i) }}</span>
           </div>
-          <div class="flex flex-col" :class="m.author_id === auth.user?.id ? 'items-end' : 'items-start'">
+          <div class="group flex flex-col" :class="m.author_id === auth.user?.id ? 'items-end' : 'items-start'">
             <div class="max-w-[85%] rounded-2xl px-4 py-2.5"
-                 :class="m.author_id === auth.user?.id ? 'bg-saffron-500 text-white' : 'bg-white text-ink-800 ring-1 ring-parchment-200'">
-              <div class="mb-0.5 text-xs opacity-70">{{ m.author_name || 'Аноним' }} · {{ fmtTime(m.created_at) }}</div>
-              <div class="markdown-body break-words" v-html="renderMarkdown(m.body)"></div>
+                 :class="[m.author_id === auth.user?.id ? 'bg-saffron-500 text-white' : 'bg-white text-ink-800 ring-1 ring-parchment-200', editingId === m.id && 'w-full']">
+              <div class="mb-0.5 flex flex-wrap items-center gap-x-1.5 text-xs opacity-70">
+                <span>{{ m.author_name || 'Аноним' }} · {{ fmtTime(m.created_at) }}</span>
+                <span v-if="m.edit_count" :title="`изменено раз: ${m.edit_count}`">· изменено{{ m.edit_count > 1 ? ` ×${m.edit_count}` : '' }}</span>
+              </div>
+              <div v-if="editingId === m.id">
+                <textarea v-model="editText" rows="3"
+                          class="w-full resize-y rounded-lg border border-parchment-300 bg-white p-2 text-ink-800 focus:border-saffron-400 focus:outline-none"></textarea>
+                <div class="mt-1 flex justify-end gap-2">
+                  <button class="rounded-md px-2 py-1 text-xs text-ink-700/70 hover:bg-black/5" @click="cancelEdit">Отмена</button>
+                  <button class="rounded-md bg-white px-2 py-1 text-xs font-medium text-saffron-700 ring-1 ring-parchment-300 hover:bg-parchment-50 disabled:opacity-50"
+                          :disabled="savingEdit || !editText.trim()" @click="saveEdit(m)">Сохранить</button>
+                </div>
+              </div>
+              <div v-else class="markdown-body break-words" v-html="renderMarkdown(m.body)"></div>
             </div>
-            <button v-if="thread.kind === 'report'"
-                    class="mt-1 flex items-center gap-1 rounded-full px-2 py-0.5 text-sm transition-colors"
-                    :class="[m.liked ? 'text-red-500' : 'text-ink-700/40', canLike ? 'cursor-pointer hover:bg-parchment-100' : 'cursor-default']"
-                    :disabled="!canLike" @click="toggleLike(m)">
-              <span>{{ m.liked ? '❤' : '♡' }}</span><span v-if="m.likes" class="text-xs">{{ m.likes }}</span>
-            </button>
+
+            <div v-if="editingId !== m.id && (m.author_id !== auth.user?.id || canModify(m))"
+                 class="mt-1 flex items-center gap-1">
+              <button v-if="m.author_id !== auth.user?.id"
+                      class="flex items-center gap-1 rounded-full px-2 py-0.5 text-sm transition-colors"
+                      :class="m.liked ? 'text-red-500' : 'text-ink-700/40 hover:bg-parchment-100'"
+                      @click="toggleLike(m)">
+                <span>{{ m.liked ? '❤' : '♡' }}</span><span v-if="m.likes" class="text-xs">{{ m.likes }}</span>
+              </button>
+              <template v-if="canModify(m)">
+                <button class="rounded-full px-2 py-0.5 text-xs text-ink-700/50 transition-colors hover:bg-parchment-100 hover:text-ink-700" @click="startEdit(m)">Изменить</button>
+                <button class="rounded-full px-2 py-0.5 text-xs text-red-500/70 transition-colors hover:bg-red-50 hover:text-red-600" @click="removeMessage(m)">Удалить</button>
+              </template>
+            </div>
           </div>
         </template>
         <div v-if="!thread.messages.length" class="text-center text-sm text-ink-700/50">Сообщений пока нет</div>

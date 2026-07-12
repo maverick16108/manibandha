@@ -1,3 +1,5 @@
+from datetime import datetime, timedelta, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
@@ -37,9 +39,30 @@ def _msg_out(m: ThreadMessage, user_id: int) -> MessageOut:
     return MessageOut(
         id=m.id, author_id=m.author_id,
         author_name=m.author.full_name if m.author else None,
-        body=m.body, created_at=m.created_at,
+        body=m.body, created_at=m.created_at, edit_count=m.edit_count or 0,
         likes=len(m.likes), liked=any(l.user_id == user_id for l in m.likes),
     )
+
+
+EDIT_WINDOW = timedelta(hours=1)
+
+
+def _within_edit_window(m: ThreadMessage) -> bool:
+    created = m.created_at
+    if created is None:
+        return False
+    if created.tzinfo is None:
+        created = created.replace(tzinfo=timezone.utc)
+    return (datetime.now(timezone.utc) - created) <= EDIT_WINDOW
+
+
+async def _broadcast(thread_id: int, data: dict) -> None:
+    """Разослать событие подключённым к ветке (правка/удаление в реальном времени)."""
+    try:
+        from app.api.routes.ws import manager
+        await manager.broadcast(thread_id, data)
+    except Exception:
+        pass
 
 
 @router.get("", response_model=list[ThreadListItem])
@@ -229,10 +252,47 @@ def add_message(thread_id: int, payload: MessageCreate, db: Session = Depends(ge
     return _msg_out(msg, user.id)
 
 
+def _get_own_editable(db: Session, user: User, thread_id: int, message_id: int) -> ThreadMessage:
+    _get_accessible_thread(db, user, thread_id)  # доступ к ветке
+    msg = db.get(ThreadMessage, message_id)
+    if not msg or msg.thread_id != thread_id:
+        raise HTTPException(status_code=404, detail="Сообщение не найдено")
+    if msg.author_id != user.id:
+        raise HTTPException(status_code=403, detail="Можно менять только свои сообщения")
+    if not _within_edit_window(msg):
+        raise HTTPException(status_code=403, detail="Прошёл час — сообщение больше нельзя изменить")
+    return msg
+
+
+@router.patch("/{thread_id}/messages/{message_id}", response_model=MessageOut)
+async def edit_message(thread_id: int, message_id: int, payload: MessageCreate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    msg = _get_own_editable(db, user, thread_id, message_id)
+    body = payload.body.strip()
+    if not body:
+        raise HTTPException(status_code=400, detail="Пустое сообщение")
+    msg.body = body
+    msg.edited_at = func.now()
+    msg.edit_count = (msg.edit_count or 0) + 1
+    db.commit()
+    db.refresh(msg)
+    out = _msg_out(msg, user.id)
+    await _broadcast(thread_id, {
+        "type": "edit",
+        "message": {"id": msg.id, "body": msg.body, "edit_count": msg.edit_count},
+    })
+    return out
+
+
+@router.delete("/{thread_id}/messages/{message_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_message(thread_id: int, message_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    msg = _get_own_editable(db, user, thread_id, message_id)
+    db.delete(msg)
+    db.commit()
+    await _broadcast(thread_id, {"type": "delete", "message_id": message_id})
+
+
 @router.post("/{thread_id}/messages/{message_id}/like")
 def toggle_like(thread_id: int, message_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    if user.role not in (Role.guru, Role.curator):
-        raise HTTPException(status_code=403, detail="Лайкать может гуру или куратор")
     _get_accessible_thread(db, user, thread_id)  # проверка доступа к ветке
     msg = db.get(ThreadMessage, message_id)
     if not msg or msg.thread_id != thread_id:

@@ -37,6 +37,9 @@ class ThreadMessage(Base):
     author_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     body: Mapped[str] = mapped_column(String, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    # редактирование в течение часа: отметка и число правок
+    edited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    edit_count: Mapped[int] = mapped_column(default=0, server_default="0", nullable=False)
 
     thread = relationship("Thread", back_populates="messages")
     author = relationship("User")

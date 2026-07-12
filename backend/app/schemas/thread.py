@@ -16,6 +16,7 @@ class MessageOut(BaseModel):
     author_name: str | None = None
     body: str
     created_at: datetime
+    edit_count: int = 0
     likes: int = 0
     liked: bool = False
 

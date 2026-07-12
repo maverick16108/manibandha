@@ -38,7 +38,7 @@ function eventLabel(d) {
 }
 
 const statusOptions = [{ value: '', label: 'Все статусы' }, ...STATUS_ORDER.map((s) => ({ value: s, label: STATUS_LABELS[s] }))]
-const mentorOptions = computed(() => [{ value: '', label: 'Все наставники' }, ...mentors.value.map((m) => ({ value: m.id, label: m.spiritual_name || m.material_name }))])
+const mentorOptions = computed(() => [{ value: '', label: 'Все кураторы' }, ...mentors.value.map((m) => ({ value: m.id, label: m.spiritual_name || m.material_name }))])
 const regionOptions = computed(() => [{ value: '', label: 'Все области' }, ...regions.value.map((r) => ({ value: r.name, label: r.name }))])
 const cityOptions = computed(() => [{ value: '', label: 'Все города' }, ...cities.value.map((c) => ({ value: c.name, label: c.name }))])
 
@@ -134,7 +134,7 @@ onMounted(async () => {
         <AppSelect v-model="filters.status" :options="statusOptions" placeholder="Все статусы" />
         <AppSelect v-model="filters.region" :options="regionOptions" placeholder="Все области" />
         <AppSelect v-model="filters.city" :options="cityOptions" placeholder="Все города" />
-        <AppSelect v-model="filters.mentor_id" :options="mentorOptions" placeholder="Все наставники" />
+        <AppSelect v-model="filters.mentor_id" :options="mentorOptions" placeholder="Все кураторы" />
         <div class="flex flex-col justify-center gap-1.5 px-1">
           <label class="flex items-center gap-2 text-sm text-ink-700">
             <input type="checkbox" v-model="filters.ready_pranama" true-value="true" false-value="" /> Готовые к пранаме
@@ -162,7 +162,7 @@ onMounted(async () => {
               <th class="px-4 py-3">Имя</th>
               <th class="px-4 py-3">Статус</th>
               <th class="px-4 py-3">Область / Город</th>
-              <th class="px-4 py-3">Наставник</th>
+              <th class="px-4 py-3">Куратор</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-parchment-100">

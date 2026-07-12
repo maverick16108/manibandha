@@ -28,7 +28,7 @@ const groupOptions = [
   { value: 'region', label: 'По области' },
   { value: 'city', label: 'По городу' },
   { value: 'country', label: 'По стране' },
-  { value: 'mentor', label: 'По наставнику' },
+  { value: 'mentor', label: 'По куратору' },
 ]
 
 function params() {
@@ -79,7 +79,7 @@ onMounted(async () => {
     client.get('/disciples', { params: { is_mentor: true, limit: 500 } }),
     client.get('/regions'), client.get('/cities'), client.get('/countries'),
   ])
-  mentors.value = [{ value: '', label: 'Все наставники' }, ...m.data.items.map((x) => ({ value: x.id, label: x.spiritual_name || x.material_name }))]
+  mentors.value = [{ value: '', label: 'Все кураторы' }, ...m.data.items.map((x) => ({ value: x.id, label: x.spiritual_name || x.material_name }))]
   regionsOpt.value = [{ value: '', label: 'Все области' }, ...r.data.map((x) => ({ value: x.name, label: x.name }))]
   citiesOpt.value = [{ value: '', label: 'Все города' }, ...c.data.map((x) => ({ value: x.name, label: x.name }))]
   countriesOpt.value = [{ value: '', label: 'Все страны' }, ...co.data.map((x) => ({ value: x.name, label: x.name }))]
@@ -110,7 +110,7 @@ onMounted(async () => {
         <AppSelect v-model="filters.region" :options="regionsOpt" placeholder="Все области" />
         <AppSelect v-model="filters.city" :options="citiesOpt" placeholder="Все города" />
         <AppSelect v-model="filters.country" :options="countriesOpt" placeholder="Все страны" />
-        <AppSelect v-model="filters.mentor_id" :options="mentors" placeholder="Все наставники" />
+        <AppSelect v-model="filters.mentor_id" :options="mentors" placeholder="Все кураторы" />
       </div>
       <div class="mt-3 flex flex-wrap items-center gap-4">
         <label class="flex items-center gap-2 text-sm text-ink-700">

@@ -38,7 +38,7 @@ SYSTEM_ROLES = [
         "disciples.view_all", "disciples.create", "disciples.edit", "disciples.delete", "disciples.approve",
         "dictionaries.manage", "users.manage",
     ]},
-    {"key": "curator", "name": "Наставник", "is_superadmin": False, "is_default": False, "capabilities": [
+    {"key": "curator", "name": "Куратор", "is_superadmin": False, "is_default": False, "capabilities": [
         "dashboard.view", "calendar.view", "disciples.view_own", "disciples.edit",
         "reports.read_all", "reports.like",
     ]},

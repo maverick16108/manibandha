@@ -40,6 +40,7 @@ class DiscipleBase(BaseModel):
     current_activity: str | None = None
 
     mentor_id: int | None = None
+    mentor_name: str | None = None
     is_mentor: bool = False
     recommended_by: str | None = None
     application_date: date | None = None
@@ -74,6 +75,7 @@ class DiscipleUpdate(BaseModel):
     seva: str | None = None
     current_activity: str | None = None
     mentor_id: int | None = None
+    mentor_name: str | None = None
     is_mentor: bool | None = None
     recommended_by: str | None = None
     application_date: date | None = None

@@ -176,7 +176,7 @@ def add_message(thread_id: int, payload: MessageCreate, db: Session = Depends(ge
 @router.post("/{thread_id}/messages/{message_id}/like")
 def toggle_like(thread_id: int, message_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     if user.role not in (Role.guru, Role.curator):
-        raise HTTPException(status_code=403, detail="Лайкать может гуру или наставник")
+        raise HTTPException(status_code=403, detail="Лайкать может гуру или куратор")
     _get_accessible_thread(db, user, thread_id)  # проверка доступа к ветке
     msg = db.get(ThreadMessage, message_id)
     if not msg or msg.thread_id != thread_id:

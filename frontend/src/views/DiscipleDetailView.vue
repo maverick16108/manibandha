@@ -145,7 +145,8 @@ onMounted(async () => {
           <div class="flex justify-between"><dt class="text-ink-700/60">Область</dt><dd class="text-ink-800">{{ d.region || '—' }}</dd></div>
           <div class="flex justify-between"><dt class="text-ink-700/60">Семейное положение</dt><dd class="text-ink-800">{{ MARITAL_LABELS[d.marital_status] || '—' }}</dd></div>
           <div class="flex justify-between"><dt class="text-ink-700/60">Дата рождения</dt><dd class="text-ink-800">{{ formatDate(d.date_of_birth) }}</dd></div>
-          <div class="flex justify-between"><dt class="text-ink-700/60">Наставник</dt><dd class="text-ink-800">{{ d.mentor?.name || '—' }}</dd></div>
+          <div class="flex justify-between"><dt class="text-ink-700/60">Куратор</dt><dd class="text-ink-800">{{ d.mentor?.name || '—' }}</dd></div>
+          <div class="flex justify-between"><dt class="text-ink-700/60">Наставник</dt><dd class="text-ink-800">{{ d.mentor_name || '—' }}</dd></div>
         </dl>
       </div>
 
@@ -159,7 +160,7 @@ onMounted(async () => {
           <div class="flex justify-between"><dt class="text-ink-700/60">Кто рекомендовал</dt><dd class="text-ink-800">{{ d.recommended_by || '—' }}</dd></div>
           <div class="flex justify-between"><dt class="text-ink-700/60">Дата заявки</dt><dd class="text-ink-800">{{ formatDate(d.application_date) }}</dd></div>
         </dl>
-        <div v-if="d.seva" class="mt-4"><div class="label">Севы</div><p class="text-sm text-ink-700">{{ d.seva }}</p></div>
+        <div v-if="d.seva" class="mt-4"><div class="label">Служение</div><p class="text-sm text-ink-700">{{ d.seva }}</p></div>
         <div v-if="d.current_activity" class="mt-3"><div class="label">Деятельность</div><p class="text-sm text-ink-700">{{ d.current_activity }}</p></div>
         <div v-if="d.notes" class="mt-3"><div class="label">Примечания</div><p class="text-sm text-ink-700">{{ d.notes }}</p></div>
       </div>

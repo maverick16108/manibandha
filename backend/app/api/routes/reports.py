@@ -186,7 +186,7 @@ _COLUMNS = [
     ("Область", lambda d: d.region or ""),
     ("Город", lambda d: d.city or ""),
     ("Храм", lambda d: d.temple.name if d.temple else ""),
-    ("Наставник", lambda d: d.mentor.name if d.mentor else ""),
+    ("Куратор", lambda d: d.mentor.name if d.mentor else ""),
     ("Телефон", lambda d: d.phone or ""),
     ("Email", lambda d: d.email or ""),
 ]

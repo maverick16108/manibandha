@@ -47,8 +47,9 @@ class Disciple(Base):
 
     # Наставник — это тоже ученик с признаком is_mentor; mentor_id ссылается на него
     is_mentor: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
-    mentor_id: Mapped[int | None] = mapped_column(ForeignKey("disciples.id", ondelete="SET NULL"), nullable=True, index=True)
-    recommended_by: Mapped[str | None] = mapped_column(String(255), nullable=True)  # наставник / президент храма
+    mentor_id: Mapped[int | None] = mapped_column(ForeignKey("disciples.id", ondelete="SET NULL"), nullable=True, index=True)  # закреплённый куратор (ученик с is_mentor)
+    mentor_name: Mapped[str | None] = mapped_column(String(255), nullable=True)  # личный наставник (свободный текст)
+    recommended_by: Mapped[str | None] = mapped_column(String(255), nullable=True)  # куратор / президент храма
     application_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     ready_for_pranama: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     ready_for_initiation: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)

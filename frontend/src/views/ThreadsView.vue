@@ -59,7 +59,7 @@ onMounted(async () => {
   <div class="mx-auto max-w-6xl">
     <div class="mb-6 flex items-center justify-between">
       <div>
-        <p class="text-ink-700/60">{{ isReport ? 'Ежемесячные отчёты учеников · доступ: ученик, наставник, гуру' : 'Личные вопросы · видит только гуру и сам ученик' }}</p>
+        <p class="text-ink-700/60">{{ isReport ? 'Ежемесячные отчёты учеников · доступ: ученик, куратор, гуру' : 'Личные вопросы · видит только гуру и сам ученик' }}</p>
       </div>
       <RouterLink v-if="auth.user?.disciple_id" :to="{ name: isReport ? 'report-new' : 'question-new' }" class="btn-primary">
         {{ isReport ? '+ Новый отчёт' : '+ Новый вопрос' }}

@@ -58,7 +58,7 @@ const form = reactive({
   marital_status: '', date_of_birth: '',
   initiation_status: 'aspirant', pranama_date: '', harinama_date: '', harinama_name: '', brahman_date: '',
   seva: '', current_activity: '',
-  mentor_id: '', is_mentor: false, recommended_by: '', application_date: '', ready_for_pranama: false, ready_for_initiation: false,
+  mentor_id: '', mentor_name: '', is_mentor: false, recommended_by: '', application_date: '', ready_for_pranama: false, ready_for_initiation: false,
   notes: '',
 })
 
@@ -207,6 +207,10 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
             <AppDatePicker v-model="form.date_of_birth" />
             <p v-if="errors.date_of_birth" class="mt-1 text-xs text-red-600">{{ errors.date_of_birth }}</p>
           </div>
+          <div class="sm:col-span-2">
+            <label class="label">Наставник</label>
+            <input v-model="form.mentor_name" class="input" placeholder="Ваш личный наставник (по желанию)" />
+          </div>
         </div>
       </section>
 
@@ -223,7 +227,13 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
         </div>
       </section>
 
-      <!-- при самостоятельной регистрации — только комментарий куратору -->
+      <!-- при самостоятельной регистрации — служение и комментарий куратору -->
+      <section v-if="selfFill" class="card p-6">
+        <h3 class="mb-4 font-display text-xl text-ink-900">Служение</h3>
+        <textarea v-model="form.seva" rows="4" class="input min-h-[6rem] resize-y"
+                  placeholder="Опишите ваше текущее служение"></textarea>
+      </section>
+
       <section v-if="selfFill" class="card p-6">
         <h3 class="mb-4 font-display text-xl text-ink-900">Комментарий для куратора</h3>
         <textarea v-model="form.notes" rows="5" class="input min-h-[7rem] resize-y"
@@ -233,14 +243,14 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
       <section v-if="!selfFill" class="card p-6">
         <h3 class="mb-4 font-display text-xl text-ink-900">Путь аспиранта и служение</h3>
         <div class="grid gap-4 sm:grid-cols-2">
-          <div><label class="label">Наставник</label>
+          <div><label class="label">Куратор</label>
             <AppSelect v-model="form.mentor_id" :options="mentorOptions" placeholder="—" />
           </div>
-          <div><label class="label">Кто рекомендовал</label><input v-model="form.recommended_by" class="input" placeholder="Наставник / президент храма" /></div>
+          <div><label class="label">Кто рекомендовал</label><input v-model="form.recommended_by" class="input" placeholder="Куратор / президент храма" /></div>
           <div><label class="label">Дата заявки</label><AppDatePicker v-model="form.application_date" /></div>
           <div class="flex flex-col justify-end gap-2">
             <label class="flex items-center gap-2 text-sm text-ink-700">
-              <input type="checkbox" v-model="form.is_mentor" /> Является наставником
+              <input type="checkbox" v-model="form.is_mentor" /> Является куратором
             </label>
             <label class="flex items-center gap-2 text-sm text-ink-700">
               <input type="checkbox" v-model="form.ready_for_pranama" /> Готов(а) к пранаме
@@ -249,7 +259,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
               <input type="checkbox" v-model="form.ready_for_initiation" /> Готов(а) к инициации
             </label>
           </div>
-          <div class="sm:col-span-2"><label class="label">Севы (служение)</label><textarea v-model="form.seva" rows="4" class="input resize-y min-h-[6rem]"></textarea></div>
+          <div class="sm:col-span-2"><label class="label">Служение</label><textarea v-model="form.seva" rows="4" class="input resize-y min-h-[6rem]"></textarea></div>
           <div class="sm:col-span-2"><label class="label">Текущая деятельность</label><textarea v-model="form.current_activity" rows="4" class="input resize-y min-h-[6rem]"></textarea></div>
           <div class="sm:col-span-2"><label class="label">Примечания</label><textarea v-model="form.notes" rows="6" class="input resize-y min-h-[8rem]"></textarea></div>
         </div>

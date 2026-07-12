@@ -88,7 +88,7 @@ const service = [
           </p>
           <div class="mt-10 flex flex-wrap justify-center gap-3 md:justify-end">
             <a href="#about" class="btn-primary">О духовном учителе</a>
-            <a href="#schedule" class="btn border border-white/50 text-white hover:bg-white/10" :class="!events.length && 'invisible'">Расписание</a>
+            <a href="#schedule" class="btn border border-white/50 text-white hover:bg-white/10">Расписание</a>
           </div>
         </div>
       </div>

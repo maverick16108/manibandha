@@ -28,7 +28,7 @@ export const MARITAL_LABELS = {
 export const ROLE_LABELS = {
   guru: 'Гуру',
   secretary: 'Секретарь',
-  curator: 'Наставник',
+  curator: 'Куратор',
   student: 'Ученик',
 }
 

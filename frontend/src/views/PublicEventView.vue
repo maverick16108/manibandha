@@ -6,6 +6,7 @@ import { renderMarkdown } from '../lib/markdown'
 import { extractImageUrls, preloadImages } from '../lib/preload'
 import PublicShell from '../components/PublicShell.vue'
 import AppIcon from '../components/AppIcon.vue'
+import AppSkeleton from '../components/AppSkeleton.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -37,7 +38,14 @@ onMounted(async () => {
 
 <template>
   <PublicShell>
-    <div v-if="loading" class="text-ink-700/50">Загрузка…</div>
+    <div v-if="loading" class="space-y-6">
+      <div class="flex gap-2"><AppSkeleton w="w-16" h="h-4" /><AppSkeleton w="w-24" h="h-4" /></div>
+      <AppSkeleton w="w-2/3" h="h-10" />
+      <div class="flex gap-4"><AppSkeleton w="w-32" h="h-5" /><AppSkeleton w="w-24" h="h-5" /></div>
+      <div class="space-y-2 pt-2"><AppSkeleton /><AppSkeleton w="w-5/6" /></div>
+      <AppSkeleton w="w-80" h="h-56" rounded="rounded-xl" />
+      <div class="space-y-2"><AppSkeleton /><AppSkeleton w="w-4/5" /><AppSkeleton w="w-3/5" /></div>
+    </div>
     <div v-else-if="notFound" class="text-center text-ink-700/60">
       Событие не найдено. <RouterLink to="/calendar" class="text-saffron-700 hover:underline">К календарю</RouterLink>
     </div>

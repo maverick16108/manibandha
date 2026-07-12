@@ -399,8 +399,8 @@ onBeforeUnmount(() => { if (ws) ws.close(); clearTimeout(typingTimer); clearInte
         <div v-if="replyTo || editingMsg" class="mb-1 flex items-center gap-2 rounded-lg border-l-2 border-saffron-400 bg-parchment-100 px-3 py-1.5">
           <AppIcon :name="editingMsg ? 'edit' : 'reply'" :size="16" class="shrink-0 text-saffron-600" />
           <div class="min-w-0 flex-1">
-            <div class="text-xs font-semibold text-saffron-700">{{ editingMsg ? 'Редактирование сообщения' : `Ответ · ${replyTo.author_name || ''}` }}</div>
-            <div v-if="replyTo" class="truncate text-xs text-ink-700/70">{{ replyTo.body }}</div>
+            <div class="text-sm font-semibold text-saffron-700">{{ editingMsg ? 'Редактирование' : `В ответ ${replyTo.author_name || ''}` }}</div>
+            <div class="truncate text-xs text-ink-700/70">{{ editingMsg ? snippetOf(editingMsg.body) : replyTo.body }}</div>
           </div>
           <button class="shrink-0 rounded-full p-1 text-ink-700/50 hover:bg-parchment-200 hover:text-ink-700" @click="editingMsg ? cancelEdit() : (replyTo = null)">
             <AppIcon name="close" :size="16" />

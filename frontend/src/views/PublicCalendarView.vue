@@ -64,7 +64,7 @@ function range(e) { const s = fmtShort(e.starts_on); return e.ends_on && e.ends_
 function prevMonth() { let { y, m } = cursor.value; m--; if (m < 1) { m = 12; y-- } cursor.value = { y, m } }
 function nextMonth() { let { y, m } = cursor.value; m++; if (m > 12) { m = 1; y++ } cursor.value = { y, m } }
 function isToday(d) { return d && cursor.value.y === today.getFullYear() && cursor.value.m === today.getMonth() + 1 && d === today.getDate() }
-function openEvent(id) { router.push({ name: 'public-event', params: { id }, query: { from: 'calendar' } }) }
+function openEvent(id, from = 'calendar') { router.push({ name: 'public-event', params: { id }, query: { from } }) }
 
 // тап по дню — прокрутить к событиям дня в списке ниже и подсветить все
 const highlightIds = ref([])
@@ -179,7 +179,7 @@ onMounted(async () => {
         </div>
         <p class="ml-auto text-sm text-ink-700/60">Маршрут гуру · событий: <b class="text-ink-900">{{ mapEvents.length }}</b></p>
       </div>
-      <EventsMap :events="mapEvents" @open="openEvent($event.id)" />
+      <EventsMap :events="mapEvents" @open="openEvent($event.id, 'map')" />
     </template>
   </PublicShell>
 </template>

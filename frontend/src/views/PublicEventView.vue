@@ -14,13 +14,15 @@ const ev = ref(null)
 const loading = ref(true)
 const notFound = ref(false)
 
-const fromCalendar = computed(() => route.query.from === 'calendar')
-// клик по крошке: если пришли оттуда — назад (сохранит позицию), иначе прямой переход
-function goCrumb(target) {
-  // «Календарь» всегда открывает сетку календаря (без режима карты)
-  if (target === 'calendar') { router.push('/calendar'); return }
+// откуда пришли: 'calendar' (сетка) | 'map' (карта) | undefined (с главной)
+const middleCrumb = computed(() => {
+  if (route.query.from === 'map') return { label: 'Карта', path: '/calendar?view=map' }
+  if (route.query.from === 'calendar') return { label: 'Календарь', path: '/calendar' }
+  return null
+})
+function goHome() {
   const back = window.history.length > 1
-  ;(!fromCalendar.value && back) ? router.back() : router.push('/')
+  ;(!middleCrumb.value && back) ? router.back() : router.push('/')
 }
 
 const MON = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря']
@@ -52,10 +54,10 @@ onMounted(async () => {
     </div>
     <article v-else>
       <nav class="mb-5 flex flex-wrap items-center gap-1.5 text-sm text-ink-700/60">
-        <button class="hover:text-saffron-700" @click="goCrumb('home')">Главная</button>
+        <button class="hover:text-saffron-700" @click="goHome">Главная</button>
         <span class="text-ink-700/30">/</span>
-        <template v-if="fromCalendar">
-          <button class="hover:text-saffron-700" @click="goCrumb('calendar')">Календарь</button>
+        <template v-if="middleCrumb">
+          <button class="hover:text-saffron-700" @click="router.push(middleCrumb.path)">{{ middleCrumb.label }}</button>
           <span class="text-ink-700/30">/</span>
         </template>
         <span class="truncate text-ink-800">{{ ev.title }}</span>

@@ -209,7 +209,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
           </div>
           <div class="sm:col-span-2">
             <label class="label">Наставник</label>
-            <input v-model="form.mentor_name" class="input" placeholder="Ваш личный наставник (по желанию)" />
+            <input v-model="form.mentor_name" class="input" placeholder="Укажите наставника, если есть" />
           </div>
         </div>
       </section>

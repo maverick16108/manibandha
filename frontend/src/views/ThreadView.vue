@@ -342,7 +342,7 @@ onBeforeUnmount(() => { if (ws) ws.close(); clearTimeout(typingTimer); clearInte
     </div>
 
     <template v-else-if="thread">
-      <div v-if="thread.period" class="mb-2 flex shrink-0 flex-wrap items-center gap-2">
+      <div v-if="thread.period" class="mb-2 flex shrink-0 flex-wrap items-center gap-2 pt-3">
         <span class="badge bg-saffron-500/15 text-saffron-700">{{ periodLabel }}</span>
       </div>
 

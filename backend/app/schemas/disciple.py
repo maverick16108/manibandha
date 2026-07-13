@@ -98,6 +98,7 @@ class DiscipleListItem(BaseModel):
     initiation_status: InitiationStatus
     is_mentor: bool = False
     is_approved: bool = True
+    profile_filled: bool = False
     pranama_date: date | None = None
     harinama_date: date | None = None
     brahman_date: date | None = None

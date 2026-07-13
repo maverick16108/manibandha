@@ -101,6 +101,7 @@ onBeforeUnmount(() => { clearInterval(poll); document.removeEventListener('visib
           <thead class="border-b border-parchment-200 bg-parchment-50 text-left text-xs uppercase tracking-wide text-ink-700/60">
             <tr>
               <th class="px-4 py-3">Имя</th>
+              <th class="px-4 py-3">Анкета</th>
               <th class="px-4 py-3">Телефон</th>
               <th class="px-4 py-3">Дата регистрации</th>
               <th class="px-4 py-3 text-right">Действия</th>
@@ -110,6 +111,12 @@ onBeforeUnmount(() => { clearInterval(poll); document.removeEventListener('visib
             <tr v-for="d in items" :key="d.id" class="hover:bg-parchment-50">
               <td class="px-4 py-3">
                 <button class="font-medium text-ink-900 hover:text-saffron-700 hover:underline" @click="openCard(d)">{{ nameOf(d) }}</button>
+              </td>
+              <td class="px-4 py-3">
+                <span v-if="d.profile_filled" class="badge inline-flex items-center gap-1 bg-green-500/15 text-green-700">
+                  <AppIcon name="check" :size="13" /> Заполнена
+                </span>
+                <span v-else class="badge bg-amber-500/15 text-amber-700">Не заполнена</span>
               </td>
               <td class="px-4 py-3 text-ink-700">{{ d.phone ? formatPhone(d.phone) : '—' }}</td>
               <td class="px-4 py-3 text-ink-700">{{ formatDate(d.created_at) }}</td>

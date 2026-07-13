@@ -65,6 +65,15 @@ class Disciple(Base):
     def name(self) -> str:
         return self.spiritual_name or self.material_name
 
+    @property
+    def profile_filled(self) -> bool:
+        """Заполнены ли обязательные поля анкеты (ФИО, страна, город, дата рождения, семейное положение)."""
+        return bool(
+            (self.material_name or "").strip()
+            and self.country and self.city
+            and self.date_of_birth and self.marital_status
+        )
+
     temple = relationship("Temple", back_populates="disciples")
     mentor = relationship("Disciple", remote_side=[id], foreign_keys=[mentor_id])
     checklist = relationship("ChecklistItem", back_populates="disciple", cascade="all, delete-orphan")

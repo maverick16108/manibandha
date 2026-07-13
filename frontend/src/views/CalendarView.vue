@@ -88,8 +88,11 @@ async function remove(e) {
   await load()
 }
 
-// ── быстрый скроллер по датам (режим «Список») ──
-const feedPoints = computed(() => events.value.filter((e) => e.starts_on).map((e) => {
+// ── лента: от сегодня вниз по возрастанию даты ──
+const listFeed = computed(() => events.value
+  .filter((e) => e.starts_on && (e.ends_on || e.starts_on) >= today)
+  .sort((a, b) => (a.starts_on || '').localeCompare(b.starts_on || '')))
+const feedPoints = computed(() => listFeed.value.map((e) => {
   const [y, m] = e.starts_on.split('-')
   return { id: `ev-${e.id}`, label: `${MONTHS[+m - 1]} ${y}` }
 }))
@@ -135,7 +138,7 @@ onMounted(load)
     <!-- LIST -->
     <div v-else-if="mode === 'list'" class="lg:flex lg:items-start lg:gap-6">
       <div class="min-w-0 flex-1 space-y-4">
-        <div v-for="e in events" :id="`ev-${e.id}`" :key="e.id" class="card scroll-mt-24 p-5" :class="isNow(e) && 'border-saffron-400/50'">
+        <div v-for="e in listFeed" :id="`ev-${e.id}`" :key="e.id" class="card scroll-mt-24 p-5" :class="isNow(e) && 'border-saffron-400/50'">
           <div class="flex items-start justify-between gap-3">
             <div>
               <div class="flex flex-wrap items-center gap-2">
@@ -153,7 +156,7 @@ onMounted(load)
           </div>
           <div v-if="e.description" class="markdown-body mt-3 text-ink-700" v-html="renderMarkdown(e.description)"></div>
         </div>
-        <div v-if="!events.length" class="card p-8 text-center text-ink-700/50">Событий пока нет</div>
+        <div v-if="!listFeed.length" class="card p-8 text-center text-ink-700/50">Предстоящих событий нет</div>
       </div>
 
       <!-- быстрый скроллер по датам -->

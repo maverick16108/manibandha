@@ -88,8 +88,10 @@ function focusDay(y, m, d) {
   setTimeout(() => { if (highlightIds.value === ids) highlightIds.value = [] }, 2000)
 }
 
-// ── лента и быстрый скроллер по датам (режим «Список») ──
-const feed = computed(() => [...events.value].sort((a, b) => (a.starts_on || '').localeCompare(b.starts_on || '')))
+// ── лента: от сегодня вниз по возрастанию даты ──
+const feed = computed(() => events.value
+  .filter((e) => e.starts_on && (e.ends_on || e.starts_on) >= isoToday)
+  .sort((a, b) => (a.starts_on || '').localeCompare(b.starts_on || '')))
 const feedPoints = computed(() => feed.value.filter((e) => e.starts_on).map((e) => {
   const [y, m] = e.starts_on.split('-')
   return { id: `evl-${e.id}`, label: `${MONTHS[+m - 1]} ${y}` }

@@ -71,7 +71,7 @@ async function submit() {
       </div>
       <div>
         <label class="label">Первое сообщение *</label>
-        <MarkdownEditor v-model="body" :rows="6" height-class="min-h-[35vh]" type-anywhere draft-scope="forum:new" placeholder="Текст… (можно вставлять фото)" />
+        <MarkdownEditor v-model="body" :rows="6" height-class="min-h-[35vh]" type-anywhere draft-scope="forum:new" placeholder="Текст… (можно вставлять фото)" @submit="submit" />
       </div>
       <p v-if="error" class="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{{ error }}</p>
       <div class="flex gap-2">

@@ -13,6 +13,7 @@ import { usePageTitle } from '../composables/pageTitle'
 import { backTarget } from '../composables/backTarget'
 import { confirmDialog } from '../composables/confirm'
 import { player, playAudio, seek, closePlayer } from '../composables/audioPlayer'
+import { refreshNavCounts } from '../composables/navCounts'
 
 const route = useRoute()
 const auth = useAuthStore()
@@ -226,29 +227,50 @@ function fmtSec(s) {
   return `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`
 }
 // клик по кнопке голосового — играть/пауза; клик по волне текущего — перемотать
+let voiceDragging = false
 function onScrollerClick(e) {
+  if (voiceDragging) { voiceDragging = false; return } // клик после перетаскивания — игнор
   const btn = e.target.closest('.voice-msg')
   if (!btn) return
   e.preventDefault()
   const src = btn.dataset.audio
   const wave = e.target.closest('.voice-msg__wave')
   if (wave && player.src === src && player.duration) {
-    const rect = wave.getBoundingClientRect()
-    const frac = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
-    seek(frac * player.duration)
+    seek(waveFrac(e, wave) * player.duration)
     return
   }
   const labelEl = btn.closest('[data-audio-label]')
   playAudio(src, labelEl?.dataset.audioLabel || 'Голосовое сообщение')
 }
-// подсветка играющей кнопки + заполнение waveform по прогрессу
+function waveFrac(e, wave) {
+  const rect = wave.getBoundingClientRect()
+  const x = e.touches ? e.touches[0].clientX : e.clientX
+  return Math.max(0, Math.min(1, (x - rect.left) / rect.width))
+}
+// перетаскивание ползунка по волне играющего сообщения
+function onScrollerDown(e) {
+  const wave = e.target.closest('.voice-msg__wave')
+  if (!wave) return
+  const src = wave.closest('.voice-msg')?.dataset.audio
+  if (!src || player.src !== src || !player.duration) return
+  const move = (ev) => { voiceDragging = true; seek(waveFrac(ev, wave) * player.duration); if (ev.cancelable) ev.preventDefault() }
+  const up = () => {
+    window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up)
+    window.removeEventListener('touchmove', move); window.removeEventListener('touchend', up)
+  }
+  window.addEventListener('mousemove', move); window.addEventListener('mouseup', up)
+  window.addEventListener('touchmove', move, { passive: false }); window.addEventListener('touchend', up)
+}
+// подсветка играющей кнопки + заполнение waveform по прогрессу + обратный отсчёт
 function syncVoiceButtons() {
   document.querySelectorAll('.voice-msg').forEach((b) => {
     const cur = b.dataset.audio === player.src
     b.classList.toggle('is-playing', cur && player.playing)
     const pct = cur && player.duration ? (player.currentTime / player.duration) * 100 : 0
     const played = b.querySelector('.vw-played'); if (played) played.style.clipPath = `inset(0 ${100 - pct}% 0 0)`
-    const time = b.querySelector('.voice-msg__time'); if (time) time.textContent = cur ? fmtSec(player.currentTime) : '0:00'
+    const thumb = b.querySelector('.vw-thumb'); if (thumb) thumb.style.left = pct + '%'
+    const time = b.querySelector('.voice-msg__time')
+    if (time) time.textContent = (cur && player.duration) ? '-' + fmtSec(player.duration - player.currentTime) : '0:00'
   })
 }
 watch(() => [player.src, player.playing, player.currentTime, player.duration], () => nextTick(syncVoiceButtons))
@@ -319,6 +341,7 @@ async function removeMessage(m) {
 
 onMounted(async () => {
   try { await load(); connectWs() } finally { loading.value = false }
+  refreshNavCounts() // тема прочитана на сервере — сразу обновляем бейдж в меню
   nowTimer = setInterval(() => { nowTs.value = Date.now() }, 20000) // прячет «Изменить/Удалить» после часа
   document.addEventListener('keydown', onEsc)
   await nextTick()
@@ -349,7 +372,7 @@ onBeforeUnmount(() => { if (ws) ws.close(); clearTimeout(typingTimer); clearInte
       <!-- плеер голосовых — внутри чата, сверху -->
       <AudioBar />
 
-      <div ref="scroller" class="chat-scroll flex-1 space-y-3 overflow-y-auto pt-3 pb-1 pl-1 pr-3" @scroll="onScroll" @click="onScrollerClick">
+      <div ref="scroller" class="chat-scroll flex-1 space-y-3 overflow-y-auto pt-3 pb-1 pl-1 pr-3" @scroll="onScroll" @click="onScrollerClick" @mousedown="onScrollerDown" @touchstart="onScrollerDown">
         <template v-for="(m, i) in thread.messages" :key="m.id">
           <div v-if="daySep(i)" class="flex justify-center py-1">
             <span class="rounded-full bg-white px-3 py-1 text-xs font-medium text-ink-700/60 ring-1 ring-parchment-200">{{ daySep(i) }}</span>

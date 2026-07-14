@@ -10,6 +10,9 @@ usePageTitle('Конференция')
 const route = useRoute()
 const router = useRouter()
 const id = route.params.id
+const isGuest = route.name === 'conference-guest'
+const roomParam = route.params.room
+const guestName = ref('')
 
 const state = ref('connecting')
 const errorMsg = ref('')
@@ -30,6 +33,15 @@ const viewMode = ref('grid')   // grid | speaker
 const pinnedId = ref(null)
 
 function initials(name) { return (name || '?').trim()[0]?.toUpperCase() || '?' }
+
+// LiveKit отдаёт canPublishSources то строками ("MICROPHONE"), то числами enum (1=CAMERA,2=MIC,3=SCREEN).
+// Нормализуем к 'microphone' | 'camera' | 'screen_share', чтобы корректно читать разрешения.
+const _NUM_SRC = { 1: 'camera', 2: 'microphone', 3: 'screen_share', 4: 'screen_share_audio' }
+function normSrc(s) {
+  if (typeof s === 'number') return _NUM_SRC[s] || ''
+  return String(s).toLowerCase()
+}
+function hasSrc(srcs, target) { return (srcs || []).some((s) => normSrc(s) === target) }
 
 const spotlightId = computed(() => {
   if (screenSharer.value) return null // экран занимает крупный слот
@@ -52,8 +64,8 @@ function refresh() {
       identity: p.identity, name: p.name || 'Гость', isLocal,
       camOn: !!(cam && cam.track && !cam.isMuted),
       micOn: !!(mic && mic.track && !mic.isMuted),
-      allowAudio: !!perm?.canPublish && (allowAll || srcs.includes(Track.Source.Microphone)),
-      allowVideo: !!perm?.canPublish && (allowAll || srcs.includes(Track.Source.Camera)),
+      allowAudio: !!perm?.canPublish && (allowAll || hasSrc(srcs, 'microphone')),
+      allowVideo: !!perm?.canPublish && (allowAll || hasSrc(srcs, 'camera')),
       speaking: p.isSpeaking,
     })
   }
@@ -105,11 +117,17 @@ function onData(payload, participant) {
 }
 
 async function connect() {
+  state.value = 'connecting'
   try {
-    const { data } = await client.post(`/conferences/${id}/join`)
+    const { data } = isGuest
+      ? await client.post(`/conferences/guest/${roomParam}`, { name: guestName.value.trim() || 'Гость' })
+      : await client.post(`/conferences/${id}/join`)
     canPublish.value = data.can_publish
     isHost.value = data.is_host
     myIdentity.value = data.identity
+    allowAll.audio = data.mic_allowed !== false
+    allowAll.video = data.cam_allowed !== false
+    allowAll.screen = data.screen_allowed !== false
     room = new Room({ adaptiveStream: true, dynacast: true })
     room
       .on(RoomEvent.ParticipantConnected, refresh)
@@ -132,6 +150,8 @@ async function connect() {
         await room.localParticipant.setMicrophoneEnabled(true)
         camOn.value = true; micOn.value = true
       } catch { /* нет доступа — можно смотреть */ }
+      loadDevices()
+      try { navigator.mediaDevices.addEventListener('devicechange', loadDevices) } catch { /* ignore */ }
     }
     refresh()
   } catch (e) {
@@ -172,7 +192,42 @@ async function permit(identity, kind, allow, exceptId) {
   try { await client.post(`/conferences/${id}/permit`, { identity, kind, allow, except: exceptId || null }) }
   catch (e) { alert(e.response?.data?.detail || 'Не удалось') }
 }
+// состояние сегментных переключателей «всем» (действие + подсветка)
+const allowAll = reactive({ audio: true, video: true, screen: true })
+async function setAll(kind, allow) {
+  allowAll[kind] = allow
+  await permit('all', kind, allow)
+  refresh()
+}
 function pinTile(identity) { pinnedId.value = pinnedId.value === identity ? null : identity }
+
+// ── выбор устройств (несколько микрофонов/камер) ──
+const mics = ref([])
+const cams = ref([])
+const curMic = ref('')
+const curCam = ref('')
+const micMenu = ref(false)
+const camMenu = ref(false)
+async function loadDevices() {
+  try {
+    const devs = await navigator.mediaDevices.enumerateDevices()
+    mics.value = devs.filter((d) => d.kind === 'audioinput' && d.deviceId)
+    cams.value = devs.filter((d) => d.kind === 'videoinput' && d.deviceId)
+    if (room) {
+      curMic.value = room.getActiveDevice?.('audioinput') || curMic.value
+      curCam.value = room.getActiveDevice?.('videoinput') || curCam.value
+    }
+  } catch { /* нет доступа к списку устройств */ }
+}
+async function switchMic(deviceId) {
+  micMenu.value = false
+  try { await room?.switchActiveDevice('audioinput', deviceId); curMic.value = deviceId } catch { /* ignore */ }
+}
+async function switchCam(deviceId) {
+  camMenu.value = false
+  try { await room?.switchActiveDevice('videoinput', deviceId); curCam.value = deviceId } catch { /* ignore */ }
+}
+function devLabel(d, i, kind) { return d.label || `${kind} ${i + 1}` }
 
 // ── полный экран ──
 const rootEl = ref(null)
@@ -205,7 +260,17 @@ watch([viewMode, pinnedId, screenSharer, () => tiles.value.length], () => nextTi
 function leave() {
   try { room?.disconnect() } catch { /* ignore */ }
   room = null
-  router.push({ name: 'conference' })
+  router.push(isGuest ? '/' : { name: 'conference' })
+}
+
+// пробел — включить/выключить микрофон (если не печатаем в поле)
+function onKey(e) {
+  if (e.code !== 'Space' && e.key !== ' ') return
+  const el = e.target
+  if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return
+  if (state.value !== 'connected' || !canPublish.value) return
+  e.preventDefault()
+  toggleMic()
 }
 
 const stripTiles = computed(() => (spotlightId.value || screenSharer.value)
@@ -219,13 +284,31 @@ const gridCols = computed(() => {
   return 'grid-cols-4'
 })
 
-onMounted(connect)
-onBeforeUnmount(() => { try { room?.disconnect() } catch { /* ignore */ } })
+onMounted(() => {
+  if (isGuest) state.value = 'prejoin'; else connect()
+  document.addEventListener('keydown', onKey)
+})
+onBeforeUnmount(() => {
+  document.removeEventListener('keydown', onKey)
+  try { navigator.mediaDevices.removeEventListener('devicechange', loadDevices) } catch { /* ignore */ }
+  try { room?.disconnect() } catch { /* ignore */ }
+})
 </script>
 
 <template>
-  <div ref="rootEl" class="relative mx-auto flex h-[calc(100dvh-4rem)] max-w-6xl flex-col bg-parchment-100 -mt-4 -mb-4 sm:-mt-6 sm:-mb-6 lg:-mt-8 lg:-mb-8">
-    <div v-if="state === 'connecting'" class="flex flex-1 items-center justify-center text-ink-700/60">
+  <div ref="rootEl" class="relative flex flex-col bg-parchment-100"
+       :class="isGuest ? 'h-dvh p-3 sm:p-4' : 'mx-auto h-[calc(100dvh-4rem)] max-w-6xl -mt-4 -mb-4 sm:-mt-6 sm:-mb-6 lg:-mt-8 lg:-mb-8'">
+    <!-- гость: ввод имени -->
+    <div v-if="state === 'prejoin'" class="flex flex-1 items-center justify-center">
+      <div class="card w-full max-w-sm p-6 text-center">
+        <AppIcon name="video" :size="36" class="mx-auto mb-3 text-saffron-500" />
+        <h2 class="font-display text-xl font-semibold text-ink-900">Вход в конференцию</h2>
+        <p class="mb-4 mt-1 text-sm text-ink-700/60">Как вас представить?</p>
+        <input v-model="guestName" class="input" placeholder="Ваше имя" @keydown.enter="connect" />
+        <button class="btn-primary mt-4 w-full" @click="connect">Войти</button>
+      </div>
+    </div>
+    <div v-else-if="state === 'connecting'" class="flex flex-1 items-center justify-center text-ink-700/60">
       <div class="text-center"><AppIcon name="video" :size="40" class="mx-auto mb-3 animate-pulse text-saffron-500" />Подключение…</div>
     </div>
     <div v-else-if="state === 'error'" class="flex flex-1 items-center justify-center">
@@ -234,16 +317,30 @@ onBeforeUnmount(() => { try { room?.disconnect() } catch { /* ignore */ } })
 
     <template v-else>
       <!-- панель ведущего -->
-      <div v-if="isHost" class="mb-2 flex flex-wrap items-center gap-x-3 gap-y-2 pt-3 text-sm">
-        <span class="inline-flex items-center gap-1">
-          <span class="text-ink-700/50">Звук всем:</span>
-          <button class="rounded-md border border-parchment-300 px-2 py-1 text-ink-700 hover:bg-parchment-100" @click="permit('all','audio',false)">выкл</button>
-          <button class="rounded-md border border-parchment-300 px-2 py-1 text-ink-700 hover:bg-parchment-100" @click="permit('all','audio',true)">вкл</button>
+      <div v-if="isHost" class="mb-2 flex flex-wrap items-center gap-x-4 gap-y-2 pt-3 text-sm">
+        <span class="inline-flex items-center gap-1.5">
+          <AppIcon name="volume" :size="15" class="text-ink-700/50" />
+          <span class="text-ink-700/60">Звук всем</span>
+          <span class="seg-toggle">
+            <button :class="allowAll.audio ? '' : 'off'" @click="setAll('audio', false)">выкл</button>
+            <button :class="allowAll.audio ? 'on' : ''" @click="setAll('audio', true)">вкл</button>
+          </span>
         </span>
-        <span class="inline-flex items-center gap-1">
-          <span class="text-ink-700/50">Видео всем:</span>
-          <button class="rounded-md border border-parchment-300 px-2 py-1 text-ink-700 hover:bg-parchment-100" @click="permit('all','video',false)">выкл</button>
-          <button class="rounded-md border border-parchment-300 px-2 py-1 text-ink-700 hover:bg-parchment-100" @click="permit('all','video',true)">вкл</button>
+        <span class="inline-flex items-center gap-1.5">
+          <AppIcon name="video" :size="15" class="text-ink-700/50" />
+          <span class="text-ink-700/60">Видео всем</span>
+          <span class="seg-toggle">
+            <button :class="allowAll.video ? '' : 'off'" @click="setAll('video', false)">выкл</button>
+            <button :class="allowAll.video ? 'on' : ''" @click="setAll('video', true)">вкл</button>
+          </span>
+        </span>
+        <span class="inline-flex items-center gap-1.5">
+          <AppIcon name="screen" :size="15" class="text-ink-700/50" />
+          <span class="text-ink-700/60">Экран всем</span>
+          <span class="seg-toggle">
+            <button :class="allowAll.screen ? '' : 'off'" @click="setAll('screen', false)">выкл</button>
+            <button :class="allowAll.screen ? 'on' : ''" @click="setAll('screen', true)">вкл</button>
+          </span>
         </span>
         <div class="ml-auto flex gap-1">
           <button class="rounded-md px-2.5 py-1 transition" :class="viewMode==='grid' ? 'bg-saffron-500 text-white' : 'text-ink-700 hover:bg-parchment-100'" @click="viewMode='grid'; pinnedId=null">Сетка</button>
@@ -285,14 +382,14 @@ onBeforeUnmount(() => { try { room?.disconnect() } catch { /* ignore */ } })
           <div class="absolute bottom-1.5 left-1.5 flex items-center gap-1 rounded-md bg-black/50 px-1.5 py-0.5 text-xs text-white">
             <AppIcon v-if="!t.micOn" name="mic-off" :size="12" class="text-red-400" />
             <span v-if="raised[t.identity]">✋</span>
-            <span class="max-w-[6rem] truncate">{{ t.name }}<span v-if="t.isLocal"> (вы)</span></span>
+            <span class="max-w-[9rem] truncate sm:max-w-[16rem]">{{ t.name }}<span v-if="t.isLocal"> (вы)</span></span>
           </div>
-          <!-- действия наведения: закрепить + (для ведущего) выкл. видео/звук -->
-          <div class="absolute right-1.5 top-1.5 flex gap-1 opacity-0 transition group-hover:opacity-100">
+          <!-- действия: закрепить + (для ведущего) выкл. видео/звук; на десктопе появляются при наведении, всегда видны на тач -->
+          <div class="absolute right-1.5 top-1.5 flex gap-1 opacity-100 transition sm:opacity-60 sm:group-hover:opacity-100">
             <button class="rounded-md bg-black/50 p-1 text-white hover:bg-black/70" :title="pinnedId===t.identity ? 'Открепить' : 'На весь экран'" @click="pinTile(t.identity)"><AppIcon name="pin" :size="14" /></button>
             <template v-if="isHost && !t.isLocal">
-              <button class="rounded-md p-1 text-white hover:bg-black/70" :class="t.allowAudio ? 'bg-black/50' : 'bg-red-500/80'" :title="t.allowAudio ? 'Запретить звук' : 'Разрешить звук'" @click.stop="permit(t.identity,'audio',!t.allowAudio)"><AppIcon :name="t.allowAudio ? 'volume' : 'mic-off'" :size="14" /></button>
-              <button class="rounded-md p-1 text-white hover:bg-black/70" :class="t.allowVideo ? 'bg-black/50' : 'bg-red-500/80'" :title="t.allowVideo ? 'Запретить видео' : 'Разрешить видео'" @click.stop="permit(t.identity,'video',!t.allowVideo)"><AppIcon name="video" :size="14" /></button>
+              <button class="rounded-md p-1 text-white hover:bg-black/70" :class="t.allowAudio ? 'bg-black/50' : 'bg-red-500/90'" :title="t.allowAudio ? 'Запретить звук' : 'Разрешить звук'" @click.stop="permit(t.identity,'audio',!t.allowAudio)"><AppIcon :name="t.allowAudio ? 'volume' : 'mic-off'" :size="14" /></button>
+              <button class="rounded-md p-1 text-white hover:bg-black/70" :class="t.allowVideo ? 'bg-black/50' : 'bg-red-500/90'" :title="t.allowVideo ? 'Запретить видео' : 'Разрешить видео'" @click.stop="permit(t.identity,'video',!t.allowVideo)"><AppIcon name="video" :size="14" /></button>
               <button class="rounded-md bg-black/50 px-1.5 py-1 text-[11px] font-semibold text-white hover:bg-black/70" title="Оставить говорить только его (заглушить остальных)" @click.stop="permit('all','audio',false, t.identity)">1×</button>
             </template>
           </div>
@@ -304,8 +401,26 @@ onBeforeUnmount(() => { try { room?.disconnect() } catch { /* ignore */ } })
       <!-- нижняя панель -->
       <div class="mt-2 flex shrink-0 items-center justify-center gap-3 pb-2">
         <template v-if="canPublish">
-          <button class="flex h-11 w-11 items-center justify-center rounded-full transition" :class="micOn ? 'bg-parchment-200 text-ink-800 hover:bg-parchment-300' : 'bg-red-500 text-white'" title="Микрофон" @click="toggleMic"><AppIcon :name="micOn ? 'volume' : 'mic-off'" :size="20" /></button>
-          <button class="flex h-11 w-11 items-center justify-center rounded-full transition" :class="camOn ? 'bg-parchment-200 text-ink-800 hover:bg-parchment-300' : 'bg-red-500 text-white'" title="Камера" @click="toggleCam"><AppIcon name="video" :size="20" /></button>
+          <!-- микрофон + выбор устройства -->
+          <div class="relative flex items-center">
+            <button class="flex h-11 items-center justify-center rounded-l-full pl-4 pr-3 transition" :class="micOn ? 'bg-parchment-200 text-ink-800 hover:bg-parchment-300' : 'bg-red-500 text-white'" title="Микрофон" @click="toggleMic"><AppIcon :name="micOn ? 'volume' : 'mic-off'" :size="20" /></button>
+            <button v-if="mics.length > 1" class="flex h-11 items-center justify-center rounded-r-full border-l border-parchment-50/60 pl-1.5 pr-2.5 transition" :class="micOn ? 'bg-parchment-200 text-ink-800 hover:bg-parchment-300' : 'bg-red-500 text-white'" title="Выбрать микрофон" @click="micMenu = !micMenu; camMenu = false"><AppIcon name="chevron" :size="14" class="-rotate-90" /></button>
+            <div v-if="micMenu" class="absolute bottom-14 left-0 z-40 min-w-[13rem] max-w-[16rem] overflow-hidden rounded-xl border border-parchment-200 bg-white py-1 shadow-xl">
+              <button v-for="(d, di) in mics" :key="d.deviceId" class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-parchment-100" :class="curMic === d.deviceId ? 'font-semibold text-saffron-700' : 'text-ink-800'" @click="switchMic(d.deviceId)">
+                <AppIcon name="volume" :size="14" class="shrink-0 opacity-60" /><span class="truncate">{{ devLabel(d, di, 'Микрофон') }}</span>
+              </button>
+            </div>
+          </div>
+          <!-- камера + выбор устройства -->
+          <div class="relative flex items-center">
+            <button class="flex h-11 items-center justify-center rounded-l-full pl-4 pr-3 transition" :class="camOn ? 'bg-parchment-200 text-ink-800 hover:bg-parchment-300' : 'bg-red-500 text-white'" title="Камера" @click="toggleCam"><AppIcon name="video" :size="20" /></button>
+            <button v-if="cams.length > 1" class="flex h-11 items-center justify-center rounded-r-full border-l border-parchment-50/60 pl-1.5 pr-2.5 transition" :class="camOn ? 'bg-parchment-200 text-ink-800 hover:bg-parchment-300' : 'bg-red-500 text-white'" title="Выбрать камеру" @click="camMenu = !camMenu; micMenu = false"><AppIcon name="chevron" :size="14" class="-rotate-90" /></button>
+            <div v-if="camMenu" class="absolute bottom-14 left-0 z-40 min-w-[13rem] max-w-[16rem] overflow-hidden rounded-xl border border-parchment-200 bg-white py-1 shadow-xl">
+              <button v-for="(d, di) in cams" :key="d.deviceId" class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-parchment-100" :class="curCam === d.deviceId ? 'font-semibold text-saffron-700' : 'text-ink-800'" @click="switchCam(d.deviceId)">
+                <AppIcon name="video" :size="14" class="shrink-0 opacity-60" /><span class="truncate">{{ devLabel(d, di, 'Камера') }}</span>
+              </button>
+            </div>
+          </div>
           <button class="hidden h-11 w-11 items-center justify-center rounded-full transition sm:flex" :class="screenOn ? 'bg-saffron-500 text-white' : 'bg-parchment-200 text-ink-800 hover:bg-parchment-300'" title="Показать экран" @click="toggleScreen"><AppIcon name="screen" :size="20" /></button>
         </template>
         <button class="flex h-11 w-11 items-center justify-center rounded-full text-xl transition" :class="handUp ? 'bg-saffron-500 text-white' : 'bg-parchment-200 hover:bg-parchment-300'" title="Поднять руку" @click="toggleHand">✋</button>
@@ -342,4 +457,10 @@ onBeforeUnmount(() => { try { room?.disconnect() } catch { /* ignore */ } })
 <style scoped>
 /* ровная заметная рамка говорящего */
 .speaking { outline: 3px solid #22c55e; outline-offset: -3px; box-shadow: 0 0 0 1px #22c55e, 0 0 14px rgba(34, 197, 94, 0.5); }
+
+/* сегментный переключатель «выкл | вкл» */
+.seg-toggle { display: inline-flex; padding: 2px; border-radius: 9999px; background: #efe6d6; }
+.seg-toggle button { padding: 3px 12px; border-radius: 9999px; font-size: 12px; font-weight: 600; color: #6b5b4a; transition: all .15s ease; }
+.seg-toggle button.on { background: #16a34a; color: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.15); }
+.seg-toggle button.off { background: #ef4444; color: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.15); }
 </style>

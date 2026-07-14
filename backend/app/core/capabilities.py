@@ -38,6 +38,7 @@ CAP_KEYS = set(ALL_CAPS)
 
 # Предопределённые (системные) роли. Гуру — superadmin (все права).
 SYSTEM_ROLES = [
+    {"key": "superadmin", "name": "Супер-администратор", "is_superadmin": True, "is_default": False, "capabilities": []},
     {"key": "guru", "name": "Гуру", "is_superadmin": True, "is_default": False, "capabilities": []},
     {"key": "secretary", "name": "Секретарь", "is_superadmin": False, "is_default": False, "capabilities": [
         "dashboard.view", "calendar.view", "calendar.manage",

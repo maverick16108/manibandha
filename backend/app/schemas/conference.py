@@ -10,6 +10,8 @@ class ConferenceCreate(BaseModel):
     scheduled_at: datetime | None = None
     mic_allowed: bool = True
     cam_allowed: bool = True
+    screen_allowed: bool = True
+    guests_allowed: bool = False
 
 
 class ConferenceUpdate(BaseModel):
@@ -19,14 +21,22 @@ class ConferenceUpdate(BaseModel):
     status: str | None = None  # scheduled | live | ended
 
 
+class ConferenceParticipant(BaseModel):
+    name: str
+    avatar_url: str | None = None
+
+
 class ConferenceOut(BaseModel):
     id: int
     title: str
     description: str | None = None
     mode: str
     status: str
+    room: str | None = None
     mic_allowed: bool = True
     cam_allowed: bool = True
+    screen_allowed: bool = True
+    guests_allowed: bool = False
     host_id: int | None = None
     host_name: str | None = None
     can_host: bool = False
@@ -34,6 +44,9 @@ class ConferenceOut(BaseModel):
     started_at: datetime | None = None
     ended_at: datetime | None = None
     created_at: datetime
+    # для карточки «в эфире»: сколько сейчас участников и первые из них
+    participant_count: int = 0
+    participants: list[ConferenceParticipant] = []
 
 
 class JoinOut(BaseModel):
@@ -41,6 +54,11 @@ class JoinOut(BaseModel):
     token: str
     room: str
     mode: str
+    title: str | None = None
     can_publish: bool
     is_host: bool = False
     identity: str
+    # текущие разрешения «всем» — чтобы переключатели ведущего стартовали в правильном положении
+    mic_allowed: bool = True
+    cam_allowed: bool = True
+    screen_allowed: bool = True

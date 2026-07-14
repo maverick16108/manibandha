@@ -177,6 +177,8 @@ function onDrop(e) {
   if (files.length) { e.preventDefault(); uploadFiles(files) }
 }
 function onKeydown(e) {
+  // Ctrl+Enter / Cmd+Enter — отправить (работает везде на сайте)
+  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); emit('submit'); return }
   if (props.submitOnEnter && e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); emit('submit') }
 }
 

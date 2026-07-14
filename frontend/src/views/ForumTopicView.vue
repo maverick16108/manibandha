@@ -12,6 +12,7 @@ import { extractImageUrls, preloadImages } from '../lib/preload'
 import { usePageTitle } from '../composables/pageTitle'
 import { backTarget } from '../composables/backTarget'
 import { confirmDialog } from '../composables/confirm'
+import { refreshNavCounts } from '../composables/navCounts'
 
 const route = useRoute()
 const auth = useAuthStore()
@@ -50,6 +51,7 @@ async function openCard(userId) {
   try { const { data } = await client.get(`/forum/users/${userId}`); card.value = data } catch { card.value = null }
 }
 function closeCard() { card.value = null }
+function onEsc(e) { if (e.key === 'Escape' && card.value) closeCard() }
 function placeLine(c) { return [c.city, c.region, c.country].filter(Boolean).join(', ') }
 
 // точки для быстрого скроллера по датам сообщений
@@ -164,15 +166,17 @@ async function removePost(p) {
 
 let poll = null
 onMounted(() => {
-  load()
+  load().then(refreshNavCounts) // тема прочитана — сразу гасим бейдж в меню
   nowTimer = setInterval(() => { nowTs.value = Date.now() }, 20000)
   poll = setInterval(() => load(true), 5000) // живой опрос — новые сообщения/лайки видны почти сразу
   document.addEventListener('mouseup', onDocMouseUp)
+  document.addEventListener('keydown', onEsc)
   window.addEventListener('scroll', hideQuoteBar, { passive: true })
 })
 onBeforeUnmount(() => {
   clearInterval(nowTimer); clearInterval(poll); backTarget.value = null
   document.removeEventListener('mouseup', onDocMouseUp)
+  document.removeEventListener('keydown', onEsc)
   window.removeEventListener('scroll', hideQuoteBar)
 })
 </script>

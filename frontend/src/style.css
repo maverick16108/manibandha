@@ -114,7 +114,26 @@
 .vw-played { clip-path: inset(0 100% 0 0); } /* по умолчанию ничего не заполнено */
 .bg-saffron-500 .vw-base i { background: rgba(255, 255, 255, 0.5); }
 .bg-saffron-500 .vw-played i { background: #fff; }
-.voice-msg__time { flex: none; font-variant-numeric: tabular-nums; opacity: 0.75; min-width: 2.2rem; text-align: right; }
+/* ползунок (перетаскиваемая точка) поверх волны */
+.vw-thumb {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 0.85rem;
+  height: 0.85rem;
+  margin-left: -0.425rem;
+  border-radius: 9999px;
+  background: #c8742a;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  transform: translateY(-50%);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  pointer-events: none;
+}
+.voice-msg.is-playing .vw-thumb, .voice-msg__wave:hover .vw-thumb { opacity: 1; }
+.bg-saffron-500 .vw-thumb { background: #fff; border-color: #c8742a; }
+.voice-msg__time { flex: none; font-variant-numeric: tabular-nums; opacity: 0.75; min-width: 2.6rem; text-align: right; }
 
 /* картинки в тексте — клик открывает на весь экран */
 .markdown-body img { cursor: zoom-in; }

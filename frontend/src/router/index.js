@@ -6,6 +6,7 @@ const routes = [
   { path: '/login', name: 'login', component: () => import('../views/LoginView.vue'), meta: { public: true } },
   { path: '/calendar', name: 'public-calendar', component: () => import('../views/PublicCalendarView.vue'), meta: { public: true } },
   { path: '/events/:id', name: 'public-event', component: () => import('../views/PublicEventView.vue'), meta: { public: true } },
+  { path: '/join/:room', name: 'conference-guest', component: () => import('../views/ConferenceRoomView.vue'), meta: { public: true } },
   {
     path: '/app',
     component: () => import('../components/AppLayout.vue'),

@@ -18,6 +18,9 @@ class Conference(Base):
     # разрешено ли участникам (не ведущим) по умолчанию включать микрофон/камеру
     mic_allowed: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true", nullable=False)
     cam_allowed: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true", nullable=False)
+    screen_allowed: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true", nullable=False)
+    # можно ли входить гостям по ссылке (без авторизации)
+    guests_allowed: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
     room: Mapped[str] = mapped_column(String(80), nullable=False, unique=True, index=True)
     status: Mapped[str] = mapped_column(String(20), default="scheduled", server_default="scheduled", nullable=False, index=True)  # scheduled | live | ended
     host_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)

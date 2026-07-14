@@ -93,7 +93,7 @@ onMounted(async () => {
       </div>
       <div>
         <label class="label">{{ isReport ? 'Как прошло служение в этом месяце' : 'Ваш вопрос' }}</label>
-        <MarkdownEditor v-model="form.body" :rows="6" height-class="min-h-[40vh]" type-anywhere :draft-scope="`new:${kind}`" placeholder="Текст… (можно вставлять фото)" />
+        <MarkdownEditor v-model="form.body" :rows="6" height-class="min-h-[40vh]" type-anywhere :draft-scope="`new:${kind}`" placeholder="Текст… (можно вставлять фото)" @submit="submit" />
       </div>
       <p v-if="error" class="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{{ error }}</p>
       <div class="flex gap-2">

@@ -13,7 +13,7 @@ class Settings(BaseSettings):
 
     SECRET_KEY: str = "change-me"
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 720
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 43200  # 30 дней — реже переавторизация
 
     DATABASE_URL: str = "postgresql+psycopg2://manibandha:manibandha@localhost:5432/manibandha"
 

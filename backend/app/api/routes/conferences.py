@@ -13,7 +13,7 @@ from app.core.capabilities import has_cap
 from app.core.config import settings
 from app.core.database import SessionLocal, get_db
 from app.models import Conference, User
-from app.schemas.conference import ConferenceCreate, ConferenceOut, ConferenceUpdate, JoinOut
+from app.schemas.conference import ConferenceCreate, ConferenceOut, ConferenceParticipant, ConferenceUpdate, JoinOut
 
 router = APIRouter(prefix="/conferences", tags=["conferences"])
 
@@ -51,14 +51,37 @@ def _mint_token(identity: str, name: str, room: str, can_publish: bool, sources:
     return jwt.encode(claims, settings.LIVEKIT_API_SECRET, algorithm="HS256")
 
 
-def _out(c: Conference, user: User, is_host_cap: bool) -> ConferenceOut:
+def _out(c: Conference, user: User, is_host_cap: bool, parts: list | None = None) -> ConferenceOut:
     return ConferenceOut(
-        id=c.id, title=c.title, description=c.description, mode=c.mode, status=c.status,
-        mic_allowed=c.mic_allowed, cam_allowed=c.cam_allowed,
+        id=c.id, title=c.title, description=c.description, mode=c.mode, status=c.status, room=c.room,
+        mic_allowed=c.mic_allowed, cam_allowed=c.cam_allowed, screen_allowed=c.screen_allowed, guests_allowed=c.guests_allowed,
         host_id=c.host_id, host_name=c.host.full_name if c.host else None,
         can_host=(c.host_id == user.id or is_host_cap),
         scheduled_at=c.scheduled_at, started_at=c.started_at, ended_at=c.ended_at, created_at=c.created_at,
+        participant_count=len(parts) if parts is not None else 0,
+        participants=(parts or [])[:6],
     )
+
+
+def _live_participants(db: Session, c: Conference) -> list[ConferenceParticipant]:
+    """Список подключённых к живой встрече (для карточки): имя + аватар (по возможности)."""
+    if not (settings.LIVEKIT_API_KEY and settings.LIVEKIT_API_SECRET):
+        return []
+    try:
+        raw = _room_service("ListParticipants", {"room": c.room}, c.room).get("participants", [])
+    except Exception:  # noqa: BLE001
+        return []
+    # аватары для авторизованных участников (identity = "u{user_id}")
+    uids = [int(p["identity"][1:]) for p in raw if (p.get("identity") or "").startswith("u") and p["identity"][1:].isdigit()]
+    avatars = {}
+    if uids:
+        for u in db.query(User).filter(User.id.in_(uids)).all():
+            avatars[f"u{u.id}"] = u.avatar_url
+    out = []
+    for p in raw:
+        ident = p.get("identity") or ""
+        out.append(ConferenceParticipant(name=p.get("name") or "Гость", avatar_url=avatars.get(ident)))
+    return out
 
 
 @router.get("", response_model=list[ConferenceOut])
@@ -70,7 +93,7 @@ def list_conferences(db: Session = Depends(get_db), user: User = Depends(require
         .order_by(order, Conference.scheduled_at.is_(None), Conference.scheduled_at.asc(), Conference.created_at.desc())
         .all()
     )
-    return [_out(c, user, is_host_cap) for c in rows]
+    return [_out(c, user, is_host_cap, _live_participants(db, c) if c.status == "live" else None) for c in rows]
 
 
 @router.post("", response_model=ConferenceOut, status_code=status.HTTP_201_CREATED)
@@ -84,6 +107,7 @@ def create_conference(payload: ConferenceCreate, db: Session = Depends(get_db), 
         mode=mode, room=f"conf_{uuid.uuid4().hex[:20]}", host_id=user.id,
         scheduled_at=payload.scheduled_at, status="scheduled",
         mic_allowed=bool(payload.mic_allowed), cam_allowed=bool(payload.cam_allowed),
+        screen_allowed=bool(payload.screen_allowed), guests_allowed=bool(payload.guests_allowed),
     )
     db.add(c)
     db.commit()
@@ -163,14 +187,51 @@ def join_conference(conf_id: int, db: Session = Depends(get_db), user: User = De
             if c.mic_allowed:
                 sources.append("MICROPHONE")
             if c.cam_allowed:
-                sources += ["CAMERA", "SCREEN_SHARE"]
+                sources.append("CAMERA")
+            if c.screen_allowed:
+                sources.append("SCREEN_SHARE")
         can_publish = len(sources) > 0
     token = _mint_token(identity, user.full_name or "Гость", c.room, can_publish, sources)
-    return JoinOut(url=settings.LIVEKIT_URL, token=token, room=c.room, mode=c.mode,
-                   can_publish=can_publish, is_host=is_host, identity=identity)
+    return JoinOut(url=settings.LIVEKIT_URL, token=token, room=c.room, mode=c.mode, title=c.title,
+                   can_publish=can_publish, is_host=is_host, identity=identity,
+                   mic_allowed=c.mic_allowed, cam_allowed=c.cam_allowed, screen_allowed=c.screen_allowed)
 
 
-_SRC = {"audio": ["MICROPHONE"], "video": ["CAMERA", "SCREEN_SHARE"]}
+@router.post("/guest/{room}", response_model=JoinOut)
+def guest_join(room: str, payload: dict = Body(...), db: Session = Depends(get_db)):
+    """Гостевой вход по ссылке (без авторизации), если разрешён создателем."""
+    if not (settings.LIVEKIT_API_KEY and settings.LIVEKIT_API_SECRET and settings.LIVEKIT_URL):
+        raise HTTPException(status_code=503, detail="Видеосервер не настроен")
+    c = db.query(Conference).filter(Conference.room == room).first()
+    if not c or not c.guests_allowed:
+        raise HTTPException(status_code=404, detail="Конференция недоступна для гостей")
+    name = (payload.get("name") or "").strip()[:60] or "Гость"
+    if c.status == "ended":
+        c.status = "live"
+        c.ended_at = None
+        if not c.started_at:
+            c.started_at = func.now()
+        db.commit()
+    if c.mode == "broadcast":
+        sources, can_publish = [], False
+    else:
+        sources = []
+        if c.mic_allowed:
+            sources.append("MICROPHONE")
+        if c.cam_allowed:
+            sources.append("CAMERA")
+        if c.screen_allowed:
+            sources.append("SCREEN_SHARE")
+        can_publish = len(sources) > 0
+    identity = f"g_{uuid.uuid4().hex[:12]}"
+    token = _mint_token(identity, name, c.room, can_publish, sources)
+    return JoinOut(url=settings.LIVEKIT_URL, token=token, room=c.room, mode=c.mode, title=c.title,
+                   can_publish=can_publish, is_host=False, identity=identity,
+                   mic_allowed=c.mic_allowed, cam_allowed=c.cam_allowed, screen_allowed=c.screen_allowed)
+
+
+_SRC = {"audio": ["MICROPHONE"], "video": ["CAMERA"], "screen": ["SCREEN_SHARE"]}
+_MUTE_SRC = {"audio": "MICROPHONE", "video": "CAMERA", "screen": "SCREEN_SHARE"}
 
 
 def _apply_perm(room: str, p: dict, kind: str, allow: bool):
@@ -186,7 +247,7 @@ def _apply_perm(room: str, p: dict, kind: str, allow: bool):
         "permission": {"canPublish": len(cur) > 0, "canPublishSources": sorted(cur), "canSubscribe": True, "canPublishData": True},
     }, room)
     if not allow:
-        src = "MICROPHONE" if kind == "audio" else "CAMERA"
+        src = _MUTE_SRC[kind]
         typ = "AUDIO" if kind == "audio" else "VIDEO"
         for t in p.get("tracks", []):
             if t.get("source") == src or (t.get("source") in (None, "UNKNOWN") and t.get("type") == typ):
@@ -204,16 +265,18 @@ def moderate_permit(conf_id: int, payload: dict = Body(...), db: Session = Depen
         raise HTTPException(status_code=404, detail="Конференция не найдена")
     _editable(db, user, c)
     kind = payload.get("kind")
-    if kind not in ("audio", "video"):
-        raise HTTPException(status_code=400, detail="kind: audio|video")
+    if kind not in ("audio", "video", "screen"):
+        raise HTTPException(status_code=400, detail="kind: audio|video|screen")
     allow = bool(payload.get("allow"))
     target = payload.get("identity")  # 'all' | identity
     exc = payload.get("except")
     if target == "all":  # меняем и дефолт для новых участников
         if kind == "audio":
             c.mic_allowed = allow
-        else:
+        elif kind == "video":
             c.cam_allowed = allow
+        else:
+            c.screen_allowed = allow
         db.commit()
     host_ident = f"u{c.host_id}" if c.host_id else None
     try:

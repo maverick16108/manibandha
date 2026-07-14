@@ -19,7 +19,7 @@ const items = ref([])
 const loading = ref(true)
 
 const showForm = ref(false)
-const form = ref({ title: '', description: '', mode: 'interactive', mic_allowed: true, cam_allowed: true })
+const form = ref({ title: '', description: '', mode: 'interactive', mic_allowed: true, cam_allowed: true, screen_allowed: true, guests_allowed: false })
 const schedDate = ref('')   // YYYY-MM-DD
 const schedHour = ref(19)
 const schedMin = ref(0)
@@ -32,8 +32,27 @@ async function load(silent = false) {
   try { const { data } = await client.get('/conferences'); items.value = data } finally { loading.value = false }
 }
 let poll = null
-onMounted(() => { load(); poll = setInterval(() => load(true), 15000) })
-onBeforeUnmount(() => clearInterval(poll))
+const nowTs = ref(Date.now())
+let tick = null
+onMounted(() => { load(); poll = setInterval(() => load(true), 15000); tick = setInterval(() => { nowTs.value = Date.now() }, 1000) })
+onBeforeUnmount(() => { clearInterval(poll); clearInterval(tick) })
+
+function elapsed(iso) {
+  if (!iso) return ''
+  let s = Math.max(0, Math.floor((nowTs.value - new Date(iso).getTime()) / 1000))
+  const h = Math.floor(s / 3600); s -= h * 3600
+  const m = Math.floor(s / 60); s -= m * 60
+  const pad = (n) => String(n).padStart(2, '0')
+  return h ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`
+}
+function pluralParts(n) {
+  const a = Math.abs(n) % 100, b = a % 10
+  if (a > 10 && a < 20) return 'участников'
+  if (b > 1 && b < 5) return 'участника'
+  if (b === 1) return 'участник'
+  return 'участников'
+}
+function pInitials(name) { return (name || '?').trim()[0]?.toUpperCase() || '?' }
 
 const live = computed(() => items.value.filter((c) => c.status === 'live'))
 const scheduled = computed(() => items.value.filter((c) => c.status === 'scheduled'))
@@ -47,15 +66,19 @@ function modeLabel(m) { return m === 'broadcast' ? 'Трансляция' : 'В�
 
 function resetForm() {
   showForm.value = false
-  form.value = { title: '', description: '', mode: 'interactive', mic_allowed: true, cam_allowed: true }
+  form.value = { title: '', description: '', mode: 'interactive', mic_allowed: true, cam_allowed: true, screen_allowed: true, guests_allowed: false }
   schedDate.value = ''; schedHour.value = 19; schedMin.value = 0
+}
+function copyLink(c) {
+  const url = `${location.origin}/join/${c.room}`
+  navigator.clipboard?.writeText(url).then(() => alert('Ссылка для гостей скопирована:\n' + url)).catch(() => prompt('Ссылка для гостей:', url))
 }
 // enter=true — начать сейчас и войти; enter=false — запланировать на дату
 async function submit(enter) {
   if (!form.value.title.trim()) return
   saving.value = true
   try {
-    const payload = { title: form.value.title.trim(), description: form.value.description.trim() || null, mode: form.value.mode, mic_allowed: form.value.mic_allowed, cam_allowed: form.value.cam_allowed }
+    const payload = { title: form.value.title.trim(), description: form.value.description.trim() || null, mode: form.value.mode, mic_allowed: form.value.mic_allowed, cam_allowed: form.value.cam_allowed, screen_allowed: form.value.screen_allowed, guests_allowed: form.value.guests_allowed }
     if (!enter && schedDate.value) {
       const hh = String(schedHour.value).padStart(2, '0')
       const mm = String(schedMin.value).padStart(2, '0')
@@ -79,7 +102,7 @@ async function remove(c) {
 </script>
 
 <template>
-  <div class="mx-auto max-w-4xl">
+  <div class="mx-auto max-w-6xl">
     <div class="mb-6 flex items-center justify-between gap-3">
       <p class="text-ink-700/60">Онлайн-встречи и трансляции гуру с учениками</p>
       <button v-if="canHost" class="btn-primary shrink-0" @click="showForm = !showForm"><AppIcon name="video" :size="16" /> Создать</button>
@@ -96,7 +119,9 @@ async function remove(c) {
         <span class="text-sm text-ink-700/60">Участникам по умолчанию:</span>
         <label class="flex items-center gap-2 text-sm"><input type="checkbox" v-model="form.mic_allowed" /> микрофон</label>
         <label class="flex items-center gap-2 text-sm"><input type="checkbox" v-model="form.cam_allowed" /> камера</label>
+        <label class="flex items-center gap-2 text-sm"><input type="checkbox" v-model="form.screen_allowed" /> показ экрана</label>
       </div>
+      <label class="flex items-center gap-2 text-sm"><input type="checkbox" v-model="form.guests_allowed" /> Разрешить вход гостям по ссылке (без авторизации)</label>
       <div>
         <label class="label">Запланировать (необязательно)</label>
         <div class="flex flex-wrap items-center gap-2">
@@ -134,9 +159,25 @@ async function remove(c) {
                 <h3 class="truncate font-display text-lg font-semibold text-ink-900">{{ c.title }}</h3>
                 <span class="badge bg-parchment-200 text-ink-700">{{ modeLabel(c.mode) }}</span>
               </div>
-              <div class="mt-0.5 text-sm text-ink-700/60">Ведущий: {{ c.host_name || '—' }} · с {{ fmt(c.started_at) }}</div>
+              <div class="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-ink-700/60">
+                <span>Ведущий: {{ c.host_name || '—' }}</span>
+                <span v-if="c.started_at" class="inline-flex items-center gap-1 rounded-md bg-red-500/10 px-1.5 py-0.5 font-medium tabular-nums text-red-600">
+                  <AppIcon name="clock" :size="13" /> {{ elapsed(c.started_at) }}
+                </span>
+              </div>
+              <div v-if="c.participant_count" class="mt-2 flex items-center gap-2">
+                <div class="flex -space-x-2">
+                  <template v-for="(p, pi) in c.participants" :key="pi">
+                    <img v-if="p.avatar_url" :src="p.avatar_url" :title="p.name" class="h-7 w-7 rounded-full border-2 border-parchment-50 object-cover" />
+                    <span v-else :title="p.name" class="flex h-7 w-7 items-center justify-center rounded-full border-2 border-parchment-50 bg-gradient-to-br from-saffron-400 to-saffron-600 text-xs font-semibold text-white">{{ pInitials(p.name) }}</span>
+                  </template>
+                  <span v-if="c.participant_count > c.participants.length" class="flex h-7 min-w-[1.75rem] items-center justify-center rounded-full border-2 border-parchment-50 bg-parchment-200 px-1 text-xs font-semibold text-ink-700">+{{ c.participant_count - c.participants.length }}</span>
+                </div>
+                <span class="text-sm text-ink-700/60">{{ c.participant_count }} {{ pluralParts(c.participant_count) }}</span>
+              </div>
             </div>
             <div class="flex shrink-0 items-center gap-2">
+              <button v-if="c.can_host && c.guests_allowed" class="btn-ghost text-sm" title="Скопировать ссылку для гостей" @click="copyLink(c)"><AppIcon name="link" :size="15" /> Ссылка</button>
               <button class="btn-primary" @click="enter(c)">Войти</button>
               <button v-if="c.can_host" class="btn-ghost" @click="endConf(c)">Завершить</button>
             </div>
@@ -160,6 +201,7 @@ async function remove(c) {
               <p v-if="c.description" class="mt-1 text-sm text-ink-700/70">{{ c.description }}</p>
             </div>
             <div class="flex shrink-0 items-center gap-2">
+              <button v-if="c.can_host && c.guests_allowed" class="btn-ghost text-sm" title="Скопировать ссылку для гостей" @click="copyLink(c)"><AppIcon name="link" :size="15" /> Ссылка</button>
               <button class="btn-outline" @click="enter(c)">{{ c.can_host ? 'Начать' : 'Войти' }}</button>
               <button v-if="c.can_host" class="text-ink-700/40 hover:text-red-600" @click="remove(c)"><AppIcon name="trash" :size="16" /></button>
             </div>

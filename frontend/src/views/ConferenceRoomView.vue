@@ -227,7 +227,8 @@ function pinTile(identity) { pinnedId.value = pinnedId.value === identity ? null
 
 // ── ширина ленты участников справа (тянется мышью; при большой ширине — в 2 столбца) ──
 const stripW = ref(180)
-const stripTwoCols = computed(() => stripW.value > 300)
+// 2 столбца — только если тайлов хватает на второй столбец (иначе один пустует)
+const stripTwoCols = computed(() => stripW.value > 300 && stripTiles.value.length >= 2)
 function startStripResize(e) {
   const startX = e.touches ? e.touches[0].clientX : e.clientX
   const startW = stripW.value

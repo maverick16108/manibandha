@@ -65,8 +65,66 @@ async function remove() {
   router.push({ name: 'disciples' })
 }
 
+// ── заметки куратора (дата + текст) ──
+const notes = ref([])
+const newNote = ref('')
+const savingNote = ref(false)
+const canNote = computed(() => auth.can('disciples.note'))
+async function loadNotes() {
+  if (!canNote.value) return
+  try { const { data } = await client.get(`/disciples/${id.value}/notes`); notes.value = data } catch { notes.value = [] }
+}
+async function addNote() {
+  const t = newNote.value.trim()
+  if (!t) return
+  savingNote.value = true
+  try {
+    const { data } = await client.post(`/disciples/${id.value}/notes`, { text: t })
+    notes.value.unshift(data); newNote.value = ''
+  } finally { savingNote.value = false }
+}
+async function deleteNote(n) {
+  if (!(await confirmDialog({ message: 'Удалить заметку?', confirmText: 'Удалить', danger: true }))) return
+  await client.delete(`/disciples/${id.value}/notes/${n.id}`)
+  notes.value = notes.value.filter((x) => x.id !== n.id)
+}
+
+// ── файлы анкеты ──
+const files = ref([])
+const fileInput = ref(null)
+const uploadingFile = ref(false)
+const canEdit = computed(() => auth.can('disciples.edit'))
+async function loadFiles() {
+  try { const { data } = await client.get(`/disciples/${id.value}/files`); files.value = data } catch { files.value = [] }
+}
+async function onFilePick(e) {
+  const list = Array.from(e.target.files || [])
+  if (!list.length) return
+  uploadingFile.value = true
+  try {
+    for (const f of list) {
+      const fd = new FormData(); fd.append('file', f)
+      const { data } = await client.post(`/disciples/${id.value}/files`, fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+      files.value.unshift(data)
+    }
+  } catch (err) { alert(err.response?.data?.detail || 'Не удалось загрузить файл') }
+  finally { uploadingFile.value = false; if (fileInput.value) fileInput.value.value = '' }
+}
+async function deleteFile(f) {
+  if (!(await confirmDialog({ message: `Удалить файл «${f.name}»?`, confirmText: 'Удалить', danger: true }))) return
+  await client.delete(`/disciples/${id.value}/files/${f.id}`)
+  files.value = files.value.filter((x) => x.id !== f.id)
+}
+function fmtSize(b) {
+  if (!b) return ''
+  if (b < 1024) return `${b} Б`
+  if (b < 1024 * 1024) return `${(b / 1024).toFixed(0)} КБ`
+  return `${(b / 1024 / 1024).toFixed(1)} МБ`
+}
+
 onMounted(async () => {
   try { await load() } finally { loading.value = false }
+  loadNotes(); loadFiles()
 })
 </script>
 
@@ -164,6 +222,47 @@ onMounted(async () => {
         <div v-if="d.current_activity" class="mt-3"><div class="label">Деятельность</div><p class="text-sm text-ink-700">{{ d.current_activity }}</p></div>
         <div v-if="d.notes" class="mt-3"><div class="label">Примечания</div><p class="text-sm text-ink-700">{{ d.notes }}</p></div>
       </div>
+    </div>
+
+    <!-- Заметки куратора -->
+    <div v-if="canNote" class="card mt-6 p-6">
+      <h3 class="mb-4 font-display text-xl text-ink-900">Заметки</h3>
+      <div class="mb-4 flex flex-col gap-2 sm:flex-row">
+        <textarea v-model="newNote" rows="2" class="input flex-1 resize-y" placeholder="Новая заметка об ученике…"></textarea>
+        <button class="btn-primary shrink-0 self-start" :disabled="savingNote || !newNote.trim()" @click="addNote">{{ savingNote ? '…' : 'Добавить' }}</button>
+      </div>
+      <div v-if="!notes.length" class="text-sm text-ink-700/50">Заметок пока нет</div>
+      <ul v-else class="space-y-3">
+        <li v-for="n in notes" :key="n.id" class="rounded-lg border border-parchment-200 bg-parchment-50 p-3">
+          <div class="mb-1 flex items-center justify-between gap-2 text-xs text-ink-700/50">
+            <span>{{ n.author_name || 'Аноним' }} · {{ formatDate(n.created_at) }}</span>
+            <button class="text-red-500/70 hover:text-red-600" @click="deleteNote(n)">Удалить</button>
+          </div>
+          <p class="whitespace-pre-wrap text-sm text-ink-800">{{ n.text }}</p>
+        </li>
+      </ul>
+    </div>
+
+    <!-- Файлы анкеты -->
+    <div class="card mt-6 p-6">
+      <div class="mb-4 flex items-center justify-between gap-3">
+        <h3 class="font-display text-xl text-ink-900">Файлы</h3>
+        <button v-if="canEdit" class="btn-outline shrink-0" :disabled="uploadingFile" @click="fileInput.click()">
+          <AppIcon name="reports" :size="16" /> {{ uploadingFile ? 'Загрузка…' : 'Добавить файл' }}
+        </button>
+        <input ref="fileInput" type="file" multiple class="hidden" @change="onFilePick" />
+      </div>
+      <div v-if="!files.length" class="text-sm text-ink-700/50">Файлов пока нет</div>
+      <ul v-else class="divide-y divide-parchment-100">
+        <li v-for="f in files" :key="f.id" class="flex items-center gap-3 py-2.5">
+          <AppIcon name="reports" :size="18" class="shrink-0 text-saffron-600" />
+          <a :href="f.url" target="_blank" rel="noopener" :download="f.name" class="min-w-0 flex-1">
+            <span class="block truncate font-medium text-ink-800 hover:text-saffron-700 hover:underline">{{ f.name }}</span>
+            <span class="text-xs text-ink-700/50">{{ fmtSize(f.size) }}<span v-if="f.uploaded_by_name"> · {{ f.uploaded_by_name }}</span> · {{ formatDate(f.created_at) }}</span>
+          </a>
+          <button v-if="canEdit" class="shrink-0 text-ink-700/40 hover:text-red-600" title="Удалить" @click="deleteFile(f)"><AppIcon name="trash" :size="16" /></button>
+        </li>
+      </ul>
     </div>
 
   </div>

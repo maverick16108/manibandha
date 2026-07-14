@@ -17,6 +17,7 @@ CAPABILITIES = [
     ("disciples.edit", "Редактировать анкеты", "Ученики"),
     ("disciples.delete", "Удалять учеников", "Ученики"),
     ("disciples.approve", "Апрувить регистрации", "Ученики"),
+    ("disciples.note", "Делать заметки об учениках", "Ученики"),
     ("questions.ask", "Задавать вопросы", "Вопросы"),
     ("questions.answer", "Отвечать на вопросы", "Вопросы"),
     ("questions.view_all", "Видеть все вопросы", "Вопросы"),
@@ -39,12 +40,12 @@ SYSTEM_ROLES = [
     {"key": "secretary", "name": "Секретарь", "is_superadmin": False, "is_default": False, "capabilities": [
         "dashboard.view", "calendar.view", "calendar.manage",
         "disciples.view_all", "disciples.create", "disciples.edit", "disciples.delete", "disciples.approve",
-        "forum.view", "forum.post", "forum.moderate",
+        "disciples.note", "forum.view", "forum.post", "forum.moderate",
         "dictionaries.manage", "users.manage",
     ]},
     {"key": "curator", "name": "Куратор", "is_superadmin": False, "is_default": False, "capabilities": [
         "dashboard.view", "calendar.view", "disciples.view_own", "disciples.edit",
-        "reports.read_all", "reports.like", "forum.view", "forum.post",
+        "disciples.note", "reports.read_all", "reports.like", "forum.view", "forum.post",
     ]},
     {"key": "student", "name": "Ученик", "is_superadmin": False, "is_default": True, "capabilities": [
         "calendar.view", "questions.ask", "reports.write", "forum.view", "forum.post",

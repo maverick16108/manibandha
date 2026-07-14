@@ -11,9 +11,10 @@ from app.models.draft import Draft
 from app.models.role import Role, UserRole
 from app.models.sms_code import SmsCode
 from app.models.forum import ForumTopic, ForumPost
+from app.models.disciple_extra import DiscipleNote, DiscipleFile
 
 __all__ = [
     "User", "Temple", "Disciple", "ChecklistItem", "City", "Country", "Region",
     "Thread", "ThreadMessage", "MessageLike", "ThreadRead", "Event", "Draft", "Role", "UserRole", "SmsCode",
-    "ForumTopic", "ForumPost",
+    "ForumTopic", "ForumPost", "DiscipleNote", "DiscipleFile",
 ]

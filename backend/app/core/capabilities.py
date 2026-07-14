@@ -27,6 +27,8 @@ CAPABILITIES = [
     ("forum.view", "Читать форум", "Форум"),
     ("forum.post", "Писать на форуме", "Форум"),
     ("forum.moderate", "Модерировать форум", "Форум"),
+    ("conference.view", "Участвовать в конференциях", "Конференция"),
+    ("conference.host", "Проводить конференции", "Конференция"),
     ("dictionaries.manage", "Управлять справочниками", "Справочники"),
     ("users.manage", "Управлять пользователями", "Пользователи"),
     ("roles.manage", "Управлять ролями", "Роли"),
@@ -41,14 +43,17 @@ SYSTEM_ROLES = [
         "dashboard.view", "calendar.view", "calendar.manage",
         "disciples.view_all", "disciples.create", "disciples.edit", "disciples.delete", "disciples.approve",
         "disciples.note", "forum.view", "forum.post", "forum.moderate",
+        "conference.view", "conference.host",
         "dictionaries.manage", "users.manage",
     ]},
     {"key": "curator", "name": "Куратор", "is_superadmin": False, "is_default": False, "capabilities": [
         "dashboard.view", "calendar.view", "disciples.view_own", "disciples.edit",
         "disciples.note", "reports.read_all", "reports.like", "forum.view", "forum.post",
+        "conference.view",
     ]},
     {"key": "student", "name": "Ученик", "is_superadmin": False, "is_default": True, "capabilities": [
         "calendar.view", "questions.ask", "reports.write", "forum.view", "forum.post",
+        "conference.view",
     ]},
     {"key": "forum_moderator", "name": "Модератор форума", "is_superadmin": False, "is_default": False, "capabilities": [
         "forum.view", "forum.post", "forum.moderate",

@@ -30,6 +30,11 @@ class Settings(BaseSettings):
     SMSC_ENABLED: bool = False  # в dev по умолчанию выкл — код пишется в лог
     SMS_CODE_TTL_SECONDS: int = 300
 
+    # LiveKit — видеоконференции (self-hosted)
+    LIVEKIT_API_KEY: str = ""
+    LIVEKIT_API_SECRET: str = ""
+    LIVEKIT_URL: str = ""  # wss://... для клиента
+
     @property
     def cors_origins(self) -> list[str]:
         return [o.strip() for o in self.BACKEND_CORS_ORIGINS.split(",") if o.strip()]

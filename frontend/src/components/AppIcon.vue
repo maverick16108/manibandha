@@ -217,6 +217,21 @@ defineProps({
       <path d="m16 9.5 4 4m0-4-4 4" />
     </template>
 
+    <!-- video (конференция) -->
+    <template v-else-if="name === 'video'">
+      <rect x="2.5" y="6" width="12" height="12" rx="2.2" />
+      <path d="M14.5 10.5 21 7v10l-6.5-3.5" />
+    </template>
+
+    <!-- mic-off (микрофон выключен) -->
+    <template v-else-if="name === 'mic-off'">
+      <path d="M9 9v-1a3 3 0 0 1 5.5-1.7" />
+      <path d="M15 11a3 3 0 0 1-4.5 2.6" />
+      <path d="M5.5 11a6.5 6.5 0 0 0 10 5" />
+      <path d="M12 17.5V21m-3 0h6" />
+      <path d="m4 4 16 16" />
+    </template>
+
     <!-- forum (обсуждения) -->
     <template v-else-if="name === 'forum'">
       <path d="M4 5.5h11a1.5 1.5 0 0 1 1.5 1.5v5A1.5 1.5 0 0 1 15 13.5H8l-3 3v-3H4A1.5 1.5 0 0 1 2.5 12V7A1.5 1.5 0 0 1 4 5.5Z" />

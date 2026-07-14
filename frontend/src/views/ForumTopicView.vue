@@ -6,6 +6,7 @@ import { useAuthStore } from '../stores/auth'
 import AppIcon from '../components/AppIcon.vue'
 import AppSkeleton from '../components/AppSkeleton.vue'
 import MarkdownEditor from '../components/MarkdownEditor.vue'
+import EventsFastScroll from '../components/EventsFastScroll.vue'
 import { renderMarkdown } from '../lib/markdown'
 import { extractImageUrls, preloadImages } from '../lib/preload'
 import { usePageTitle } from '../composables/pageTitle'
@@ -50,6 +51,12 @@ async function openCard(userId) {
 }
 function closeCard() { card.value = null }
 function placeLine(c) { return [c.city, c.region, c.country].filter(Boolean).join(', ') }
+
+// точки для быстрого скроллера по датам сообщений
+const feedPoints = computed(() => posts.value.map((p) => ({
+  id: `post-${p.id}`,
+  label: new Date(p.created_at).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }),
+})))
 
 async function load(silent = false) {
   try {
@@ -171,7 +178,8 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="mx-auto max-w-6xl">
+  <div class="mx-auto max-w-6xl lg:flex lg:items-start lg:gap-4">
+    <div class="min-w-0 flex-1">
     <div v-if="loading" class="space-y-4">
       <AppSkeleton w="w-64" h="h-8" />
       <div class="card space-y-3 p-5"><AppSkeleton /><AppSkeleton w="w-4/5" /></div>
@@ -187,7 +195,7 @@ onBeforeUnmount(() => {
       <img v-if="topic.cover_url" :src="topic.cover_url" alt="" class="mb-5 max-h-72 w-full rounded-xl object-cover" />
 
       <div class="space-y-3">
-        <article v-for="p in posts" :key="p.id" data-post :data-post-author="p.author_name || 'Аноним'" class="card p-4 sm:p-5">
+        <article v-for="p in posts" :id="`post-${p.id}`" :key="p.id" data-post :data-post-author="p.author_name || 'Аноним'" class="card scroll-mt-20 p-4 sm:p-5">
           <div class="mb-2 flex items-center gap-3">
             <button class="shrink-0" title="Профиль" @click="openCard(p.author_id)">
               <img v-if="p.author_avatar" :src="p.author_avatar" class="photo-bw h-9 w-9 rounded-full object-cover ring-2 ring-transparent transition hover:ring-saffron-400" />
@@ -246,6 +254,12 @@ onBeforeUnmount(() => {
         </div>
       </div>
     </template>
+    </div>
+
+    <!-- быстрый скроллер по датам сообщений -->
+    <aside v-if="topic && feedPoints.length > 3" class="sticky top-20 hidden h-[calc(100vh-6rem)] w-8 shrink-0 lg:block">
+      <EventsFastScroll :points="feedPoints" />
+    </aside>
 
     <!-- мини-профиль участника -->
     <div v-if="card" class="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/40 p-4" @click.self="closeCard">

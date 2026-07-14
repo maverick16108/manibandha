@@ -13,6 +13,7 @@ const track = ref(null)
 const thumbTop = ref(0)
 const dragging = ref(false)
 const label = ref('')
+const activeIndex = ref(0)
 
 function metrics() {
   const max = document.documentElement.scrollHeight - window.innerHeight
@@ -27,11 +28,13 @@ function updateThumb() {
 }
 function updateLabel() {
   let l = props.points[0]?.label || ''
-  for (const p of props.points) {
+  let idx = 0
+  props.points.forEach((p, i) => {
     const el = document.getElementById(p.id)
-    if (el && el.getBoundingClientRect().top - 90 <= 0) l = p.label
-  }
+    if (el && el.getBoundingClientRect().top - 90 <= 0) { l = p.label; idx = i }
+  })
   label.value = l
+  activeIndex.value = idx
 }
 function onWin() { if (!dragging.value) updateThumb() }
 
@@ -80,10 +83,13 @@ onBeforeUnmount(() => {
          :class="dragging ? 'w-3' : 'w-2 hover:w-3'"
          :style="{ top: (thumbTop + 8) + 'px', height: THUMB + 'px' }"
          @mousedown.prevent="onDown" @touchstart.prevent="onDown"></div>
-    <!-- подпись даты при перетаскивании -->
+    <!-- показатель позиции/всего и подпись при перетаскивании -->
     <transition name="fs">
-      <div v-if="dragging && label" class="pointer-events-none absolute right-full mr-2 whitespace-nowrap rounded-lg bg-ink-900 px-3 py-1 text-sm font-semibold text-white shadow-lg"
-           :style="{ top: (thumbTop + 8) + 'px' }">{{ label }}</div>
+      <div v-if="dragging && points.length" class="pointer-events-none absolute right-full mr-2 whitespace-nowrap rounded-lg bg-ink-900 px-3 py-1.5 text-right text-white shadow-lg"
+           :style="{ top: (thumbTop + 8) + 'px' }">
+        <div class="text-sm font-bold tabular-nums">{{ activeIndex + 1 }} / {{ points.length }}</div>
+        <div v-if="label" class="text-xs text-white/70">{{ label }}</div>
+      </div>
     </transition>
   </div>
 </template>

@@ -41,6 +41,11 @@ class PostCreate(BaseModel):
     body: str
 
 
+class Participant(BaseModel):
+    name: str | None = None
+    avatar: str | None = None
+
+
 class PostOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
@@ -50,11 +55,9 @@ class PostOut(BaseModel):
     body: str
     created_at: datetime
     edit_count: int = 0
-
-
-class Participant(BaseModel):
-    name: str | None = None
-    avatar: str | None = None
+    likes: int = 0
+    liked: bool = False
+    likers: list[Participant] = []
 
 
 class TopicListItem(BaseModel):

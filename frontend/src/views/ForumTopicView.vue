@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import client from '../api/client'
 import { useAuthStore } from '../stores/auth'
@@ -43,13 +43,52 @@ function initials(name) { return (name || '?').trim()[0]?.toUpperCase() || '?' }
 
 async function load(silent = false) {
   try {
-    const { data } = await client.get(`/forum/topics/${id.value}`)
+    // фоновый опрос не накручивает счётчик просмотров
+    const { data } = await client.get(`/forum/topics/${id.value}`, { params: silent ? { count: false } : {} })
     await preloadImages(data.posts.flatMap((p) => extractImageUrls(p.body)))
     topic.value = data
   } finally {
     if (!silent) loading.value = false
   }
 }
+
+async function toggleLike(p) {
+  try {
+    const { data } = await client.post(`/forum/posts/${p.id}/like`)
+    p.likes = data.likes; p.liked = data.liked; p.likers = data.likers
+  } catch { /* игнор */ }
+}
+
+// ── цитирование ──
+function quoteInto(author, text) {
+  const q = `> **${author}**:\n` + String(text).split('\n').map((l) => `> ${l}`).join('\n') + '\n\n'
+  body.value = (body.value ? body.value.replace(/\s*$/, '') + '\n\n' : '') + q
+  nextTick(() => { const ta = document.querySelector('textarea'); if (ta) { ta.focus(); ta.scrollIntoView({ block: 'center' }) } })
+}
+function quotePost(p) {
+  const text = (p.body || '').replace(/@\[audio\]\([^)]*\)/g, '🎤 голосовое').replace(/!\[[^\]]*\]\([^)]*\)/g, '🖼 фото').trim()
+  quoteInto(p.author_name || 'Аноним', text)
+}
+const quoteBar = reactive({ show: false, x: 0, y: 0, text: '', author: '' })
+function onDocMouseUp(e) {
+  if (e.target.closest?.('.quote-float')) return
+  const sel = window.getSelection()
+  const text = sel ? sel.toString().trim() : ''
+  const art = e.target.closest?.('[data-post]')
+  if (!text || !art) { quoteBar.show = false; return }
+  const rect = sel.getRangeAt(0).getBoundingClientRect()
+  quoteBar.text = text
+  quoteBar.author = art.dataset.postAuthor || 'Аноним'
+  quoteBar.x = rect.left + rect.width / 2
+  quoteBar.y = rect.top - 10
+  quoteBar.show = true
+}
+function doQuoteSelection() {
+  quoteInto(quoteBar.author, quoteBar.text)
+  quoteBar.show = false
+  window.getSelection()?.removeAllRanges()
+}
+function hideQuoteBar() { quoteBar.show = false }
 
 async function send() {
   if (editingPost.value) { await saveEdit(); return }
@@ -110,9 +149,15 @@ let poll = null
 onMounted(() => {
   load()
   nowTimer = setInterval(() => { nowTs.value = Date.now() }, 20000)
-  poll = setInterval(() => load(true), 20000)
+  poll = setInterval(() => load(true), 5000) // живой опрос — новые сообщения/лайки видны почти сразу
+  document.addEventListener('mouseup', onDocMouseUp)
+  window.addEventListener('scroll', hideQuoteBar, { passive: true })
 })
-onBeforeUnmount(() => { clearInterval(nowTimer); clearInterval(poll); backTarget.value = null })
+onBeforeUnmount(() => {
+  clearInterval(nowTimer); clearInterval(poll); backTarget.value = null
+  document.removeEventListener('mouseup', onDocMouseUp)
+  window.removeEventListener('scroll', hideQuoteBar)
+})
 </script>
 
 <template>
@@ -132,7 +177,7 @@ onBeforeUnmount(() => { clearInterval(nowTimer); clearInterval(poll); backTarget
       <img v-if="topic.cover_url" :src="topic.cover_url" alt="" class="mb-5 max-h-72 w-full rounded-xl object-cover" />
 
       <div class="space-y-3">
-        <article v-for="p in posts" :key="p.id" data-post class="card p-4 sm:p-5">
+        <article v-for="p in posts" :key="p.id" data-post :data-post-author="p.author_name || 'Аноним'" class="card p-4 sm:p-5">
           <div class="mb-2 flex items-center gap-3">
             <img v-if="p.author_avatar" :src="p.author_avatar" class="photo-bw h-9 w-9 shrink-0 rounded-full object-cover" />
             <span v-else class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-saffron-400 to-saffron-600 text-sm font-semibold text-white">{{ initials(p.author_name) }}</span>
@@ -146,8 +191,34 @@ onBeforeUnmount(() => { clearInterval(nowTimer); clearInterval(poll); backTarget
             </div>
           </div>
           <div class="markdown-body break-words text-ink-800" v-html="renderMarkdown(p.body)"></div>
+
+          <!-- лайки, кто поставил, цитирование -->
+          <div class="mt-2 flex flex-wrap items-center gap-2">
+            <button class="flex items-center gap-1 rounded-full px-2 py-0.5 text-sm transition-colors"
+                    :class="p.liked ? 'text-red-500' : 'text-ink-700/40 hover:bg-parchment-100 hover:text-red-500'"
+                    @click="toggleLike(p)">
+              <span>{{ p.liked ? '❤' : '♡' }}</span><span v-if="p.likes" class="text-xs font-medium">{{ p.likes }}</span>
+            </button>
+            <div v-if="p.likers && p.likers.length" class="flex -space-x-1.5" :title="p.likers.map((l) => l.name).join(', ')">
+              <template v-for="(l, li) in p.likers.slice(0, 8)" :key="li">
+                <img v-if="l.avatar" :src="l.avatar" class="photo-bw h-6 w-6 rounded-full object-cover ring-2 ring-white" :title="l.name" />
+                <span v-else class="flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-br from-saffron-400 to-saffron-600 text-[10px] font-semibold text-white ring-2 ring-white" :title="l.name">{{ initials(l.name) }}</span>
+              </template>
+            </div>
+            <button v-if="auth.can('forum.post')" class="ml-auto flex items-center gap-1 rounded-md px-2 py-0.5 text-xs text-ink-700/50 hover:bg-parchment-100 hover:text-saffron-700" @click="quotePost(p)">
+              <AppIcon name="reply" :size="14" /> Цитировать
+            </button>
+          </div>
         </article>
       </div>
+
+      <!-- плавающая кнопка «Цитировать выделенное» -->
+      <button v-if="quoteBar.show && auth.can('forum.post')"
+              class="quote-float fixed z-50 -translate-x-1/2 -translate-y-full rounded-lg bg-ink-900 px-3 py-1.5 text-sm font-medium text-white shadow-lg"
+              :style="{ left: quoteBar.x + 'px', top: quoteBar.y + 'px' }"
+              @mousedown.prevent @click="doQuoteSelection">
+        Цитировать
+      </button>
 
       <!-- ввод сообщения (тот же интерфейс, что и в чате) -->
       <div v-if="auth.can('forum.post')" class="mt-5">
@@ -170,5 +241,6 @@ onBeforeUnmount(() => { clearInterval(nowTimer); clearInterval(poll); backTarget
 .markdown-body :deep(a) { text-decoration: underline; }
 .markdown-body :deep(ul) { margin: 0.25rem 0; padding-left: 1.25rem; list-style: disc; }
 .markdown-body :deep(ol) { margin: 0.25rem 0; padding-left: 1.35rem; list-style: decimal; }
+.markdown-body :deep(blockquote) { border-left: 3px solid rgba(200,116,42,0.5); background: rgba(200,116,42,0.06); padding: 0.4rem 0.75rem; margin: 0.4rem 0; border-radius: 0 0.4rem 0.4rem 0; color: rgba(60,50,45,0.85); }
 .markdown-body :deep(img) { max-height: 22rem; border-radius: 0.5rem; margin: 0.35rem 0; }
 </style>

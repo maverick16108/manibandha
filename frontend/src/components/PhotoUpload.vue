@@ -11,19 +11,20 @@ const uploaded = ref(props.modelValue ? [props.modelValue] : [])
 const uploading = ref(false)
 const error = ref('')
 const input = ref(null)
+const dragOver = ref(false)
 
 watch(() => props.modelValue, (v) => {
   if (v && !uploaded.value.includes(v)) uploaded.value.unshift(v)
 })
 
-async function onFiles(e) {
-  const files = Array.from(e.target.files || [])
-  if (!files.length) return
+async function uploadFiles(files) {
+  const imgs = Array.from(files || []).filter((f) => f.type.startsWith('image/'))
+  if (!imgs.length) return
   error.value = ''
   uploading.value = true
   try {
     const fd = new FormData()
-    files.forEach((f) => fd.append('files', f))
+    imgs.forEach((f) => fd.append('files', f))
     const { data } = await client.post('/uploads', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
     uploaded.value.push(...data.urls)
     if (!props.modelValue && data.urls[0]) emit('update:modelValue', data.urls[0])
@@ -34,6 +35,8 @@ async function onFiles(e) {
     if (input.value) input.value.value = ''
   }
 }
+function onFiles(e) { uploadFiles(e.target.files) }
+function onDrop(e) { dragOver.value = false; uploadFiles(e.dataTransfer?.files) }
 
 function setMain(url) { emit('update:modelValue', url) }
 function removeOne(url) {
@@ -56,15 +59,18 @@ function removeOne(url) {
                 @click="removeOne(url)"><AppIcon name="close" :size="12" /></button>
       </div>
 
-      <!-- upload button -->
+      <!-- upload button (клик или перетаскивание файла) -->
       <button type="button" :disabled="uploading" @click="input.click()"
-        class="flex h-20 w-20 flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed border-parchment-300 text-ink-700/50 transition hover:border-saffron-400 hover:text-saffron-600">
+        @dragover.prevent="dragOver = true" @dragleave="dragOver = false" @drop.prevent="onDrop"
+        class="flex h-20 w-20 flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed text-ink-700/50 transition hover:border-saffron-400 hover:text-saffron-600"
+        :class="dragOver ? 'border-saffron-500 bg-saffron-500/10 text-saffron-700' : 'border-parchment-300'">
         <AppIcon :name="uploading ? 'lotus' : 'download'" :size="20" :class="uploading && 'animate-pulse rotate-180'" />
-        <span class="text-[11px]">{{ uploading ? 'Загрузка…' : 'Загрузить' }}</span>
+        <span class="text-[11px]">{{ uploading ? 'Загрузка…' : (dragOver ? 'Отпустите' : 'Загрузить') }}</span>
       </button>
       <input ref="input" type="file" accept="image/*" multiple class="hidden" @change="onFiles" />
     </div>
-    <p v-if="uploaded.length > 1" class="mt-2 text-xs text-ink-700/50">Нажмите на фото, чтобы сделать его основным</p>
+    <p class="mt-2 text-xs text-ink-700/40">Нажмите или перетащите фото в область загрузки</p>
+    <p v-if="uploaded.length > 1" class="mt-1 text-xs text-ink-700/50">Нажмите на фото, чтобы сделать его основным</p>
     <p v-if="error" class="mt-2 text-sm text-red-600">{{ error }}</p>
   </div>
 </template>

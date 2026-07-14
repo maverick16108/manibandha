@@ -179,17 +179,17 @@ async function removeSection(s) {
       </div>
       <div v-if="!sections.length" class="card p-10 text-center text-ink-700/50">Разделов пока нет</div>
       <div v-else class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <div v-for="s in sections" :key="s.id" class="card overflow-hidden">
+        <div v-for="s in sections" :key="s.id" class="card cursor-pointer overflow-hidden transition hover:border-saffron-400/50 hover:shadow" @click="pickSection(s.id)">
           <img v-if="s.cover_url" :src="s.cover_url" alt="" class="h-28 w-full object-cover" />
           <div class="p-4">
             <div class="flex items-start justify-between gap-2">
-              <button class="flex min-w-0 items-center gap-2 text-left" @click="pickSection(s.id)">
+              <div class="flex min-w-0 items-center gap-2">
                 <span class="h-3 w-3 shrink-0 rounded-sm" :style="{ background: s.color }"></span>
-                <span class="truncate font-semibold text-ink-900 hover:text-saffron-700">{{ s.title }}</span>
-              </button>
+                <span class="truncate font-semibold text-ink-900">{{ s.title }}</span>
+              </div>
               <div v-if="s.can_edit" class="flex shrink-0 items-center gap-1">
-                <button class="text-ink-700/40 hover:text-saffron-700" title="Изменить" @click="openEditSection(s)"><AppIcon name="edit" :size="15" /></button>
-                <button class="text-ink-700/30 hover:text-red-600" title="Удалить" @click="removeSection(s)"><AppIcon name="trash" :size="15" /></button>
+                <button class="text-ink-700/40 hover:text-saffron-700" title="Изменить" @click.stop="openEditSection(s)"><AppIcon name="edit" :size="15" /></button>
+                <button class="text-ink-700/30 hover:text-red-600" title="Удалить" @click.stop="removeSection(s)"><AppIcon name="trash" :size="15" /></button>
               </div>
             </div>
             <p v-if="s.description" class="mt-1 text-sm text-ink-700/60">{{ s.description }}</p>

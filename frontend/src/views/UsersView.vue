@@ -18,6 +18,17 @@ function focusName() { nextTick(() => nameInput.value?.focus()) }
 
 const users = ref([])
 const roles = ref([]) // [{id, name, ...}] — динамические роли для назначения
+const search = ref('')
+const roleFilter = ref('')
+const roleFilterOptions = computed(() => [{ value: '', label: 'Все роли' }, ...roleOptions])
+const filteredUsers = computed(() => {
+  const q = search.value.trim().toLowerCase()
+  return users.value.filter((u) => {
+    if (roleFilter.value && u.role !== roleFilter.value) return false
+    if (!q) return true
+    return [u.full_name, u.email, u.phone].some((f) => (f || '').toString().toLowerCase().includes(q))
+  })
+})
 const showForm = ref(false)
 const editing = ref(null)
 const error = ref('')
@@ -107,8 +118,13 @@ onMounted(load)
 
 <template>
   <div class="mx-auto max-w-6xl">
-    <div class="mb-6 flex items-center justify-between">
-      <button class="btn-primary" @click="startNew">+ Добавить</button>
+    <div class="mb-4 flex flex-wrap items-center gap-3">
+      <button class="btn-primary shrink-0" @click="startNew">+ Добавить</button>
+      <div class="relative min-w-0 flex-1 sm:max-w-xs">
+        <AppIcon name="disciples" :size="16" class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-700/40" />
+        <input v-model="search" class="input pl-9" placeholder="Поиск по имени, email, телефону" />
+      </div>
+      <div class="w-44 shrink-0"><AppSelect v-model="roleFilter" :options="roleFilterOptions" /></div>
     </div>
 
     <div class="card divide-y divide-parchment-100">
@@ -118,7 +134,8 @@ onMounted(load)
           <AppSkeleton w="w-20" h="h-8" />
         </div>
       </template>
-      <div v-for="u in users" :key="u.id" v-show="!loading" class="flex items-center justify-between p-4">
+      <div v-if="!loading && !filteredUsers.length" class="p-8 text-center text-ink-700/50">Никого не найдено</div>
+      <div v-for="u in filteredUsers" :key="u.id" v-show="!loading" class="flex items-center justify-between p-4">
         <div>
           <div class="font-medium text-ink-900">{{ u.full_name }} <span v-if="!u.is_active" class="badge bg-red-100 text-red-700">отключён</span></div>
           <div class="text-sm text-ink-700/60">{{ u.email }} · {{ ROLE_LABELS[u.role] }}</div>

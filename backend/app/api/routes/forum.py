@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.api.deps import get_current_user, require_cap
 from app.core.database import get_db
-from app.models import ForumPost, ForumSection, ForumTopic, ForumTopicRead, User
+from app.models import ForumPost, ForumPostLike, ForumSection, ForumTopic, ForumTopicRead, User
 from app.schemas.forum import (
     Participant, PostCreate, PostOut, SectionCreate, SectionOut, SectionUpdate, TopicCreate, TopicListItem, TopicOut,
 )
@@ -25,12 +25,17 @@ def _within_edit_window(p: ForumPost) -> bool:
     return (datetime.now(timezone.utc) - created) <= EDIT_WINDOW
 
 
-def _post_out(p: ForumPost) -> PostOut:
+def _post_out(p: ForumPost, user_id: int | None = None) -> PostOut:
+    likers = [Participant(name=l.user.full_name if l.user else None,
+                          avatar=l.user.avatar_url if l.user else None) for l in (p.likes or [])]
     return PostOut(
         id=p.id, author_id=p.author_id,
         author_name=p.author.full_name if p.author else None,
         author_avatar=p.author.avatar_url if p.author else None,
         body=p.body, created_at=p.created_at, edit_count=p.edit_count or 0,
+        likes=len(p.likes or []),
+        liked=any(l.user_id == user_id for l in (p.likes or [])),
+        likers=likers,
     )
 
 
@@ -153,14 +158,14 @@ def list_topics(section_id: int | None = Query(None), db: Session = Depends(get_
     return out
 
 
-def _topic_out(t: ForumTopic) -> TopicOut:
+def _topic_out(t: ForumTopic, user_id: int | None = None) -> TopicOut:
     return TopicOut(
         id=t.id, title=t.title, cover_url=t.cover_url, section_id=t.section_id,
         section_title=t.section.title if t.section else None,
         section_color=t.section.color if t.section else "#c8742a",
         author_name=t.author.full_name if t.author else None,
         pinned=t.pinned, created_at=t.created_at,
-        posts=[_post_out(p) for p in t.posts],
+        posts=[_post_out(p, user_id) for p in t.posts],
     )
 
 
@@ -181,19 +186,21 @@ def create_topic(payload: TopicCreate, db: Session = Depends(get_db), user: User
     db.add(ForumPost(topic_id=topic.id, author_id=user.id, body=body))
     db.commit()
     db.refresh(topic)
-    return _topic_out(topic)
+    return _topic_out(topic, user.id)
 
 
 @router.get("/topics/{topic_id}", response_model=TopicOut)
-def get_topic(topic_id: int, db: Session = Depends(get_db), user: User = Depends(require_cap("forum.view"))):
+def get_topic(topic_id: int, count: bool = Query(True), db: Session = Depends(get_db), user: User = Depends(require_cap("forum.view"))):
     t = db.query(ForumTopic).options(
         joinedload(ForumTopic.posts).joinedload(ForumPost.author),
+        joinedload(ForumTopic.posts).joinedload(ForumPost.likes).joinedload(ForumPostLike.user),
         joinedload(ForumTopic.section),
         joinedload(ForumTopic.author),
     ).filter(ForumTopic.id == topic_id).first()
     if not t:
         raise HTTPException(status_code=404, detail="Тема не найдена")
-    t.views = (t.views or 0) + 1
+    if count:
+        t.views = (t.views or 0) + 1  # только реальное открытие, не фоновый опрос
     # отметить прочитанной
     r = db.query(ForumTopicRead).filter(ForumTopicRead.topic_id == topic_id, ForumTopicRead.user_id == user.id).first()
     if r:
@@ -202,7 +209,7 @@ def get_topic(topic_id: int, db: Session = Depends(get_db), user: User = Depends
         db.add(ForumTopicRead(topic_id=topic_id, user_id=user.id))
     db.commit()
     db.refresh(t)
-    return _topic_out(t)
+    return _topic_out(t, user.id)
 
 
 @router.post("/topics/{topic_id}/posts", response_model=PostOut, status_code=status.HTTP_201_CREATED)
@@ -225,7 +232,7 @@ def add_post(topic_id: int, payload: PostCreate, db: Session = Depends(get_db), 
     else:
         db.add(ForumTopicRead(topic_id=topic_id, user_id=user.id))
     db.commit()
-    return _post_out(post)
+    return _post_out(post, user.id)
 
 
 def _own_or_moderator(db: Session, user: User, post: ForumPost, need_window: bool):
@@ -251,7 +258,29 @@ def edit_post(post_id: int, payload: PostCreate, db: Session = Depends(get_db), 
     post.edit_count = (post.edit_count or 0) + 1
     db.commit()
     db.refresh(post)
-    return _post_out(post)
+    return _post_out(post, user.id)
+
+
+@router.post("/posts/{post_id}/like")
+def toggle_like(post_id: int, db: Session = Depends(get_db), user: User = Depends(require_cap("forum.view"))):
+    post = db.get(ForumPost, post_id)
+    if not post:
+        raise HTTPException(status_code=404, detail="Сообщение не найдено")
+    existing = db.query(ForumPostLike).filter(ForumPostLike.post_id == post_id, ForumPostLike.user_id == user.id).first()
+    if existing:
+        db.delete(existing)
+    else:
+        db.add(ForumPostLike(post_id=post_id, user_id=user.id))
+    db.commit()
+    likes = (
+        db.query(ForumPostLike).options(joinedload(ForumPostLike.user))
+        .filter(ForumPostLike.post_id == post_id).all()
+    )
+    return {
+        "likes": len(likes),
+        "liked": any(l.user_id == user.id for l in likes),
+        "likers": [{"name": l.user.full_name if l.user else None, "avatar": l.user.avatar_url if l.user else None} for l in likes],
+    }
 
 
 @router.delete("/posts/{post_id}", status_code=status.HTTP_204_NO_CONTENT)

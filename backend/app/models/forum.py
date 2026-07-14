@@ -60,6 +60,22 @@ class ForumPost(Base):
 
     topic = relationship("ForumTopic", back_populates="posts")
     author = relationship("User")
+    likes = relationship("ForumPostLike", back_populates="post", cascade="all, delete-orphan")
+
+
+class ForumPostLike(Base):
+    """Лайк на сообщение форума."""
+
+    __tablename__ = "forum_post_likes"
+    __table_args__ = (UniqueConstraint("post_id", "user_id", name="uq_forum_post_like"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    post_id: Mapped[int] = mapped_column(ForeignKey("forum_posts.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    post = relationship("ForumPost", back_populates="likes")
+    user = relationship("User")
 
 
 class ForumTopicRead(Base):

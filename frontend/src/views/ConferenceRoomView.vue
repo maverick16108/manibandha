@@ -1,7 +1,7 @@
 <script setup>
-import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Room, RoomEvent, Track, DataPacket_Kind } from 'livekit-client'
+import { Room, RoomEvent, Track } from 'livekit-client'
 import client from '../api/client'
 import AppIcon from '../components/AppIcon.vue'
 import { usePageTitle } from '../composables/pageTitle'
@@ -45,10 +45,15 @@ function refresh() {
   const add = (p, isLocal) => {
     const cam = p.getTrackPublication(Track.Source.Camera)
     const mic = p.getTrackPublication(Track.Source.Microphone)
+    const perm = p.permissions
+    const srcs = perm?.canPublishSources || []
+    const allowAll = !!perm?.canPublish && srcs.length === 0
     list.push({
       identity: p.identity, name: p.name || 'Гость', isLocal,
       camOn: !!(cam && cam.track && !cam.isMuted),
       micOn: !!(mic && mic.track && !mic.isMuted),
+      allowAudio: !!perm?.canPublish && (allowAll || srcs.includes(Track.Source.Microphone)),
+      allowVideo: !!perm?.canPublish && (allowAll || srcs.includes(Track.Source.Camera)),
       speaking: p.isSpeaking,
     })
   }
@@ -92,6 +97,9 @@ function onData(payload, participant) {
     if (msg.type === 'hand' && participant) {
       if (msg.raised) raised[participant.identity] = true
       else delete raised[participant.identity]
+    } else if (msg.type === 'chat') {
+      messages.value.push({ name: participant?.name || 'Гость', text: msg.text })
+      if (chatOpen.value) scrollChat(); else unread.value += 1
     }
   } catch { /* ignore */ }
 }
@@ -113,6 +121,7 @@ async function connect() {
       .on(RoomEvent.LocalTrackPublished, refresh)
       .on(RoomEvent.LocalTrackUnpublished, refresh)
       .on(RoomEvent.ActiveSpeakersChanged, (speakers) => { activeSpeaker.value = speakers[0]?.identity || activeSpeaker.value; refresh() })
+      .on(RoomEvent.ParticipantPermissionsChanged, refresh)
       .on(RoomEvent.DataReceived, onData)
       .on(RoomEvent.Disconnected, () => { if (state.value === 'connected') leave() })
     await room.connect(data.url, data.token)
@@ -158,11 +167,40 @@ async function toggleHand() {
   } catch { /* ignore */ }
 }
 
-// ── модерация (для ведущего) ──
-async function moderate(identity, kind, muted) {
-  try { await client.post(`/conferences/${id}/mute`, { identity, kind, muted }) } catch (e) { alert(e.response?.data?.detail || 'Не удалось') }
+// ── модерация: разрешить/запретить публикацию ──
+async function permit(identity, kind, allow, exceptId) {
+  try { await client.post(`/conferences/${id}/permit`, { identity, kind, allow, except: exceptId || null }) }
+  catch (e) { alert(e.response?.data?.detail || 'Не удалось') }
 }
 function pinTile(identity) { pinnedId.value = pinnedId.value === identity ? null : identity }
+
+// ── полный экран ──
+const rootEl = ref(null)
+const isFs = ref(false)
+function toggleFullscreen() {
+  const el = rootEl.value
+  if (!document.fullscreenElement) { el?.requestFullscreen?.().catch(() => {}); isFs.value = true }
+  else { document.exitFullscreen?.(); isFs.value = false }
+}
+
+// ── чат ──
+const chatOpen = ref(false)
+const messages = ref([])
+const chatInput = ref('')
+const unread = ref(0)
+function scrollChat() { nextTick(() => { const el = document.getElementById('conf-chat-scroll'); if (el) el.scrollTop = el.scrollHeight }) }
+function sendChat() {
+  const text = chatInput.value.trim()
+  if (!text || !room) return
+  try { room.localParticipant.publishData(new TextEncoder().encode(JSON.stringify({ type: 'chat', text })), { reliable: true }) } catch { /* ignore */ }
+  messages.value.push({ name: 'Вы', text, self: true })
+  chatInput.value = ''
+  scrollChat()
+}
+function openChat() { chatOpen.value = true; unread.value = 0; scrollChat() }
+
+// переприкрепить видео при смене раскладки (иначе своё видео пропадает)
+watch([viewMode, pinnedId, screenSharer, () => tiles.value.length], () => nextTick(attachAll))
 
 function leave() {
   try { room?.disconnect() } catch { /* ignore */ }
@@ -186,7 +224,7 @@ onBeforeUnmount(() => { try { room?.disconnect() } catch { /* ignore */ } })
 </script>
 
 <template>
-  <div class="mx-auto flex h-[calc(100dvh-4rem)] max-w-6xl flex-col -mt-4 -mb-4 sm:-mt-6 sm:-mb-6 lg:-mt-8 lg:-mb-8">
+  <div ref="rootEl" class="relative mx-auto flex h-[calc(100dvh-4rem)] max-w-6xl flex-col bg-parchment-100 -mt-4 -mb-4 sm:-mt-6 sm:-mb-6 lg:-mt-8 lg:-mb-8">
     <div v-if="state === 'connecting'" class="flex flex-1 items-center justify-center text-ink-700/60">
       <div class="text-center"><AppIcon name="video" :size="40" class="mx-auto mb-3 animate-pulse text-saffron-500" />Подключение…</div>
     </div>
@@ -196,10 +234,17 @@ onBeforeUnmount(() => { try { room?.disconnect() } catch { /* ignore */ } })
 
     <template v-else>
       <!-- панель ведущего -->
-      <div v-if="isHost" class="mb-2 flex flex-wrap items-center gap-2 pt-3 text-sm">
-        <span class="font-medium text-ink-700/60">Модерация:</span>
-        <button class="rounded-md border border-parchment-300 px-2.5 py-1 text-ink-700 hover:bg-parchment-100" @click="moderate('all','audio',true)">Выкл. звук всем</button>
-        <button class="rounded-md border border-parchment-300 px-2.5 py-1 text-ink-700 hover:bg-parchment-100" @click="moderate('all','video',true)">Выкл. видео всем</button>
+      <div v-if="isHost" class="mb-2 flex flex-wrap items-center gap-x-3 gap-y-2 pt-3 text-sm">
+        <span class="inline-flex items-center gap-1">
+          <span class="text-ink-700/50">Звук всем:</span>
+          <button class="rounded-md border border-parchment-300 px-2 py-1 text-ink-700 hover:bg-parchment-100" @click="permit('all','audio',false)">выкл</button>
+          <button class="rounded-md border border-parchment-300 px-2 py-1 text-ink-700 hover:bg-parchment-100" @click="permit('all','audio',true)">вкл</button>
+        </span>
+        <span class="inline-flex items-center gap-1">
+          <span class="text-ink-700/50">Видео всем:</span>
+          <button class="rounded-md border border-parchment-300 px-2 py-1 text-ink-700 hover:bg-parchment-100" @click="permit('all','video',false)">выкл</button>
+          <button class="rounded-md border border-parchment-300 px-2 py-1 text-ink-700 hover:bg-parchment-100" @click="permit('all','video',true)">вкл</button>
+        </span>
         <div class="ml-auto flex gap-1">
           <button class="rounded-md px-2.5 py-1 transition" :class="viewMode==='grid' ? 'bg-saffron-500 text-white' : 'text-ink-700 hover:bg-parchment-100'" @click="viewMode='grid'; pinnedId=null">Сетка</button>
           <button class="rounded-md px-2.5 py-1 transition" :class="viewMode==='speaker' ? 'bg-saffron-500 text-white' : 'text-ink-700 hover:bg-parchment-100'" @click="viewMode='speaker'; pinnedId=null">Активный спикер</button>
@@ -246,8 +291,9 @@ onBeforeUnmount(() => { try { room?.disconnect() } catch { /* ignore */ } })
           <div class="absolute right-1.5 top-1.5 flex gap-1 opacity-0 transition group-hover:opacity-100">
             <button class="rounded-md bg-black/50 p-1 text-white hover:bg-black/70" :title="pinnedId===t.identity ? 'Открепить' : 'На весь экран'" @click="pinTile(t.identity)"><AppIcon name="pin" :size="14" /></button>
             <template v-if="isHost && !t.isLocal">
-              <button class="rounded-md bg-black/50 p-1 text-white hover:bg-black/70" :title="t.micOn ? 'Выкл. звук' : 'Вкл. звук'" @click="moderate(t.identity,'audio',t.micOn)"><AppIcon :name="t.micOn ? 'volume' : 'mic-off'" :size="14" /></button>
-              <button class="rounded-md bg-black/50 p-1 text-white hover:bg-black/70" :title="t.camOn ? 'Выкл. видео' : 'Вкл. видео'" @click="moderate(t.identity,'video',t.camOn)"><AppIcon name="video" :size="14" /></button>
+              <button class="rounded-md p-1 text-white hover:bg-black/70" :class="t.allowAudio ? 'bg-black/50' : 'bg-red-500/80'" :title="t.allowAudio ? 'Запретить звук' : 'Разрешить звук'" @click.stop="permit(t.identity,'audio',!t.allowAudio)"><AppIcon :name="t.allowAudio ? 'volume' : 'mic-off'" :size="14" /></button>
+              <button class="rounded-md p-1 text-white hover:bg-black/70" :class="t.allowVideo ? 'bg-black/50' : 'bg-red-500/80'" :title="t.allowVideo ? 'Запретить видео' : 'Разрешить видео'" @click.stop="permit(t.identity,'video',!t.allowVideo)"><AppIcon name="video" :size="14" /></button>
+              <button class="rounded-md bg-black/50 px-1.5 py-1 text-[11px] font-semibold text-white hover:bg-black/70" title="Оставить говорить только его (заглушить остальных)" @click.stop="permit('all','audio',false, t.identity)">1×</button>
             </template>
           </div>
         </div>
@@ -263,7 +309,31 @@ onBeforeUnmount(() => { try { room?.disconnect() } catch { /* ignore */ } })
           <button class="hidden h-11 w-11 items-center justify-center rounded-full transition sm:flex" :class="screenOn ? 'bg-saffron-500 text-white' : 'bg-parchment-200 text-ink-800 hover:bg-parchment-300'" title="Показать экран" @click="toggleScreen"><AppIcon name="screen" :size="20" /></button>
         </template>
         <button class="flex h-11 w-11 items-center justify-center rounded-full text-xl transition" :class="handUp ? 'bg-saffron-500 text-white' : 'bg-parchment-200 hover:bg-parchment-300'" title="Поднять руку" @click="toggleHand">✋</button>
+        <button class="relative flex h-11 w-11 items-center justify-center rounded-full bg-parchment-200 text-ink-800 transition hover:bg-parchment-300" title="Чат" @click="chatOpen ? (chatOpen=false) : openChat()">
+          <AppIcon name="chat" :size="20" />
+          <span v-if="unread" class="absolute -right-1 -top-1 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-red-500 px-1 text-xs font-semibold text-white">{{ unread }}</span>
+        </button>
+        <button class="hidden h-11 w-11 items-center justify-center rounded-full bg-parchment-200 text-ink-800 transition hover:bg-parchment-300 sm:flex" title="Во весь экран" @click="toggleFullscreen"><AppIcon name="screen" :size="20" /></button>
         <button class="flex h-11 items-center gap-2 rounded-full bg-red-500 px-5 text-white transition hover:bg-red-600" title="Выйти" @click="leave"><AppIcon name="logout" :size="18" /> Выйти</button>
+      </div>
+
+      <!-- чат -->
+      <div v-if="chatOpen" class="absolute inset-y-0 right-0 z-30 flex w-full flex-col border-l border-parchment-200 bg-white shadow-xl sm:w-80">
+        <div class="flex items-center justify-between border-b border-parchment-200 px-4 py-3">
+          <span class="font-medium text-ink-900">Чат конференции</span>
+          <button class="rounded-full p-1 text-ink-700/50 hover:bg-parchment-100" @click="chatOpen=false"><AppIcon name="close" :size="18" /></button>
+        </div>
+        <div id="conf-chat-scroll" class="flex-1 space-y-2 overflow-y-auto p-4">
+          <div v-if="!messages.length" class="text-center text-sm text-ink-700/50">Сообщений пока нет</div>
+          <div v-for="(m, mi) in messages" :key="mi" class="flex flex-col" :class="m.self ? 'items-end' : 'items-start'">
+            <span class="text-xs text-ink-700/50">{{ m.name }}</span>
+            <span class="max-w-[85%] break-words rounded-2xl px-3 py-1.5 text-sm" :class="m.self ? 'bg-saffron-500 text-white' : 'bg-parchment-100 text-ink-800'">{{ m.text }}</span>
+          </div>
+        </div>
+        <div class="flex items-center gap-2 border-t border-parchment-200 p-3">
+          <input v-model="chatInput" class="input flex-1" placeholder="Сообщение…" @keydown.enter="sendChat" />
+          <button class="btn-primary" :disabled="!chatInput.trim()" @click="sendChat">→</button>
+        </div>
       </div>
     </template>
   </div>

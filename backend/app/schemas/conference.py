@@ -8,6 +8,8 @@ class ConferenceCreate(BaseModel):
     description: str | None = None
     mode: str = "interactive"  # interactive | broadcast
     scheduled_at: datetime | None = None
+    mic_allowed: bool = True
+    cam_allowed: bool = True
 
 
 class ConferenceUpdate(BaseModel):
@@ -23,6 +25,8 @@ class ConferenceOut(BaseModel):
     description: str | None = None
     mode: str
     status: str
+    mic_allowed: bool = True
+    cam_allowed: bool = True
     host_id: int | None = None
     host_name: str | None = None
     can_host: bool = False

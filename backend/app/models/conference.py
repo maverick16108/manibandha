@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, String, Text, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -15,6 +15,9 @@ class Conference(Base):
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     mode: Mapped[str] = mapped_column(String(20), default="interactive", server_default="interactive", nullable=False)  # interactive | broadcast
+    # разрешено ли участникам (не ведущим) по умолчанию включать микрофон/камеру
+    mic_allowed: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true", nullable=False)
+    cam_allowed: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true", nullable=False)
     room: Mapped[str] = mapped_column(String(80), nullable=False, unique=True, index=True)
     status: Mapped[str] = mapped_column(String(20), default="scheduled", server_default="scheduled", nullable=False, index=True)  # scheduled | live | ended
     host_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)

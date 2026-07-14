@@ -19,7 +19,7 @@ const items = ref([])
 const loading = ref(true)
 
 const showForm = ref(false)
-const form = ref({ title: '', description: '', mode: 'interactive' })
+const form = ref({ title: '', description: '', mode: 'interactive', mic_allowed: true, cam_allowed: true })
 const schedDate = ref('')   // YYYY-MM-DD
 const schedHour = ref(19)
 const schedMin = ref(0)
@@ -47,7 +47,7 @@ function modeLabel(m) { return m === 'broadcast' ? 'Трансляция' : 'В�
 
 function resetForm() {
   showForm.value = false
-  form.value = { title: '', description: '', mode: 'interactive' }
+  form.value = { title: '', description: '', mode: 'interactive', mic_allowed: true, cam_allowed: true }
   schedDate.value = ''; schedHour.value = 19; schedMin.value = 0
 }
 // enter=true — начать сейчас и войти; enter=false — запланировать на дату
@@ -55,7 +55,7 @@ async function submit(enter) {
   if (!form.value.title.trim()) return
   saving.value = true
   try {
-    const payload = { title: form.value.title.trim(), description: form.value.description.trim() || null, mode: form.value.mode }
+    const payload = { title: form.value.title.trim(), description: form.value.description.trim() || null, mode: form.value.mode, mic_allowed: form.value.mic_allowed, cam_allowed: form.value.cam_allowed }
     if (!enter && schedDate.value) {
       const hh = String(schedHour.value).padStart(2, '0')
       const mm = String(schedMin.value).padStart(2, '0')
@@ -91,6 +91,11 @@ async function remove(c) {
       <div class="flex flex-wrap items-center gap-4">
         <label class="flex items-center gap-2 text-sm"><input type="radio" value="interactive" v-model="form.mode" /> Встреча (все с камерой)</label>
         <label class="flex items-center gap-2 text-sm"><input type="radio" value="broadcast" v-model="form.mode" /> Трансляция (вещает ведущий)</label>
+      </div>
+      <div v-if="form.mode === 'interactive'" class="flex flex-wrap items-center gap-4 rounded-lg bg-parchment-100 px-3 py-2">
+        <span class="text-sm text-ink-700/60">Участникам по умолчанию:</span>
+        <label class="flex items-center gap-2 text-sm"><input type="checkbox" v-model="form.mic_allowed" /> микрофон</label>
+        <label class="flex items-center gap-2 text-sm"><input type="checkbox" v-model="form.cam_allowed" /> камера</label>
       </div>
       <div>
         <label class="label">Запланировать (необязательно)</label>

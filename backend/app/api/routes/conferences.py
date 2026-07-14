@@ -38,29 +38,23 @@ def _room_service(method: str, body: dict, room: str) -> dict:
         return json.loads(r.read().decode() or "{}")
 
 
-def _mint_token(identity: str, name: str, room: str, can_publish: bool, ttl: int = 6 * 3600) -> str:
-    """LiveKit access token (JWT, HS256)."""
+def _mint_token(identity: str, name: str, room: str, can_publish: bool, sources: list | None = None, ttl: int = 6 * 3600) -> str:
+    """LiveKit access token (JWT, HS256). sources ограничивает, что можно публиковать."""
     now = int(time.time())
-    claims = {
-        "iss": settings.LIVEKIT_API_KEY,
-        "sub": identity,
-        "name": name,
-        "nbf": now - 5,
-        "exp": now + ttl,
-        "video": {
-            "room": room,
-            "roomJoin": True,
-            "canPublish": can_publish,
-            "canSubscribe": True,
-            "canPublishData": True,
-        },
+    video = {
+        "room": room, "roomJoin": True, "canPublish": can_publish,
+        "canSubscribe": True, "canPublishData": True,
     }
+    if sources is not None:
+        video["canPublishSources"] = sources
+    claims = {"iss": settings.LIVEKIT_API_KEY, "sub": identity, "name": name, "nbf": now - 5, "exp": now + ttl, "video": video}
     return jwt.encode(claims, settings.LIVEKIT_API_SECRET, algorithm="HS256")
 
 
 def _out(c: Conference, user: User, is_host_cap: bool) -> ConferenceOut:
     return ConferenceOut(
         id=c.id, title=c.title, description=c.description, mode=c.mode, status=c.status,
+        mic_allowed=c.mic_allowed, cam_allowed=c.cam_allowed,
         host_id=c.host_id, host_name=c.host.full_name if c.host else None,
         can_host=(c.host_id == user.id or is_host_cap),
         scheduled_at=c.scheduled_at, started_at=c.started_at, ended_at=c.ended_at, created_at=c.created_at,
@@ -89,6 +83,7 @@ def create_conference(payload: ConferenceCreate, db: Session = Depends(get_db), 
         title=title[:255], description=(payload.description or "").strip() or None,
         mode=mode, room=f"conf_{uuid.uuid4().hex[:20]}", host_id=user.id,
         scheduled_at=payload.scheduled_at, status="scheduled",
+        mic_allowed=bool(payload.mic_allowed), cam_allowed=bool(payload.cam_allowed),
     )
     db.add(c)
     db.commit()
@@ -159,32 +154,80 @@ def join_conference(conf_id: int, db: Session = Depends(get_db), user: User = De
         c.started_at = func.now()
         db.commit()
     identity = f"u{user.id}"
-    token = _mint_token(identity, user.full_name or "Гость", c.room, can_publish)
+    # источники публикации: ведущий — всё; участник — по флагам конференции (трансляция — только ведущий)
+    if is_host:
+        sources = None
+    else:
+        sources = []
+        if c.mode != "broadcast":
+            if c.mic_allowed:
+                sources.append("MICROPHONE")
+            if c.cam_allowed:
+                sources += ["CAMERA", "SCREEN_SHARE"]
+        can_publish = len(sources) > 0
+    token = _mint_token(identity, user.full_name or "Гость", c.room, can_publish, sources)
     return JoinOut(url=settings.LIVEKIT_URL, token=token, room=c.room, mode=c.mode,
                    can_publish=can_publish, is_host=is_host, identity=identity)
 
 
-@router.post("/{conf_id}/mute")
-def moderate_mute(conf_id: int, payload: dict = Body(...), db: Session = Depends(get_db), user: User = Depends(require_cap("conference.view"))):
-    """Модерация: выключить/включить видео или звук у одного участника или у всех."""
+_SRC = {"audio": ["MICROPHONE"], "video": ["CAMERA", "SCREEN_SHARE"]}
+
+
+def _apply_perm(room: str, p: dict, kind: str, allow: bool):
+    """Выдать/забрать право публикации источника у участника (+ заглушить при запрете)."""
+    perm = p.get("permission") or {}
+    cur = set(perm.get("canPublishSources") or perm.get("can_publish_sources") or [])
+    if not cur and (perm.get("canPublish") or perm.get("can_publish")):
+        cur = {"CAMERA", "MICROPHONE", "SCREEN_SHARE"}
+    for s in _SRC[kind]:
+        cur.add(s) if allow else cur.discard(s)
+    _room_service("UpdateParticipant", {
+        "room": room, "identity": p["identity"],
+        "permission": {"canPublish": len(cur) > 0, "canPublishSources": sorted(cur), "canSubscribe": True, "canPublishData": True},
+    }, room)
+    if not allow:
+        src = "MICROPHONE" if kind == "audio" else "CAMERA"
+        typ = "AUDIO" if kind == "audio" else "VIDEO"
+        for t in p.get("tracks", []):
+            if t.get("source") == src or (t.get("source") in (None, "UNKNOWN") and t.get("type") == typ):
+                try:
+                    _room_service("MutePublishedTrack", {"room": room, "identity": p["identity"], "track_sid": t["sid"], "muted": True}, room)
+                except Exception:  # noqa: BLE001
+                    pass
+
+
+@router.post("/{conf_id}/permit")
+def moderate_permit(conf_id: int, payload: dict = Body(...), db: Session = Depends(get_db), user: User = Depends(require_cap("conference.view"))):
+    """Разрешить/запретить участникам звук или видео: одному, всем, или всем кроме одного."""
     c = db.get(Conference, conf_id)
     if not c:
         raise HTTPException(status_code=404, detail="Конференция не найдена")
-    _editable(db, user, c)  # только ведущий/организатор
-    kind = payload.get("kind")  # audio | video
-    muted = bool(payload.get("muted"))
-    target = payload.get("identity")  # 'all' или конкретный identity
-    src = "MICROPHONE" if kind == "audio" else "CAMERA"
-    typ = "AUDIO" if kind == "audio" else "VIDEO"
+    _editable(db, user, c)
+    kind = payload.get("kind")
+    if kind not in ("audio", "video"):
+        raise HTTPException(status_code=400, detail="kind: audio|video")
+    allow = bool(payload.get("allow"))
+    target = payload.get("identity")  # 'all' | identity
+    exc = payload.get("except")
+    if target == "all":  # меняем и дефолт для новых участников
+        if kind == "audio":
+            c.mic_allowed = allow
+        else:
+            c.cam_allowed = allow
+        db.commit()
+    host_ident = f"u{c.host_id}" if c.host_id else None
     try:
         parts = _room_service("ListParticipants", {"room": c.room}, c.room).get("participants", [])
         for p in parts:
-            if target != "all" and p.get("identity") != target:
+            ident = p.get("identity")
+            if ident == host_ident:
                 continue
-            for t in p.get("tracks", []):
-                if t.get("source") == src or (t.get("source") in (None, "UNKNOWN") and t.get("type") == typ):
-                    _room_service("MutePublishedTrack",
-                                  {"room": c.room, "identity": p["identity"], "track_sid": t["sid"], "muted": muted}, c.room)
+            if target != "all" and ident != target:
+                continue
+            if target == "all" and exc and ident == exc:
+                _apply_perm(c.room, p, kind, True)  # исключение — оставить включённым
+                continue
+            _apply_perm(c.room, p, kind, allow)
     except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=502, detail=f"Ошибка модерации: {e}")
     return {"ok": True}

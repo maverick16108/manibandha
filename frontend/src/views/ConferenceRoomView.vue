@@ -401,7 +401,7 @@ onBeforeUnmount(() => {
             <span class="flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-saffron-400 to-saffron-600 text-3xl font-semibold text-white">{{ initials(spotlightTile.name) }}</span>
           </div>
           <div class="absolute bottom-2 left-2 flex items-center gap-1.5 rounded-md bg-black/50 px-2 py-1 text-sm text-white">
-            <AppIcon v-if="!spotlightTile.micOn" name="mic-off" :size="14" class="text-red-400" />
+            <AppIcon v-if="!spotlightTile.micOn" name="mic-off" :size="18" class="text-red-400" />
             <span v-if="raised[spotlightTile.identity]" class="text-2xl leading-none">✋</span>
             <span>{{ spotlightTile.name }}<span v-if="spotlightTile.isLocal"> (вы)</span></span>
           </div>

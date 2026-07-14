@@ -211,7 +211,10 @@ async function remove(c) {
 
       <!-- прошедшие -->
       <div v-if="ended.length" class="space-y-2">
-        <div class="text-sm font-semibold uppercase tracking-wide text-ink-700/40">Прошедшие</div>
+        <div class="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-ink-700/70">
+          <span>Прошедшие</span>
+          <span class="h-px flex-1 bg-parchment-300"></span>
+        </div>
         <div v-for="c in ended" :key="c.id" class="flex items-center justify-between gap-3 rounded-lg border border-parchment-200 px-4 py-2.5">
           <div class="min-w-0">
             <span class="truncate font-medium text-ink-700">{{ c.title }}</span>

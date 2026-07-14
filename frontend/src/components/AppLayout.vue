@@ -77,14 +77,19 @@ function logout() {
     <!-- Sidebar (скрыт для незаапрувленного кандидата) -->
     <aside
       v-if="showSidebar"
-      class="fixed inset-y-0 left-0 z-30 flex w-64 transform flex-col border-r border-parchment-200 bg-white transition-transform"
-      :class="[sidebarOpen ? 'translate-x-0' : '-translate-x-full', collapsed ? 'lg:-translate-x-full' : 'lg:translate-x-0']"
+      class="fixed inset-y-0 left-0 z-30 flex w-64 transform flex-col border-r border-parchment-200 bg-white transition-all lg:translate-x-0"
+      :class="[sidebarOpen ? 'translate-x-0' : '-translate-x-full', collapsed && 'lg:w-16']"
     >
-      <div class="flex h-16 shrink-0 items-center gap-2.5 border-b border-parchment-200 px-5">
-        <img src="/lotus-mark.png" alt="" class="h-9 w-auto" />
-        <span class="font-display text-2xl font-semibold leading-none text-ink-900">Манибандха</span>
-        <button class="ml-auto hidden rounded-lg p-1.5 text-ink-700/60 hover:bg-parchment-100 lg:block" title="Свернуть меню" @click="collapsed = true">
+      <div class="flex h-16 shrink-0 items-center gap-2.5 border-b border-parchment-200 px-5" :class="collapsed && 'lg:justify-center lg:px-0'">
+        <img src="/lotus-mark.png" alt="" class="h-9 w-auto" :class="collapsed && 'lg:hidden'" />
+        <span class="font-display text-2xl font-semibold leading-none text-ink-900" :class="collapsed && 'lg:hidden'">Манибандха</span>
+        <!-- свернуть (в развёрнутом виде) -->
+        <button class="ml-auto hidden rounded-lg p-1.5 text-ink-700/60 hover:bg-parchment-100 lg:block" :class="collapsed && 'lg:hidden'" title="Свернуть меню" @click="collapsed = true">
           <AppIcon name="chevron" :size="18" class="rotate-90" />
+        </button>
+        <!-- развернуть (в свёрнутом виде) -->
+        <button class="hidden rounded-lg p-1.5 text-ink-700/60 hover:bg-parchment-100" :class="collapsed ? 'lg:block' : 'lg:hidden'" title="Развернуть меню" @click="collapsed = false">
+          <AppIcon name="chevron" :size="18" class="-rotate-90" />
         </button>
       </div>
 
@@ -94,13 +99,24 @@ function logout() {
             v-if="canShow(item)"
             :to="{ name: item.name }"
             class="mb-1 flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-ink-700 hover:bg-parchment-100"
+            :class="collapsed && 'lg:justify-center lg:px-2'"
             active-class="bg-saffron-500/10 text-saffron-700"
+            :title="collapsed ? item.label : ''"
             @click="sidebarOpen = false"
           >
-            <AppIcon :name="item.icon" :size="18" />
-            <span class="flex-1">{{ item.label }}</span>
+            <span class="relative shrink-0">
+              <AppIcon :name="item.icon" :size="18" />
+              <!-- цифра прямо на иконке, когда меню свёрнуто -->
+              <span v-if="badgeFor(item.name) > 0"
+                    class="absolute -right-2 -top-2 hidden h-4 min-w-[1rem] items-center justify-center rounded-full bg-saffron-500 px-1 text-[10px] font-semibold leading-none text-white"
+                    :class="collapsed && 'lg:flex'">
+                {{ badgeFor(item.name) }}
+              </span>
+            </span>
+            <span class="flex-1" :class="collapsed && 'lg:hidden'">{{ item.label }}</span>
             <span v-if="badgeFor(item.name) > 0"
-                  class="inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-saffron-500 px-1.5 text-xs font-semibold text-white">
+                  class="inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-saffron-500 px-1.5 text-xs font-semibold text-white"
+                  :class="collapsed && 'lg:hidden'">
               {{ badgeFor(item.name) }}
             </span>
           </RouterLink>
@@ -111,20 +127,22 @@ function logout() {
       <div class="relative shrink-0 border-t border-parchment-200 p-3">
         <button
           class="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left hover:bg-parchment-100"
+          :class="collapsed && 'lg:justify-center'"
+          :title="collapsed ? auth.user?.full_name : ''"
           @click="profileMenu = !profileMenu"
         >
           <img v-if="auth.user?.avatar_url" :src="auth.user.avatar_url" class="photo-bw h-9 w-9 shrink-0 rounded-full object-cover" />
           <span v-else class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-saffron-400 to-saffron-600 text-sm font-semibold text-white">
             {{ initials }}
           </span>
-          <span class="min-w-0 flex-1">
+          <span class="min-w-0 flex-1" :class="collapsed && 'lg:hidden'">
             <span class="block truncate text-sm font-medium text-ink-800">{{ auth.user?.full_name }}</span>
             <span class="block text-xs text-ink-700/60">{{ ROLE_LABELS[auth.user?.role] || auth.user?.role }}</span>
           </span>
-          <AppIcon name="chevron" :size="16" class="shrink-0 text-ink-700/50 transition" :class="profileMenu && 'rotate-180'" />
+          <AppIcon name="chevron" :size="16" class="shrink-0 text-ink-700/50 transition" :class="[profileMenu && 'rotate-180', collapsed && 'lg:hidden']" />
         </button>
 
-        <div v-if="profileMenu" class="absolute inset-x-3 bottom-full mb-1 overflow-hidden rounded-lg border border-parchment-200 bg-white shadow-lg">
+        <div v-if="profileMenu" class="absolute bottom-full mb-1 overflow-hidden rounded-lg border border-parchment-200 bg-white shadow-lg" :class="collapsed ? 'left-2 min-w-[12rem] lg:left-2 lg:right-auto' : 'inset-x-3'">
           <RouterLink :to="{ name: 'profile' }" class="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-ink-700 hover:bg-parchment-100" @click="profileMenu = false; sidebarOpen = false">
             <AppIcon name="disciples" :size="16" /> Профиль
           </RouterLink>
@@ -141,13 +159,10 @@ function logout() {
     <div v-if="profileMenu" class="fixed inset-0 z-20" @click="profileMenu = false"></div>
 
     <!-- Main -->
-    <div :class="showSidebar && !collapsed && 'lg:pl-64'">
+    <div :class="showSidebar && (collapsed ? 'lg:pl-16' : 'lg:pl-64')">
       <header class="sticky top-0 z-10 flex h-16 items-center gap-3 border-b border-parchment-200 bg-parchment-50/90 px-4 backdrop-blur sm:px-6">
         <button v-if="showSidebar" class="-ml-1 shrink-0 rounded-lg p-2 text-ink-800 hover:bg-parchment-200 lg:hidden" @click="sidebarOpen = true">
           <AppIcon name="menu" :size="28" :stroke="2" />
-        </button>
-        <button v-if="showSidebar && collapsed" class="-ml-1 hidden shrink-0 rounded-lg p-2 text-ink-800 hover:bg-parchment-200 lg:block" title="Показать меню" @click="collapsed = false">
-          <AppIcon name="menu" :size="26" :stroke="2" />
         </button>
         <button v-if="showSidebar && showBack" class="btn-outline shrink-0" @click="goBack">
           <AppIcon name="chevron" :size="16" class="rotate-90" /> Назад

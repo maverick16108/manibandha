@@ -38,6 +38,16 @@ def _room_service(method: str, body: dict, room: str) -> dict:
         return json.loads(r.read().decode() or "{}")
 
 
+def _close_room(room: str):
+    """Закрыть комнату LiveKit — всех участников отключит (при завершении встречи)."""
+    if not (settings.LIVEKIT_API_KEY and settings.LIVEKIT_API_SECRET):
+        return
+    try:
+        _room_service("DeleteRoom", {"room": room}, room)
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def _mint_token(identity: str, name: str, room: str, can_publish: bool, sources: list | None = None, ttl: int = 6 * 3600) -> str:
     """LiveKit access token (JWT, HS256). sources ограничивает, что можно публиковать."""
     now = int(time.time())
@@ -143,6 +153,8 @@ def update_conference(conf_id: int, payload: ConferenceUpdate, db: Session = Dep
             c.ended_at = _f.now()
     db.commit()
     db.refresh(c)
+    if payload.status == "ended":
+        _close_room(c.room)  # отключить всех оставшихся участников
     return _out(c, user, has_cap(db, user, "conference.host"))
 
 
@@ -152,8 +164,10 @@ def delete_conference(conf_id: int, db: Session = Depends(get_db), user: User = 
     if not c:
         raise HTTPException(status_code=404, detail="Конференция не найдена")
     _editable(db, user, c)
+    room = c.room
     db.delete(c)
     db.commit()
+    _close_room(room)  # если удаляют идущую встречу — отключить участников
 
 
 @router.post("/{conf_id}/join", response_model=JoinOut)

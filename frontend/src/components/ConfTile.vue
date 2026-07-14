@@ -18,7 +18,7 @@ function initials(name) { return (name || '?').trim()[0]?.toUpperCase() || '?' }
       <span class="flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-saffron-400 to-saffron-600 text-xl font-semibold text-white">{{ initials(t.name) }}</span>
     </div>
     <div class="absolute bottom-1.5 left-1.5 flex items-center gap-1 rounded-md bg-black/50 px-1.5 py-0.5 text-xs text-white">
-      <AppIcon v-if="!t.micOn" name="mic-off" :size="12" class="text-red-400" />
+      <AppIcon v-if="!t.micOn" name="mic-off" :size="17" class="text-red-400" />
       <span v-if="raised[t.identity]" class="text-lg leading-none">✋</span>
       <span class="max-w-[9rem] truncate sm:max-w-[16rem]">{{ t.name }}<span v-if="t.isLocal"> (вы)</span></span>
     </div>
@@ -27,7 +27,6 @@ function initials(name) { return (name || '?').trim()[0]?.toUpperCase() || '?' }
       <template v-if="isHost && !t.isLocal">
         <button class="rounded-lg p-2 text-white hover:bg-black/70" :class="t.allowAudio ? 'bg-black/50' : 'bg-red-500/90'" :title="t.allowAudio ? 'Запретить звук' : 'Разрешить звук'" @click.stop="emit('permit', t.identity, 'audio', !t.allowAudio)"><AppIcon :name="t.allowAudio ? 'volume' : 'mic-off'" :size="20" /></button>
         <button class="rounded-lg p-2 text-white hover:bg-black/70" :class="t.allowVideo ? 'bg-black/50' : 'bg-red-500/90'" :title="t.allowVideo ? 'Запретить видео' : 'Разрешить видео'" @click.stop="emit('permit', t.identity, 'video', !t.allowVideo)"><AppIcon name="video" :size="20" /></button>
-        <button class="rounded-lg bg-black/50 p-2 text-white hover:bg-black/70" title="Дать слово только ему — заглушить остальных" @click.stop="emit('permit', 'all', 'audio', false, t.identity)"><AppIcon name="user" :size="20" /></button>
       </template>
     </div>
   </div>

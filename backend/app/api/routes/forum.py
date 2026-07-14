@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
@@ -8,7 +8,7 @@ from app.api.deps import get_current_user, require_cap
 from app.core.database import get_db
 from app.models import Disciple, ForumPost, ForumPostLike, ForumSection, ForumTopic, ForumTopicRead, User
 from app.schemas.forum import (
-    Participant, PostCreate, PostOut, SectionCreate, SectionOut, SectionUpdate, TopicCreate, TopicListItem, TopicOut,
+    Participant, PostCreate, PostOut, Reaction, SectionCreate, SectionOut, SectionUpdate, TopicCreate, TopicListItem, TopicOut,
 )
 
 router = APIRouter(prefix="/forum", tags=["forum"])
@@ -41,17 +41,42 @@ def _within_edit_window(p: ForumPost) -> bool:
     return (datetime.now(timezone.utc) - created) <= EDIT_WINDOW
 
 
+def _reactions_of(likes: list, user_id: int | None) -> list[Reaction]:
+    """Сгруппировать реакции по эмодзи: количество, кто поставил, стоит ли моя."""
+    groups: dict[str, list] = {}
+    order: list[str] = []
+    for l in likes or []:
+        e = l.emoji or "❤️"
+        if e not in groups:
+            groups[e] = []
+            order.append(e)
+        groups[e].append(l)
+    order.sort(key=lambda e: (-len(groups[e]),))  # популярные — первыми
+    out = []
+    for e in order:
+        ls = groups[e]
+        out.append(Reaction(
+            emoji=e, count=len(ls),
+            mine=any(l.user_id == user_id for l in ls),
+            who=[Participant(name=l.user.full_name if l.user else None,
+                             avatar=l.user.avatar_url if l.user else None) for l in ls],
+        ))
+    return out
+
+
 def _post_out(p: ForumPost, user_id: int | None = None) -> PostOut:
+    likes = p.likes or []
     likers = [Participant(name=l.user.full_name if l.user else None,
-                          avatar=l.user.avatar_url if l.user else None) for l in (p.likes or [])]
+                          avatar=l.user.avatar_url if l.user else None) for l in likes]
     return PostOut(
         id=p.id, author_id=p.author_id,
         author_name=p.author.full_name if p.author else None,
         author_avatar=p.author.avatar_url if p.author else None,
         body=p.body, created_at=p.created_at, edit_count=p.edit_count or 0,
-        likes=len(p.likes or []),
-        liked=any(l.user_id == user_id for l in (p.likes or [])),
+        likes=len(likes),
+        liked=any(l.user_id == user_id for l in likes),
         likers=likers,
+        reactions=_reactions_of(likes, user_id),
     )
 
 
@@ -278,15 +303,20 @@ def edit_post(post_id: int, payload: PostCreate, db: Session = Depends(get_db), 
 
 
 @router.post("/posts/{post_id}/like")
-def toggle_like(post_id: int, db: Session = Depends(get_db), user: User = Depends(require_cap("forum.view"))):
+def toggle_like(post_id: int, payload: dict | None = Body(default=None), db: Session = Depends(get_db), user: User = Depends(require_cap("forum.view"))):
+    """Поставить/сменить/снять реакцию-эмодзи (одна на пользователя на сообщение). Любой эмодзи."""
+    emoji = ((payload or {}).get("emoji") or "❤️").strip()[:16] or "❤️"
     post = db.get(ForumPost, post_id)
     if not post:
         raise HTTPException(status_code=404, detail="Сообщение не найдено")
     existing = db.query(ForumPostLike).filter(ForumPostLike.post_id == post_id, ForumPostLike.user_id == user.id).first()
     if existing:
-        db.delete(existing)
+        if existing.emoji == emoji:
+            db.delete(existing)  # тот же эмодзи — снять
+        else:
+            existing.emoji = emoji  # сменить на другой
     else:
-        db.add(ForumPostLike(post_id=post_id, user_id=user.id))
+        db.add(ForumPostLike(post_id=post_id, user_id=user.id, emoji=emoji))
     db.commit()
     likes = (
         db.query(ForumPostLike).options(joinedload(ForumPostLike.user))
@@ -296,6 +326,7 @@ def toggle_like(post_id: int, db: Session = Depends(get_db), user: User = Depend
         "likes": len(likes),
         "liked": any(l.user_id == user.id for l in likes),
         "likers": [{"name": l.user.full_name if l.user else None, "avatar": l.user.avatar_url if l.user else None} for l in likes],
+        "reactions": [r.model_dump() for r in _reactions_of(likes, user.id)],
     }
 
 

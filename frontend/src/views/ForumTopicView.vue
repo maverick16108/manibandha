@@ -51,7 +51,11 @@ async function openCard(userId) {
   try { const { data } = await client.get(`/forum/users/${userId}`); card.value = data } catch { card.value = null }
 }
 function closeCard() { card.value = null }
-function onEsc(e) { if (e.key === 'Escape' && card.value) closeCard() }
+function onEsc(e) {
+  if (e.key !== 'Escape') return
+  if (picker.open) closePicker()
+  else if (card.value) closeCard()
+}
 function placeLine(c) { return [c.city, c.region, c.country].filter(Boolean).join(', ') }
 
 // точки для быстрого скроллера по датам сообщений
@@ -71,11 +75,36 @@ async function load(silent = false) {
   }
 }
 
-async function toggleLike(p) {
+// ── реакции-эмодзи (любой смайлик, как в вопросах) ──
+const QUICK = ['❤️', '👍', '🙏', '🔥', '😂', '🎉']
+const EMOJI_PALETTE = [
+  '❤️', '🧡', '💛', '💚', '💙', '💜', '🤍', '🔥', '👍', '👎', '🙏', '👏', '🙌', '🤝', '💪', '✌️',
+  '😀', '😁', '😂', '🤣', '😊', '😇', '🙂', '😍', '🥰', '😘', '😎', '🤩', '🥳', '😌', '🤔', '😴',
+  '😢', '😭', '😱', '😳', '🤯', '😤', '😅', '😉', '😋', '🤗', '🤭', '🫡', '🫶', '💯', '✨', '⭐',
+  '🎉', '🎊', '🌸', '🌺', '🌼', '🌈', '☀️', '🕉️', '🪔', '📿', '🌿', '🍀', '☘️', '🐄', '🦚', '🪷',
+]
+const picker = reactive({ open: false, postId: null, x: 0, y: 0 })
+const pickerStyle = computed(() => {
+  const w = 288, h = 300
+  const x = Math.min(picker.x, window.innerWidth - w - 8)
+  const y = Math.min(picker.y, window.innerHeight - h - 8)
+  return { left: Math.max(8, x) + 'px', top: Math.max(8, y) + 'px' }
+})
+function openPicker(e, p) {
+  picker.open = true; picker.postId = p.id
+  picker.x = e.clientX; picker.y = e.clientY
+}
+function closePicker() { picker.open = false; picker.postId = null }
+async function react(p, emoji) {
+  closePicker()
   try {
-    const { data } = await client.post(`/forum/posts/${p.id}/like`)
-    p.likes = data.likes; p.liked = data.liked; p.likers = data.likers
+    const { data } = await client.post(`/forum/posts/${p.id}/like`, { emoji })
+    p.reactions = data.reactions; p.likes = data.likes; p.liked = data.liked; p.likers = data.likers
   } catch { /* игнор */ }
+}
+function reactPicked(emoji) {
+  const p = posts.value.find((x) => x.id === picker.postId)
+  if (p) react(p, emoji)
 }
 
 // ── цитирование ──
@@ -199,7 +228,7 @@ onBeforeUnmount(() => {
       <img v-if="topic.cover_url" :src="topic.cover_url" alt="" class="mb-5 max-h-72 w-full rounded-xl object-cover" />
 
       <div class="space-y-3">
-        <article v-for="p in posts" :id="`post-${p.id}`" :key="p.id" data-post :data-post-author="p.author_name || 'Аноним'" class="card scroll-mt-20 p-4 sm:p-5">
+        <article v-for="p in posts" :id="`post-${p.id}`" :key="p.id" data-post :data-post-author="p.author_name || 'Аноним'" class="card scroll-mt-20 p-4 sm:p-5" @contextmenu.prevent="openPicker($event, p)">
           <div class="mb-2 flex items-center gap-3">
             <button class="shrink-0" title="Профиль" @click="openCard(p.author_id)">
               <img v-if="p.author_avatar" :src="p.author_avatar" class="photo-bw h-9 w-9 rounded-full object-cover ring-2 ring-transparent transition hover:ring-saffron-400" />
@@ -216,25 +245,36 @@ onBeforeUnmount(() => {
           </div>
           <div class="markdown-body break-words text-ink-800" v-html="renderMarkdown(p.body)"></div>
 
-          <!-- лайки, кто поставил, цитирование -->
-          <div class="mt-2 flex flex-wrap items-center gap-2">
-            <button class="flex items-center gap-1 rounded-full px-2 py-0.5 text-sm transition-colors"
-                    :class="p.liked ? 'text-red-500' : 'text-ink-700/40 hover:bg-parchment-100 hover:text-red-500'"
-                    @click="toggleLike(p)">
-              <span>{{ p.liked ? '❤' : '♡' }}</span><span v-if="p.likes" class="text-xs font-medium">{{ p.likes }}</span>
+          <!-- реакции-эмодзи (любой смайлик), кто поставил, цитирование -->
+          <div class="mt-2 flex flex-wrap items-center gap-1.5">
+            <button v-for="r in p.reactions" :key="r.emoji"
+                    class="flex items-center gap-1 rounded-full border px-2 py-0.5 transition"
+                    :class="r.mine ? 'border-saffron-400 bg-saffron-50' : 'border-parchment-200 hover:bg-parchment-100'"
+                    :title="r.who.map((w) => w.name).filter(Boolean).join(', ')"
+                    @click="react(p, r.emoji)">
+              <span class="text-xl leading-none">{{ r.emoji }}</span>
+              <span v-if="r.count > 1" class="text-sm font-semibold text-ink-700">{{ r.count }}</span>
             </button>
-            <div v-if="p.likers && p.likers.length" class="flex -space-x-1.5" :title="p.likers.map((l) => l.name).join(', ')">
-              <template v-for="(l, li) in p.likers.slice(0, 8)" :key="li">
-                <img v-if="l.avatar" :src="l.avatar" class="photo-bw h-6 w-6 rounded-full object-cover ring-2 ring-white" :title="l.name" />
-                <span v-else class="flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-br from-saffron-400 to-saffron-600 text-[10px] font-semibold text-white ring-2 ring-white" :title="l.name">{{ initials(l.name) }}</span>
-              </template>
-            </div>
+            <button class="flex h-8 w-8 items-center justify-center rounded-full text-lg leading-none text-ink-700/40 transition hover:bg-parchment-100 hover:text-saffron-600" title="Поставить реакцию" @click.stop="openPicker($event, p)">🙂</button>
             <button v-if="auth.can('forum.post')" class="ml-auto flex items-center gap-1 rounded-md px-2 py-0.5 text-xs text-ink-700/50 hover:bg-parchment-100 hover:text-saffron-700" @click="quotePost(p)">
               <AppIcon name="reply" :size="14" /> Цитировать
             </button>
           </div>
         </article>
       </div>
+
+      <!-- выбор реакции: 6 быстрых + палитра любых смайликов -->
+      <template v-if="picker.open">
+        <div class="fixed inset-0 z-40" @click="closePicker" @contextmenu.prevent="closePicker"></div>
+        <div class="fixed z-50 w-72 rounded-xl border border-parchment-200 bg-white p-2 shadow-xl" :style="pickerStyle">
+          <div class="mb-1.5 flex justify-between gap-0.5 border-b border-parchment-100 pb-1.5">
+            <button v-for="e in QUICK" :key="e" class="rounded-full px-0.5 text-2xl leading-none transition-transform hover:scale-125" @click="reactPicked(e)">{{ e }}</button>
+          </div>
+          <div class="grid max-h-44 grid-cols-8 gap-0.5 overflow-y-auto">
+            <button v-for="e in EMOJI_PALETTE" :key="e" class="rounded p-1 text-xl leading-none transition hover:bg-parchment-100" @click="reactPicked(e)">{{ e }}</button>
+          </div>
+        </div>
+      </template>
 
       <!-- плавающая кнопка «Цитировать выделенное» -->
       <button v-if="quoteBar.show && auth.can('forum.post')"

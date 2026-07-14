@@ -34,7 +34,7 @@ async function load(silent = false) {
 let poll = null
 const nowTs = ref(Date.now())
 let tick = null
-onMounted(() => { load(); poll = setInterval(() => load(true), 15000); tick = setInterval(() => { nowTs.value = Date.now() }, 1000) })
+onMounted(() => { load(); poll = setInterval(() => load(true), 4000); tick = setInterval(() => { nowTs.value = Date.now() }, 1000) })
 onBeforeUnmount(() => { clearInterval(poll); clearInterval(tick) })
 
 function elapsed(iso) {

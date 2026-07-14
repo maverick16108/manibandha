@@ -46,6 +46,13 @@ class Participant(BaseModel):
     avatar: str | None = None
 
 
+class Reaction(BaseModel):
+    emoji: str
+    count: int
+    mine: bool = False
+    who: list[Participant] = []
+
+
 class PostOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
@@ -58,6 +65,7 @@ class PostOut(BaseModel):
     likes: int = 0
     liked: bool = False
     likers: list[Participant] = []
+    reactions: list[Reaction] = []
 
 
 class TopicListItem(BaseModel):

@@ -23,7 +23,13 @@ const isHost = ref(false)
 const myIdentity = ref('')
 const micOn = ref(false)
 const camOn = ref(false)
+const micBusy = ref(false)  // идёт включение/выключение — не мигаем иконкой
+const camBusy = ref(false)
 const screenOn = ref(false)
+// что мне сейчас разрешено публиковать (ведущий может забрать право прямо во время встречи)
+const myAllowMic = ref(true)
+const myAllowCam = ref(true)
+const myAllowScreen = ref(true)
 const handUp = ref(false)
 
 const tiles = ref([])          // [{identity, name, isLocal, camOn, micOn, speaking}]
@@ -73,6 +79,20 @@ function refresh() {
   add(room.localParticipant, true)
   room.remoteParticipants.forEach((p) => add(p, false))
   tiles.value = list
+  // мои актуальные права публикации (ведущий мог их изменить прямо во время встречи)
+  if (!isHost.value) {
+    const lp = room.localParticipant
+    const perm = lp.permissions
+    const srcs = perm?.canPublishSources || []
+    const allowAll = !!perm?.canPublish && srcs.length === 0
+    myAllowMic.value = !!perm?.canPublish && (allowAll || hasSrc(srcs, 'microphone'))
+    myAllowCam.value = !!perm?.canPublish && (allowAll || hasSrc(srcs, 'camera'))
+    myAllowScreen.value = !!perm?.canPublish && (allowAll || hasSrc(srcs, 'screen_share'))
+    // забрали право — гасим локально, чтобы нельзя было включить обратно
+    if (!myAllowMic.value && micOn.value && !micBusy.value) { micOn.value = false; room.localParticipant.setMicrophoneEnabled(false).catch(() => {}) }
+    if (!myAllowCam.value && camOn.value && !camBusy.value) { camOn.value = false; room.localParticipant.setCameraEnabled(false).catch(() => {}) }
+    if (!myAllowScreen.value && screenOn.value) { screenOn.value = false; room.localParticipant.setScreenShareEnabled(false).catch(() => {}) }
+  }
   let sharer = null
   const all = [room.localParticipant, ...room.remoteParticipants.values()]
   for (const p of all) {
@@ -146,11 +166,9 @@ async function connect() {
     await room.connect(data.url, data.token)
     state.value = 'connected'
     if (canPublish.value) {
-      try {
-        await room.localParticipant.setCameraEnabled(true)
-        await room.localParticipant.setMicrophoneEnabled(true)
-        camOn.value = true; micOn.value = true
-      } catch { /* нет доступа — можно смотреть */ }
+      camBusy.value = true; micBusy.value = true
+      try { await room.localParticipant.setCameraEnabled(true); camOn.value = true } catch { /* нет доступа */ } finally { camBusy.value = false }
+      try { await room.localParticipant.setMicrophoneEnabled(true); micOn.value = true } catch { /* нет доступа */ } finally { micBusy.value = false }
       loadDevices()
       try { navigator.mediaDevices.addEventListener('devicechange', loadDevices) } catch { /* ignore */ }
     }
@@ -162,19 +180,24 @@ async function connect() {
 }
 
 async function toggleMic() {
-  if (!room || !canPublish.value) return
-  micOn.value = !micOn.value
-  try { await room.localParticipant.setMicrophoneEnabled(micOn.value) } catch { micOn.value = !micOn.value }
+  if (!room || !canPublish.value || micBusy.value) return
+  if (!micOn.value && !myAllowMic.value) return // право забрал ведущий — включить нельзя
+  const next = !micOn.value
+  micBusy.value = true // иконка не меняется, пока идёт переключение
+  try { await room.localParticipant.setMicrophoneEnabled(next); micOn.value = next } catch { /* ignore */ } finally { micBusy.value = false }
   refresh()
 }
 async function toggleCam() {
-  if (!room || !canPublish.value) return
-  camOn.value = !camOn.value
-  try { await room.localParticipant.setCameraEnabled(camOn.value) } catch { camOn.value = !camOn.value }
+  if (!room || !canPublish.value || camBusy.value) return
+  if (!camOn.value && !myAllowCam.value) return // право забрал ведущий — включить нельзя
+  const next = !camOn.value
+  camBusy.value = true
+  try { await room.localParticipant.setCameraEnabled(next); camOn.value = next } catch { /* ignore */ } finally { camBusy.value = false }
   refresh()
 }
 async function toggleScreen() {
   if (!room || !canPublish.value) return
+  if (!screenOn.value && !myAllowScreen.value) return // право забрал ведущий
   screenOn.value = !screenOn.value
   try { await room.localParticipant.setScreenShareEnabled(screenOn.value) } catch { screenOn.value = !screenOn.value }
   refresh()
@@ -201,6 +224,25 @@ async function setAll(kind, allow) {
   refresh()
 }
 function pinTile(identity) { pinnedId.value = pinnedId.value === identity ? null : identity }
+
+// ── ширина ленты участников справа (тянется мышью; при большой ширине — в 2 столбца) ──
+const stripW = ref(180)
+const stripTwoCols = computed(() => stripW.value > 300)
+function startStripResize(e) {
+  const startX = e.touches ? e.touches[0].clientX : e.clientX
+  const startW = stripW.value
+  const move = (ev) => {
+    const x = ev.touches ? ev.touches[0].clientX : ev.clientX
+    stripW.value = Math.max(120, Math.min(window.innerWidth * 0.6, startW + (startX - x)))
+    if (ev.cancelable) ev.preventDefault()
+  }
+  const up = () => {
+    window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up)
+    window.removeEventListener('touchmove', move); window.removeEventListener('touchend', up)
+  }
+  window.addEventListener('mousemove', move); window.addEventListener('mouseup', up)
+  window.addEventListener('touchmove', move, { passive: false }); window.addEventListener('touchend', up)
+}
 
 // ── выбор устройств (несколько микрофонов/камер) ──
 const mics = ref([])
@@ -267,8 +309,9 @@ function leave() {
   router.push(isGuest ? '/' : { name: 'conference' })
 }
 
-// Esc — закрыть чат; пробел — включить/выключить микрофон (если не печатаем в поле)
+// Esc — закрыть меню выбора устройства / чат; пробел — вкл/выкл микрофон (если не печатаем)
 function onKey(e) {
+  if (e.key === 'Escape' && (micMenu.value || camMenu.value)) { micMenu.value = false; camMenu.value = false; return }
   if (e.key === 'Escape' && chatOpen.value) { chatOpen.value = false; return }
   if (e.code !== 'Space' && e.key !== ' ') return
   const el = e.target
@@ -366,8 +409,11 @@ onBeforeUnmount(() => {
             <span>{{ spotlightTile.name }}<span v-if="spotlightTile.isLocal"> (вы)</span></span>
           </div>
         </div>
-        <!-- лента участников: вертикальный столбец справа, прокрутка вверх/вниз -->
-        <div v-if="stripTiles.length" class="flex w-32 shrink-0 flex-col gap-2 overflow-y-auto pr-0.5 sm:w-44">
+        <!-- ручка изменения ширины ленты -->
+        <div v-if="stripTiles.length" class="w-1.5 shrink-0 cursor-col-resize rounded bg-parchment-300 transition hover:bg-saffron-400" title="Потяните, чтобы изменить ширину" @mousedown.prevent="startStripResize" @touchstart.prevent="startStripResize"></div>
+        <!-- лента участников справа: тянется по ширине; при большой ширине — в 2 столбца -->
+        <div v-if="stripTiles.length" class="shrink-0 gap-2 overflow-y-auto pr-0.5" :style="{ width: stripW + 'px' }"
+             :class="stripTwoCols ? 'grid grid-cols-2 content-start' : 'flex flex-col'">
           <ConfTile v-for="t in stripTiles" :key="t.identity" :t="t" :raised="raised" :pinned-id="pinnedId" :is-host="isHost"
                     class="aspect-video shrink-0" @pin="pinTile" @permit="permit" />
         </div>
@@ -381,23 +427,26 @@ onBeforeUnmount(() => {
 
       <audio v-for="t in tiles.filter((x) => !x.isLocal)" :key="'a' + t.identity" :data-audio="t.identity" autoplay></audio>
 
+      <!-- клик вне меню выбора устройства — закрыть -->
+      <div v-if="micMenu || camMenu" class="fixed inset-0 z-30" @click="micMenu = false; camMenu = false"></div>
+
       <!-- нижняя панель -->
       <div class="mt-2 flex shrink-0 items-center justify-center gap-3 pb-2">
         <template v-if="canPublish">
-          <!-- микрофон + выбор устройства -->
+          <!-- микрофон + выбор устройства (во время загрузки иконка не меняется) -->
           <div class="relative flex items-center">
-            <button class="flex h-11 items-center justify-center rounded-l-full pl-4 pr-3 transition" :class="micOn ? 'bg-parchment-200 text-ink-800 hover:bg-parchment-300' : 'bg-red-500 text-white'" title="Микрофон" @click="toggleMic"><AppIcon :name="micOn ? 'volume' : 'mic-off'" :size="20" /></button>
-            <button v-if="mics.length > 1" class="flex h-11 items-center justify-center rounded-r-full border-l border-parchment-50/60 pl-1.5 pr-2.5 transition" :class="micOn ? 'bg-parchment-200 text-ink-800 hover:bg-parchment-300' : 'bg-red-500 text-white'" title="Выбрать микрофон" @click="micMenu = !micMenu; camMenu = false"><AppIcon name="chevron" :size="14" class="-rotate-90" /></button>
+            <button class="flex h-11 items-center justify-center rounded-l-full pl-4 pr-3 transition" :class="[(micOn || micBusy) ? 'bg-parchment-200 text-ink-800 hover:bg-parchment-300' : 'bg-red-500 text-white', micBusy && 'animate-pulse']" title="Микрофон" @click="toggleMic"><AppIcon :name="(micOn || micBusy) ? 'volume' : 'mic-off'" :size="20" /></button>
+            <button v-if="mics.length > 1" class="flex h-11 items-center justify-center rounded-r-full border-l border-parchment-50/60 pl-1.5 pr-2.5 transition" :class="(micOn || micBusy) ? 'bg-parchment-200 text-ink-800 hover:bg-parchment-300' : 'bg-red-500 text-white'" title="Выбрать микрофон" @click="micMenu = !micMenu; camMenu = false"><AppIcon name="chevron" :size="14" class="-rotate-90" /></button>
             <div v-if="micMenu" class="absolute bottom-14 left-0 z-40 min-w-[13rem] max-w-[16rem] overflow-hidden rounded-xl border border-parchment-200 bg-white py-1 shadow-xl">
               <button v-for="(d, di) in mics" :key="d.deviceId" class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-parchment-100" :class="curMic === d.deviceId ? 'font-semibold text-saffron-700' : 'text-ink-800'" @click="switchMic(d.deviceId)">
                 <AppIcon name="volume" :size="14" class="shrink-0 opacity-60" /><span class="truncate">{{ devLabel(d, di, 'Микрофон') }}</span>
               </button>
             </div>
           </div>
-          <!-- камера + выбор устройства -->
+          <!-- камера + выбор устройства (во время загрузки иконка не меняется) -->
           <div class="relative flex items-center">
-            <button class="flex h-11 items-center justify-center rounded-l-full pl-4 pr-3 transition" :class="camOn ? 'bg-parchment-200 text-ink-800 hover:bg-parchment-300' : 'bg-red-500 text-white'" title="Камера" @click="toggleCam"><AppIcon name="video" :size="20" /></button>
-            <button v-if="cams.length > 1" class="flex h-11 items-center justify-center rounded-r-full border-l border-parchment-50/60 pl-1.5 pr-2.5 transition" :class="camOn ? 'bg-parchment-200 text-ink-800 hover:bg-parchment-300' : 'bg-red-500 text-white'" title="Выбрать камеру" @click="camMenu = !camMenu; micMenu = false"><AppIcon name="chevron" :size="14" class="-rotate-90" /></button>
+            <button class="flex h-11 items-center justify-center rounded-l-full pl-4 pr-3 transition" :class="[(camOn || camBusy) ? 'bg-parchment-200 text-ink-800 hover:bg-parchment-300' : 'bg-red-500 text-white', camBusy && 'animate-pulse']" title="Камера" @click="toggleCam"><AppIcon name="video" :size="20" /></button>
+            <button v-if="cams.length > 1" class="flex h-11 items-center justify-center rounded-r-full border-l border-parchment-50/60 pl-1.5 pr-2.5 transition" :class="(camOn || camBusy) ? 'bg-parchment-200 text-ink-800 hover:bg-parchment-300' : 'bg-red-500 text-white'" title="Выбрать камеру" @click="camMenu = !camMenu; micMenu = false"><AppIcon name="chevron" :size="14" class="-rotate-90" /></button>
             <div v-if="camMenu" class="absolute bottom-14 left-0 z-40 min-w-[13rem] max-w-[16rem] overflow-hidden rounded-xl border border-parchment-200 bg-white py-1 shadow-xl">
               <button v-for="(d, di) in cams" :key="d.deviceId" class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-parchment-100" :class="curCam === d.deviceId ? 'font-semibold text-saffron-700' : 'text-ink-800'" @click="switchCam(d.deviceId)">
                 <AppIcon name="video" :size="14" class="shrink-0 opacity-60" /><span class="truncate">{{ devLabel(d, di, 'Камера') }}</span>

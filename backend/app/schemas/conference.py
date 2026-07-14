@@ -38,4 +38,5 @@ class JoinOut(BaseModel):
     room: str
     mode: str
     can_publish: bool
+    is_host: bool = False
     identity: str

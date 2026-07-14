@@ -1,19 +1,41 @@
+import json
 import time
+import urllib.request
 import uuid
 
 import jwt
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import case
+from fastapi import APIRouter, Body, Depends, HTTPException, Request, status
+from sqlalchemy import case, func
 from sqlalchemy.orm import Session, joinedload
 
-from app.api.deps import get_current_user, require_cap
+from app.api.deps import require_cap
 from app.core.capabilities import has_cap
 from app.core.config import settings
-from app.core.database import get_db
+from app.core.database import SessionLocal, get_db
 from app.models import Conference, User
 from app.schemas.conference import ConferenceCreate, ConferenceOut, ConferenceUpdate, JoinOut
 
 router = APIRouter(prefix="/conferences", tags=["conferences"])
+
+
+def _admin_token(room: str) -> str:
+    now = int(time.time())
+    return jwt.encode(
+        {"iss": settings.LIVEKIT_API_KEY, "nbf": now - 5, "exp": now + 120,
+         "video": {"room": room, "roomAdmin": True, "roomJoin": False}},
+        settings.LIVEKIT_API_SECRET, algorithm="HS256",
+    )
+
+
+def _room_service(method: str, body: dict, room: str) -> dict:
+    """Twirp-вызов LiveKit RoomService (модерация)."""
+    url = f"{settings.LIVEKIT_API_URL}/twirp/livekit.RoomService/{method}"
+    req = urllib.request.Request(
+        url, data=json.dumps(body).encode(),
+        headers={"Content-Type": "application/json", "Authorization": f"Bearer {_admin_token(room)}"},
+    )
+    with urllib.request.urlopen(req, timeout=5) as r:
+        return json.loads(r.read().decode() or "{}")
 
 
 def _mint_token(identity: str, name: str, room: str, can_publish: bool, ttl: int = 6 * 3600) -> str:
@@ -122,18 +144,72 @@ def join_conference(conf_id: int, db: Session = Depends(get_db), user: User = De
     c = db.get(Conference, conf_id)
     if not c:
         raise HTTPException(status_code=404, detail="Конференция не найдена")
-    if c.status == "ended":
-        raise HTTPException(status_code=409, detail="Конференция завершена")
     is_host = c.host_id == user.id or has_cap(db, user, "conference.host")
     # интерактив — публикуют все; трансляция — только ведущий
     can_publish = is_host or c.mode == "interactive"
-    # ведущий заходит — помечаем «идёт»
-    if is_host and c.status == "scheduled":
-        from sqlalchemy import func as _f
+    # переоткрытие завершённой встречи / старт запланированной ведущим
+    if c.status == "ended":
         c.status = "live"
-        c.started_at = _f.now()
+        c.ended_at = None
+        if not c.started_at:
+            c.started_at = func.now()
+        db.commit()
+    elif is_host and c.status == "scheduled":
+        c.status = "live"
+        c.started_at = func.now()
         db.commit()
     identity = f"u{user.id}"
     token = _mint_token(identity, user.full_name or "Гость", c.room, can_publish)
     return JoinOut(url=settings.LIVEKIT_URL, token=token, room=c.room, mode=c.mode,
-                   can_publish=can_publish, identity=identity)
+                   can_publish=can_publish, is_host=is_host, identity=identity)
+
+
+@router.post("/{conf_id}/mute")
+def moderate_mute(conf_id: int, payload: dict = Body(...), db: Session = Depends(get_db), user: User = Depends(require_cap("conference.view"))):
+    """Модерация: выключить/включить видео или звук у одного участника или у всех."""
+    c = db.get(Conference, conf_id)
+    if not c:
+        raise HTTPException(status_code=404, detail="Конференция не найдена")
+    _editable(db, user, c)  # только ведущий/организатор
+    kind = payload.get("kind")  # audio | video
+    muted = bool(payload.get("muted"))
+    target = payload.get("identity")  # 'all' или конкретный identity
+    src = "MICROPHONE" if kind == "audio" else "CAMERA"
+    typ = "AUDIO" if kind == "audio" else "VIDEO"
+    try:
+        parts = _room_service("ListParticipants", {"room": c.room}, c.room).get("participants", [])
+        for p in parts:
+            if target != "all" and p.get("identity") != target:
+                continue
+            for t in p.get("tracks", []):
+                if t.get("source") == src or (t.get("source") in (None, "UNKNOWN") and t.get("type") == typ):
+                    _room_service("MutePublishedTrack",
+                                  {"room": c.room, "identity": p["identity"], "track_sid": t["sid"], "muted": muted}, c.room)
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"Ошибка модерации: {e}")
+    return {"ok": True}
+
+
+@router.post("/livekit-webhook", include_in_schema=False)
+async def livekit_webhook(request: Request):
+    """LiveKit присылает события комнаты. При закрытии комнаты — помечаем встречу завершённой."""
+    body = await request.body()
+    auth = request.headers.get("Authorization", "").removeprefix("Bearer ").strip()
+    try:
+        jwt.decode(auth, settings.LIVEKIT_API_SECRET, algorithms=["HS256"], options={"verify_aud": False})
+    except Exception:  # noqa: BLE001
+        raise HTTPException(status_code=401, detail="bad signature")
+    try:
+        data = json.loads(body.decode())
+    except Exception:  # noqa: BLE001
+        return {"ok": True}
+    event = data.get("event")
+    room = (data.get("room") or {}).get("name")
+    if event == "room_finished" and room:
+        with SessionLocal() as db:
+            c = db.query(Conference).filter(Conference.room == room, Conference.status == "live").first()
+            if c:
+                c.status = "ended"
+                c.ended_at = func.now()
+                db.commit()
+    return {"ok": True}

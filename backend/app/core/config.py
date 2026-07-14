@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     LIVEKIT_API_KEY: str = ""
     LIVEKIT_API_SECRET: str = ""
     LIVEKIT_URL: str = ""  # wss://... для клиента
+    LIVEKIT_API_URL: str = "http://127.0.0.1:7880"  # HTTP API (RoomService) — внутренний
 
     @property
     def cors_origins(self) -> list[str]:

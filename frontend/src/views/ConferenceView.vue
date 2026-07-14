@@ -170,7 +170,10 @@ async function remove(c) {
             <span class="truncate font-medium text-ink-700">{{ c.title }}</span>
             <span class="ml-2 text-xs text-ink-700/50">{{ fmt(c.started_at || c.created_at) }}</span>
           </div>
-          <button v-if="c.can_host" class="text-ink-700/30 hover:text-red-600" @click="remove(c)"><AppIcon name="trash" :size="15" /></button>
+          <div class="flex shrink-0 items-center gap-2">
+            <button class="btn-ghost text-sm" @click="enter(c)">Подключиться</button>
+            <button v-if="c.can_host" class="rounded-lg p-1.5 text-ink-700/40 transition hover:bg-red-50 hover:text-red-600" title="Удалить" @click="remove(c)"><AppIcon name="trash" :size="20" /></button>
+          </div>
         </div>
       </div>
 

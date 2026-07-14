@@ -85,11 +85,11 @@ function logout() {
         <span class="font-display text-2xl font-semibold leading-none text-ink-900" :class="collapsed && 'lg:hidden'">Манибандха</span>
         <!-- свернуть (в развёрнутом виде) -->
         <button class="ml-auto hidden rounded-lg p-1.5 text-ink-700/60 hover:bg-parchment-100 lg:block" :class="collapsed && 'lg:hidden'" title="Свернуть меню" @click="collapsed = true">
-          <AppIcon name="chevron" :size="18" class="rotate-90" />
+          <AppIcon name="sidebar" :size="20" />
         </button>
         <!-- развернуть (в свёрнутом виде) -->
         <button class="hidden rounded-lg p-1.5 text-ink-700/60 hover:bg-parchment-100" :class="collapsed ? 'lg:block' : 'lg:hidden'" title="Развернуть меню" @click="collapsed = false">
-          <AppIcon name="chevron" :size="18" class="-rotate-90" />
+          <AppIcon name="sidebar" :size="20" />
         </button>
       </div>
 

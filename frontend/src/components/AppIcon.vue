@@ -82,6 +82,12 @@ defineProps({
       <path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z" />
     </template>
 
+    <!-- sidebar / панель (свернуть-развернуть меню) -->
+    <template v-else-if="name === 'sidebar'">
+      <rect x="3" y="4.5" width="18" height="15" rx="2" />
+      <line x1="9" y1="4.5" x2="9" y2="19.5" />
+    </template>
+
     <!-- user / активный спикер (один крупно) -->
     <template v-else-if="name === 'user'">
       <circle cx="12" cy="8" r="4" />

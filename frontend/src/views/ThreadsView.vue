@@ -5,6 +5,7 @@ import client from '../api/client'
 import { useAuthStore } from '../stores/auth'
 import AppSelect from '../components/AppSelect.vue'
 import AppSkeleton from '../components/AppSkeleton.vue'
+import AppIcon from '../components/AppIcon.vue'
 import { formatDate } from '../lib/format'
 import { usePageTitle } from '../composables/pageTitle'
 
@@ -21,12 +22,27 @@ const disciples = ref([])
 const mentors = ref([])
 const filterDisciple = ref('')
 const filterMentor = ref('')
+const filterPeriod = ref('')  // для отчётов — фильтр по месяцу
+const search = ref('')
 const MONTHS = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь']
 
 // guru/staff can filter by disciple; a student only ever sees their own
 const showFilter = computed(() => !auth.user?.disciple_id)
 const discipleOptions = computed(() => [{ value: '', label: 'Все ученики' }, ...disciples.value.map((d) => ({ value: d.id, label: d.spiritual_name || d.material_name }))])
 const mentorOptions = computed(() => [{ value: '', label: 'Все наставники' }, ...mentors.value.map((d) => ({ value: d.id, label: d.spiritual_name || d.material_name }))])
+// доступные месяцы (для отчётов) — из самих отчётов, свежие сверху
+const periodOptions = computed(() => {
+  const set = [...new Set(threads.value.map((t) => t.period).filter(Boolean))].sort().reverse()
+  return [{ value: '', label: 'Все периоды' }, ...set.map((p) => ({ value: p, label: periodLabel(p) }))]
+})
+// поиск + фильтр по месяцу поверх загруженного списка
+const filtered = computed(() => {
+  let list = threads.value
+  if (isReport.value && filterPeriod.value) list = list.filter((t) => t.period === filterPeriod.value)
+  const q = search.value.trim().toLowerCase()
+  if (q) list = list.filter((t) => [t.subject, t.disciple_name, t.last_preview].some((s) => (s || '').toLowerCase().includes(q)))
+  return list
+})
 
 async function load(silent = false) {
   if (!silent) loading.value = true
@@ -83,9 +99,14 @@ onMounted(async () => {
       </RouterLink>
     </div>
 
-    <div v-if="showFilter" class="mb-4 flex flex-col gap-3 sm:flex-row">
-      <div class="card p-3 sm:w-64"><AppSelect v-model="filterDisciple" :options="discipleOptions" placeholder="Все ученики" /></div>
-      <div class="card p-3 sm:w-64"><AppSelect v-model="filterMentor" :options="mentorOptions" placeholder="Все наставники" /></div>
+    <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+      <div class="flex items-center gap-2 rounded-md border border-parchment-300 bg-white px-3 py-2 sm:w-72">
+        <AppIcon name="search" :size="16" class="shrink-0 text-ink-700/40" />
+        <input v-model="search" class="w-full bg-transparent text-sm text-ink-800 outline-none placeholder:text-ink-700/40" :placeholder="isReport ? 'Поиск по отчётам…' : 'Поиск по вопросам…'" />
+      </div>
+      <div v-if="showFilter" class="sm:w-56"><AppSelect v-model="filterDisciple" :options="discipleOptions" placeholder="Все ученики" /></div>
+      <div v-if="showFilter" class="sm:w-56"><AppSelect v-model="filterMentor" :options="mentorOptions" placeholder="Все наставники" /></div>
+      <div v-if="isReport" class="sm:w-52"><AppSelect v-model="filterPeriod" :options="periodOptions" placeholder="Все периоды" /></div>
     </div>
 
     <div v-if="loading" class="space-y-3">
@@ -93,7 +114,7 @@ onMounted(async () => {
     </div>
 
     <TransitionGroup v-else tag="div" name="flash" class="space-y-3">
-      <RouterLink v-for="t in threads" :key="t.id" :to="{ name: 'thread', params: { id: t.id } }"
+      <RouterLink v-for="t in filtered" :key="t.id" :to="{ name: 'thread', params: { id: t.id } }"
                   class="card block p-4 transition hover:border-saffron-400/50 hover:shadow">
         <div class="flex items-start justify-between gap-3">
           <div class="min-w-0">
@@ -113,8 +134,8 @@ onMounted(async () => {
         </div>
       </RouterLink>
     </TransitionGroup>
-    <div v-if="!loading && !threads.length" class="card p-8 text-center text-ink-700/50">
-      {{ isReport ? 'Отчётов пока нет' : 'Вопросов пока нет' }}
+    <div v-if="!loading && !filtered.length" class="card p-8 text-center text-ink-700/50">
+      {{ (search || filterPeriod) ? 'Ничего не найдено' : (isReport ? 'Отчётов пока нет' : 'Вопросов пока нет') }}
     </div>
   </div>
 </template>

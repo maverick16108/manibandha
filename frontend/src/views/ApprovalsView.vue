@@ -20,10 +20,20 @@ const items = ref([])
 const threadMap = ref({})
 const loading = ref(true)
 const approving = ref(null)
+const search = ref('')
 
 function nameOf(d) {
   return d.spiritual_name || d.material_name || 'Без имени'
 }
+
+const filtered = computed(() => {
+  const q = search.value.trim().toLowerCase()
+  if (!q) return items.value
+  const digits = q.replace(/\D/g, '')
+  return items.value.filter((d) =>
+    nameOf(d).toLowerCase().includes(q) ||
+    (digits && (d.phone || '').replace(/\D/g, '').includes(digits)))
+})
 
 async function load(silent = false) {
   if (!silent) loading.value = true
@@ -77,8 +87,12 @@ onBeforeUnmount(() => { clearInterval(poll); document.removeEventListener('visib
 
 <template>
   <div>
-    <div class="mb-6">
+    <div class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <p class="text-ink-700/60">Самостоятельно зарегистрированные ученики, ожидающие подтверждения</p>
+      <div v-if="!loading && items.length" class="card flex items-center gap-2 p-2.5 sm:w-72">
+        <AppIcon name="search" :size="16" class="shrink-0 text-ink-700/40" />
+        <input v-model="search" class="w-full bg-transparent text-sm text-ink-800 outline-none placeholder:text-ink-700/40" placeholder="Поиск по имени, телефону" />
+      </div>
     </div>
 
     <!-- Loading -->
@@ -108,7 +122,7 @@ onBeforeUnmount(() => { clearInterval(poll); document.removeEventListener('visib
             </tr>
           </thead>
           <TransitionGroup tag="tbody" name="flash" class="divide-y divide-parchment-100">
-            <tr v-for="d in items" :key="d.id" class="hover:bg-parchment-50">
+            <tr v-for="d in filtered" :key="d.id" class="hover:bg-parchment-50">
               <td class="px-4 py-3">
                 <button class="font-medium text-ink-900 hover:text-saffron-700 hover:underline" @click="openCard(d)">{{ nameOf(d) }}</button>
               </td>
@@ -146,6 +160,7 @@ onBeforeUnmount(() => { clearInterval(poll); document.removeEventListener('visib
           </TransitionGroup>
         </table>
       </div>
+      <div v-if="!filtered.length" class="p-8 text-center text-ink-700/50">Ничего не найдено</div>
     </div>
   </div>
 </template>

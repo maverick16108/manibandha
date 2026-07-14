@@ -83,8 +83,11 @@ onMounted(load)
     </div>
 
     <div class="card">
-      <div v-if="loading" class="grid grid-cols-2 gap-px p-4 sm:grid-cols-3">
-        <AppSkeleton v-for="i in 9" :key="i" w="w-24" />
+      <div v-if="loading" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <div v-for="i in 8" :key="i" class="border-b border-parchment-100 px-4 py-3">
+          <AppSkeleton w="w-28" />
+          <AppSkeleton v-if="withCountry" w="w-16" h="h-3" class="mt-1.5" />
+        </div>
       </div>
       <div v-else class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         <div v-for="it in items" :key="it.id"

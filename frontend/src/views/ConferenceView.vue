@@ -215,14 +215,14 @@ async function remove(c) {
           <span>Прошедшие</span>
           <span class="h-px flex-1 bg-parchment-300"></span>
         </div>
-        <div v-for="c in ended" :key="c.id" class="flex items-center justify-between gap-3 rounded-lg border border-parchment-200 px-4 py-2.5">
+        <div v-for="c in ended" :key="c.id" class="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-parchment-200 px-4 py-2.5 transition hover:border-parchment-300 hover:bg-parchment-100" @click="enter(c)">
           <div class="min-w-0">
             <span class="truncate font-medium text-ink-700">{{ c.title }}</span>
             <span class="ml-2 text-xs text-ink-700/50">{{ fmt(c.started_at || c.created_at) }}</span>
           </div>
           <div class="flex shrink-0 items-center gap-2">
-            <button class="btn-ghost text-sm" @click="enter(c)">Подключиться</button>
-            <button v-if="c.can_host" class="rounded-lg p-1.5 text-ink-700/40 transition hover:bg-red-50 hover:text-red-600" title="Удалить" @click="remove(c)"><AppIcon name="trash" :size="20" /></button>
+            <button class="btn-ghost text-sm" @click.stop="enter(c)">Подключиться</button>
+            <button v-if="c.can_host" class="rounded-lg p-1.5 text-ink-700/40 transition hover:bg-red-50 hover:text-red-600" title="Удалить" @click.stop="remove(c)"><AppIcon name="trash" :size="20" /></button>
           </div>
         </div>
       </div>

@@ -41,6 +41,16 @@ function fmt(iso) {
 }
 function initials(name) { return (name || '?').trim()[0]?.toUpperCase() || '?' }
 
+// мини-профиль участника форума
+const card = ref(null)
+async function openCard(userId) {
+  if (!userId) return
+  card.value = { _loading: true }
+  try { const { data } = await client.get(`/forum/users/${userId}`); card.value = data } catch { card.value = null }
+}
+function closeCard() { card.value = null }
+function placeLine(c) { return [c.city, c.region, c.country].filter(Boolean).join(', ') }
+
 async function load(silent = false) {
   try {
     // фоновый опрос не накручивает счётчик просмотров
@@ -179,10 +189,12 @@ onBeforeUnmount(() => {
       <div class="space-y-3">
         <article v-for="p in posts" :key="p.id" data-post :data-post-author="p.author_name || 'Аноним'" class="card p-4 sm:p-5">
           <div class="mb-2 flex items-center gap-3">
-            <img v-if="p.author_avatar" :src="p.author_avatar" class="photo-bw h-9 w-9 shrink-0 rounded-full object-cover" />
-            <span v-else class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-saffron-400 to-saffron-600 text-sm font-semibold text-white">{{ initials(p.author_name) }}</span>
+            <button class="shrink-0" title="Профиль" @click="openCard(p.author_id)">
+              <img v-if="p.author_avatar" :src="p.author_avatar" class="photo-bw h-9 w-9 rounded-full object-cover ring-2 ring-transparent transition hover:ring-saffron-400" />
+              <span v-else class="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-saffron-400 to-saffron-600 text-sm font-semibold text-white ring-2 ring-transparent transition hover:ring-saffron-400">{{ initials(p.author_name) }}</span>
+            </button>
             <div class="min-w-0 flex-1">
-              <div class="truncate text-sm font-medium text-ink-800">{{ p.author_name || 'Аноним' }}</div>
+              <button class="block max-w-full truncate text-left text-sm font-medium text-ink-800 hover:text-saffron-700 hover:underline" @click="openCard(p.author_id)">{{ p.author_name || 'Аноним' }}</button>
               <div class="text-xs text-ink-700/50">{{ fmt(p.created_at) }}<span v-if="p.edit_count"> · изменено{{ p.edit_count > 1 ? ` ×${p.edit_count}` : '' }}</span></div>
             </div>
             <div v-if="canEdit(p) || canDelete(p)" class="flex shrink-0 items-center gap-1">
@@ -234,6 +246,22 @@ onBeforeUnmount(() => {
         </div>
       </div>
     </template>
+
+    <!-- мини-профиль участника -->
+    <div v-if="card" class="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/40 p-4" @click.self="closeCard">
+      <div class="card w-full max-w-sm p-6 text-center">
+        <template v-if="card._loading">
+          <div class="py-8 text-ink-700/50">Загрузка…</div>
+        </template>
+        <template v-else>
+          <img v-if="card.photo" :src="card.photo" class="photo-bw mx-auto h-28 w-28 rounded-xl object-cover" />
+          <div v-else class="mx-auto flex h-28 w-28 items-center justify-center rounded-xl bg-gradient-to-br from-saffron-400 to-saffron-600 text-4xl font-semibold text-white">{{ initials(card.name) }}</div>
+          <h3 class="mt-4 font-display text-2xl font-semibold text-ink-900">{{ card.name || 'Участник' }}</h3>
+          <p v-if="placeLine(card)" class="mt-1 flex items-center justify-center gap-1 text-sm text-ink-700/70"><AppIcon name="pin" :size="14" class="text-saffron-600" /> {{ placeLine(card) }}</p>
+          <button class="btn-ghost mt-5" @click="closeCard">Закрыть</button>
+        </template>
+      </div>
+    </div>
   </div>
 </template>
 

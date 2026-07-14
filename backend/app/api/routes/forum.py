@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.api.deps import get_current_user, require_cap
 from app.core.database import get_db
-from app.models import ForumPost, ForumPostLike, ForumSection, ForumTopic, ForumTopicRead, User
+from app.models import Disciple, ForumPost, ForumPostLike, ForumSection, ForumTopic, ForumTopicRead, User
 from app.schemas.forum import (
     Participant, PostCreate, PostOut, SectionCreate, SectionOut, SectionUpdate, TopicCreate, TopicListItem, TopicOut,
 )
@@ -14,6 +14,22 @@ from app.schemas.forum import (
 router = APIRouter(prefix="/forum", tags=["forum"])
 
 EDIT_WINDOW = timedelta(hours=1)
+
+
+@router.get("/users/{user_id}")
+def user_card(user_id: int, db: Session = Depends(get_db), _: User = Depends(require_cap("forum.view"))):
+    """Ограниченная публичная карточка участника форума: фото, ФИО, страна/область/город."""
+    u = db.get(User, user_id)
+    if not u:
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
+    d = db.get(Disciple, u.disciple_id) if u.disciple_id else None
+    return {
+        "name": u.full_name,
+        "photo": u.avatar_url or (d.photo_url if d else None),
+        "country": d.country if d else None,
+        "region": d.region if d else None,
+        "city": d.city if d else None,
+    }
 
 
 def _within_edit_window(p: ForumPost) -> bool:

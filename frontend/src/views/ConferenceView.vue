@@ -45,22 +45,26 @@ function fmt(iso) {
 }
 function modeLabel(m) { return m === 'broadcast' ? 'Трансляция' : 'Встреча' }
 
-async function create() {
+function resetForm() {
+  showForm.value = false
+  form.value = { title: '', description: '', mode: 'interactive' }
+  schedDate.value = ''; schedHour.value = 19; schedMin.value = 0
+}
+// enter=true — начать сейчас и войти; enter=false — запланировать на дату
+async function submit(enter) {
   if (!form.value.title.trim()) return
   saving.value = true
   try {
     const payload = { title: form.value.title.trim(), description: form.value.description.trim() || null, mode: form.value.mode }
-    if (schedDate.value) {
+    if (!enter && schedDate.value) {
       const hh = String(schedHour.value).padStart(2, '0')
       const mm = String(schedMin.value).padStart(2, '0')
       payload.scheduled_at = new Date(`${schedDate.value}T${hh}:${mm}:00`).toISOString()
     }
     const { data } = await client.post('/conferences', payload)
-    showForm.value = false
-    form.value = { title: '', description: '', mode: 'interactive' }
-    schedDate.value = ''; schedHour.value = 19; schedMin.value = 0
+    resetForm()
     await load(true)
-    router.push({ name: 'conference-room', params: { id: data.id } })
+    if (enter) router.push({ name: 'conference-room', params: { id: data.id } })
   } finally { saving.value = false }
 }
 function enter(c) { router.push({ name: 'conference-room', params: { id: c.id } }) }
@@ -100,8 +104,11 @@ async function remove(c) {
           </template>
         </div>
       </div>
-      <div class="flex gap-2">
-        <button class="btn-primary" :disabled="saving || !form.title.trim()" @click="create">{{ saving ? '…' : 'Создать и войти' }}</button>
+      <div class="flex flex-wrap gap-2">
+        <button class="btn-primary" :disabled="saving || !form.title.trim()" @click="submit(true)">
+          <AppIcon name="video" :size="16" /> {{ saving ? '…' : 'Начать сейчас' }}
+        </button>
+        <button v-if="schedDate" class="btn-outline" :disabled="saving || !form.title.trim()" @click="submit(false)">Запланировать</button>
         <button class="btn-ghost" @click="showForm = false">Отмена</button>
       </div>
     </div>

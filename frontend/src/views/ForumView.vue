@@ -37,7 +37,7 @@ onBeforeUnmount(() => clearInterval(poll))
 </script>
 
 <template>
-  <div class="mx-auto max-w-4xl">
+  <div>
     <div class="mb-6 flex items-center justify-between gap-3">
       <p class="text-ink-700/60">Общение учеников — задавайте вопросы, делитесь опытом</p>
       <RouterLink v-if="auth.can('forum.post')" :to="{ name: 'forum-new' }" class="btn-primary shrink-0">+ Тема</RouterLink>

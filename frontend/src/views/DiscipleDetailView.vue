@@ -93,16 +93,17 @@ async function deleteNote(n) {
 const files = ref([])
 const fileInput = ref(null)
 const uploadingFile = ref(false)
+const fileDragOver = ref(false)
 const canEdit = computed(() => auth.can('disciples.edit'))
 async function loadFiles() {
   try { const { data } = await client.get(`/disciples/${id.value}/files`); files.value = data } catch { files.value = [] }
 }
-async function onFilePick(e) {
-  const list = Array.from(e.target.files || [])
-  if (!list.length) return
+async function uploadDiscipleFiles(list) {
+  const arr = Array.from(list || [])
+  if (!arr.length) return
   uploadingFile.value = true
   try {
-    for (const f of list) {
+    for (const f of arr) {
       const fd = new FormData(); fd.append('file', f)
       const { data } = await client.post(`/disciples/${id.value}/files`, fd, { headers: { 'Content-Type': 'multipart/form-data' } })
       files.value.unshift(data)
@@ -110,6 +111,8 @@ async function onFilePick(e) {
   } catch (err) { alert(err.response?.data?.detail || 'Не удалось загрузить файл') }
   finally { uploadingFile.value = false; if (fileInput.value) fileInput.value.value = '' }
 }
+function onFilePick(e) { uploadDiscipleFiles(e.target.files) }
+function onFileDrop(e) { fileDragOver.value = false; if (canEdit.value) uploadDiscipleFiles(e.dataTransfer?.files) }
 async function deleteFile(f) {
   if (!(await confirmDialog({ message: `Удалить файл «${f.name}»?`, confirmText: 'Удалить', danger: true }))) return
   await client.delete(`/disciples/${id.value}/files/${f.id}`)
@@ -244,7 +247,8 @@ onMounted(async () => {
     </div>
 
     <!-- Файлы анкеты -->
-    <div class="card mt-6 p-6">
+    <div class="card mt-6 p-6 transition" :class="fileDragOver && 'ring-2 ring-saffron-400 ring-offset-2'"
+         @dragover.prevent="canEdit && (fileDragOver = true)" @dragleave="fileDragOver = false" @drop.prevent="onFileDrop">
       <div class="mb-4 flex items-center justify-between gap-3">
         <h3 class="font-display text-xl text-ink-900">Файлы</h3>
         <button v-if="canEdit" class="btn-outline shrink-0" :disabled="uploadingFile" @click="fileInput.click()">
@@ -252,7 +256,11 @@ onMounted(async () => {
         </button>
         <input ref="fileInput" type="file" multiple class="hidden" @change="onFilePick" />
       </div>
-      <div v-if="!files.length" class="text-sm text-ink-700/50">Файлов пока нет</div>
+      <div v-if="canEdit && !files.length" class="rounded-lg border-2 border-dashed py-6 text-center text-sm transition"
+           :class="fileDragOver ? 'border-saffron-500 bg-saffron-500/10 text-saffron-700' : 'border-parchment-300 text-ink-700/50'">
+        {{ fileDragOver ? 'Отпустите файлы' : 'Перетащите файлы сюда или нажмите «Добавить файл»' }}
+      </div>
+      <div v-else-if="!files.length" class="text-sm text-ink-700/50">Файлов пока нет</div>
       <ul v-else class="divide-y divide-parchment-100">
         <li v-for="f in files" :key="f.id" class="flex items-center gap-3 py-2.5">
           <AppIcon name="reports" :size="18" class="shrink-0 text-saffron-600" />

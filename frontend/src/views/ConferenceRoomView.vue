@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { Room, RoomEvent, Track } from 'livekit-client'
 import client from '../api/client'
 import AppIcon from '../components/AppIcon.vue'
+import ConfTile from '../components/ConfTile.vue'
 import { usePageTitle } from '../composables/pageTitle'
 
 usePageTitle('Конференция')
@@ -252,7 +253,10 @@ function sendChat() {
   chatInput.value = ''
   scrollChat()
 }
-function openChat() { chatOpen.value = true; unread.value = 0; scrollChat() }
+function openChat() {
+  chatOpen.value = true; unread.value = 0; scrollChat()
+  nextTick(() => document.getElementById('conf-chat-input')?.focus()) // сразу фокус в поле ввода
+}
 
 // переприкрепить видео при смене раскладки (иначе своё видео пропадает)
 watch([viewMode, pinnedId, screenSharer, () => tiles.value.length], () => nextTick(attachAll))
@@ -263,8 +267,9 @@ function leave() {
   router.push(isGuest ? '/' : { name: 'conference' })
 }
 
-// пробел — включить/выключить микрофон (если не печатаем в поле)
+// Esc — закрыть чат; пробел — включить/выключить микрофон (если не печатаем в поле)
 function onKey(e) {
+  if (e.key === 'Escape' && chatOpen.value) { chatOpen.value = false; return }
   if (e.code !== 'Space' && e.key !== ' ') return
   const el = e.target
   if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return
@@ -342,58 +347,36 @@ onBeforeUnmount(() => {
             <button :class="allowAll.screen ? 'on' : ''" @click="setAll('screen', true)">вкл</button>
           </span>
         </span>
-        <div class="ml-auto flex gap-1">
-          <button class="rounded-md px-2.5 py-1 transition" :class="viewMode==='grid' ? 'bg-saffron-500 text-white' : 'text-ink-700 hover:bg-parchment-100'" @click="viewMode='grid'; pinnedId=null">Сетка</button>
-          <button class="rounded-md px-2.5 py-1 transition" :class="viewMode==='speaker' ? 'bg-saffron-500 text-white' : 'text-ink-700 hover:bg-parchment-100'" @click="viewMode='speaker'; pinnedId=null">Активный спикер</button>
-        </div>
-      </div>
-      <div v-else class="mb-2 flex justify-end gap-1 pt-3 text-sm">
-        <button class="rounded-md px-2.5 py-1 transition" :class="viewMode==='grid' ? 'bg-saffron-500 text-white' : 'text-ink-700 hover:bg-parchment-100'" @click="viewMode='grid'; pinnedId=null">Сетка</button>
-        <button class="rounded-md px-2.5 py-1 transition" :class="viewMode==='speaker' ? 'bg-saffron-500 text-white' : 'text-ink-700 hover:bg-parchment-100'" @click="viewMode='speaker'; pinnedId=null">Активный спикер</button>
       </div>
 
-      <!-- крупно: экран или спотлайт -->
-      <div v-if="screenSharer" data-screen class="mb-2 flex-1 overflow-hidden rounded-xl bg-ink-900">
-        <video autoplay playsinline class="h-full w-full object-contain"></video>
-      </div>
-      <div v-else-if="spotlightTile" class="relative mb-2 flex-1 overflow-hidden rounded-xl bg-ink-900"
-           :class="spotlightTile.speaking && 'speaking'">
-        <video :data-cam="spotlightTile.identity" autoplay playsinline :muted="spotlightTile.isLocal" class="h-full w-full object-cover" :class="!spotlightTile.camOn && 'hidden'"></video>
-        <div v-if="!spotlightTile.camOn" class="flex h-full w-full items-center justify-center">
-          <span class="flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-saffron-400 to-saffron-600 text-3xl font-semibold text-white">{{ initials(spotlightTile.name) }}</span>
+      <!-- крупный слот (экран/спикер) + лента участников справа с вертикальной прокруткой -->
+      <div v-if="screenSharer || spotlightTile" class="mb-2 flex min-h-0 flex-1 gap-2 pt-2">
+        <!-- крупно -->
+        <div v-if="screenSharer" data-screen class="min-w-0 flex-1 overflow-hidden rounded-xl bg-ink-900">
+          <video autoplay playsinline class="h-full w-full object-contain"></video>
         </div>
-        <div class="absolute bottom-2 left-2 flex items-center gap-1 rounded-md bg-black/50 px-2 py-1 text-sm text-white">
-          <AppIcon v-if="!spotlightTile.micOn" name="mic-off" :size="14" class="text-red-400" />
-          <span v-if="raised[spotlightTile.identity]">✋</span>
-          <span>{{ spotlightTile.name }}<span v-if="spotlightTile.isLocal"> (вы)</span></span>
+        <div v-else class="relative min-w-0 flex-1 overflow-hidden rounded-xl bg-ink-900" :class="spotlightTile.speaking && 'speaking'">
+          <video :data-cam="spotlightTile.identity" autoplay playsinline :muted="spotlightTile.isLocal" class="h-full w-full object-cover" :class="!spotlightTile.camOn && 'hidden'"></video>
+          <div v-if="!spotlightTile.camOn" class="flex h-full w-full items-center justify-center">
+            <span class="flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-saffron-400 to-saffron-600 text-3xl font-semibold text-white">{{ initials(spotlightTile.name) }}</span>
+          </div>
+          <div class="absolute bottom-2 left-2 flex items-center gap-1.5 rounded-md bg-black/50 px-2 py-1 text-sm text-white">
+            <AppIcon v-if="!spotlightTile.micOn" name="mic-off" :size="14" class="text-red-400" />
+            <span v-if="raised[spotlightTile.identity]" class="text-2xl leading-none">✋</span>
+            <span>{{ spotlightTile.name }}<span v-if="spotlightTile.isLocal"> (вы)</span></span>
+          </div>
+        </div>
+        <!-- лента участников: вертикальный столбец справа, прокрутка вверх/вниз -->
+        <div v-if="stripTiles.length" class="flex w-32 shrink-0 flex-col gap-2 overflow-y-auto pr-0.5 sm:w-44">
+          <ConfTile v-for="t in stripTiles" :key="t.identity" :t="t" :raised="raised" :pinned-id="pinnedId" :is-host="isHost"
+                    class="aspect-video shrink-0" @pin="pinTile" @permit="permit" />
         </div>
       </div>
 
-      <!-- сетка / лента миниатюр -->
-      <div class="grid gap-2 overflow-y-auto"
-           :class="(screenSharer || spotlightTile) ? 'max-h-32 shrink-0 grid-flow-col auto-cols-[9rem]' : ['flex-1', gridCols]">
-        <div v-for="t in ((screenSharer || spotlightTile) ? stripTiles : tiles)" :key="t.identity" :data-tile="t.identity"
-             class="group relative flex items-center justify-center overflow-hidden rounded-xl bg-ink-900"
-             :class="t.speaking && 'speaking'">
-          <video :data-cam="t.identity" autoplay playsinline :muted="t.isLocal" class="h-full w-full object-cover" :class="!t.camOn && 'hidden'"></video>
-          <div v-if="!t.camOn" class="flex h-full w-full items-center justify-center">
-            <span class="flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-saffron-400 to-saffron-600 text-xl font-semibold text-white">{{ initials(t.name) }}</span>
-          </div>
-          <div class="absolute bottom-1.5 left-1.5 flex items-center gap-1 rounded-md bg-black/50 px-1.5 py-0.5 text-xs text-white">
-            <AppIcon v-if="!t.micOn" name="mic-off" :size="12" class="text-red-400" />
-            <span v-if="raised[t.identity]">✋</span>
-            <span class="max-w-[9rem] truncate sm:max-w-[16rem]">{{ t.name }}<span v-if="t.isLocal"> (вы)</span></span>
-          </div>
-          <!-- действия: закрепить + (для ведущего) выкл. видео/звук; на десктопе появляются при наведении, всегда видны на тач -->
-          <div class="absolute right-1.5 top-1.5 flex gap-1 opacity-100 transition sm:opacity-60 sm:group-hover:opacity-100">
-            <button class="rounded-md bg-black/50 p-1 text-white hover:bg-black/70" :title="pinnedId===t.identity ? 'Открепить' : 'На весь экран'" @click="pinTile(t.identity)"><AppIcon name="pin" :size="14" /></button>
-            <template v-if="isHost && !t.isLocal">
-              <button class="rounded-md p-1 text-white hover:bg-black/70" :class="t.allowAudio ? 'bg-black/50' : 'bg-red-500/90'" :title="t.allowAudio ? 'Запретить звук' : 'Разрешить звук'" @click.stop="permit(t.identity,'audio',!t.allowAudio)"><AppIcon :name="t.allowAudio ? 'volume' : 'mic-off'" :size="14" /></button>
-              <button class="rounded-md p-1 text-white hover:bg-black/70" :class="t.allowVideo ? 'bg-black/50' : 'bg-red-500/90'" :title="t.allowVideo ? 'Запретить видео' : 'Разрешить видео'" @click.stop="permit(t.identity,'video',!t.allowVideo)"><AppIcon name="video" :size="14" /></button>
-              <button class="rounded-md bg-black/50 px-1.5 py-1 text-[11px] font-semibold text-white hover:bg-black/70" title="Оставить говорить только его (заглушить остальных)" @click.stop="permit('all','audio',false, t.identity)">1×</button>
-            </template>
-          </div>
-        </div>
+      <!-- обычная сетка (нет крупного слота) -->
+      <div v-else class="grid flex-1 gap-2 overflow-y-auto pt-2" :class="gridCols">
+        <ConfTile v-for="t in tiles" :key="t.identity" :t="t" :raised="raised" :pinned-id="pinnedId" :is-host="isHost"
+                  @pin="pinTile" @permit="permit" />
       </div>
 
       <audio v-for="t in tiles.filter((x) => !x.isLocal)" :key="'a' + t.identity" :data-audio="t.identity" autoplay></audio>
@@ -423,6 +406,8 @@ onBeforeUnmount(() => {
           </div>
           <button class="hidden h-11 w-11 items-center justify-center rounded-full transition sm:flex" :class="screenOn ? 'bg-saffron-500 text-white' : 'bg-parchment-200 text-ink-800 hover:bg-parchment-300'" title="Показать экран" @click="toggleScreen"><AppIcon name="screen" :size="20" /></button>
         </template>
+        <!-- переключение раскладки: сетка / активный спикер (для всех) -->
+        <button class="flex h-11 w-11 items-center justify-center rounded-full transition" :class="viewMode==='speaker' ? 'bg-saffron-500 text-white' : 'bg-parchment-200 text-ink-800 hover:bg-parchment-300'" :title="viewMode==='grid' ? 'Активный спикер' : 'Сетка'" @click="viewMode = viewMode==='grid' ? 'speaker' : 'grid'; pinnedId=null"><AppIcon :name="viewMode==='grid' ? 'expand' : 'grid'" :size="20" /></button>
         <button class="flex h-11 w-11 items-center justify-center rounded-full text-xl transition" :class="handUp ? 'bg-saffron-500 text-white' : 'bg-parchment-200 hover:bg-parchment-300'" title="Поднять руку" @click="toggleHand">✋</button>
         <button class="relative flex h-11 w-11 items-center justify-center rounded-full bg-parchment-200 text-ink-800 transition hover:bg-parchment-300" title="Чат" @click="chatOpen ? (chatOpen=false) : openChat()">
           <AppIcon name="chat" :size="20" />
@@ -446,7 +431,7 @@ onBeforeUnmount(() => {
           </div>
         </div>
         <div class="flex items-center gap-2 border-t border-parchment-200 p-3">
-          <input v-model="chatInput" class="input flex-1" placeholder="Сообщение…" @keydown.enter="sendChat" />
+          <input id="conf-chat-input" v-model="chatInput" class="input flex-1" placeholder="Сообщение…" @keydown.enter="sendChat" />
           <button class="btn-primary" :disabled="!chatInput.trim()" @click="sendChat">→</button>
         </div>
       </div>

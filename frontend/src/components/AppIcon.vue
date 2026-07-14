@@ -76,6 +76,20 @@ defineProps({
       <path d="M3.5 9.5h17M8 3.5v3M16 3.5v3" />
     </template>
 
+    <!-- pushpin / канцелярская кнопка (закрепить) -->
+    <template v-else-if="name === 'pushpin'">
+      <line x1="12" y1="17" x2="12" y2="22" />
+      <path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z" />
+    </template>
+
+    <!-- grid (2x2) -->
+    <template v-else-if="name === 'grid'">
+      <rect x="3.5" y="3.5" width="7" height="7" rx="1.5" />
+      <rect x="13.5" y="3.5" width="7" height="7" rx="1.5" />
+      <rect x="3.5" y="13.5" width="7" height="7" rx="1.5" />
+      <rect x="13.5" y="13.5" width="7" height="7" rx="1.5" />
+    </template>
+
     <!-- clock -->
     <template v-else-if="name === 'clock'">
       <circle cx="12" cy="12" r="9" />

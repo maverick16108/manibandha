@@ -193,7 +193,7 @@ onBeforeUnmount(() => { try { room?.disconnect() } catch { /* ignore */ } })
             <AppIcon name="video" :size="20" />
           </button>
           <button class="hidden h-11 w-11 items-center justify-center rounded-full transition sm:flex" :class="screenOn ? 'bg-saffron-500 text-white' : 'bg-parchment-200 text-ink-800 hover:bg-parchment-300'" title="Показать экран" @click="toggleScreen">
-            <AppIcon name="reports" :size="20" />
+            <AppIcon name="screen" :size="20" />
           </button>
         </template>
         <span v-else class="text-sm text-ink-700/60">Вы смотрите трансляцию</span>

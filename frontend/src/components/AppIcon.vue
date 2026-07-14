@@ -232,6 +232,13 @@ defineProps({
       <path d="m4 4 16 16" />
     </template>
 
+    <!-- screen (демонстрация экрана) -->
+    <template v-else-if="name === 'screen'">
+      <rect x="3" y="4.5" width="18" height="12" rx="2" />
+      <path d="M9 20h6m-3-3.5V20" />
+      <path d="M12 8v5m-2.2-2.8L12 8l2.2 2.2" />
+    </template>
+
     <!-- forum (обсуждения) -->
     <template v-else-if="name === 'forum'">
       <path d="M4 5.5h11a1.5 1.5 0 0 1 1.5 1.5v5A1.5 1.5 0 0 1 15 13.5H8l-3 3v-3H4A1.5 1.5 0 0 1 2.5 12V7A1.5 1.5 0 0 1 4 5.5Z" />

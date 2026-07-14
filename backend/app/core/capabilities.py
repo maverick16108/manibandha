@@ -23,6 +23,9 @@ CAPABILITIES = [
     ("reports.write", "Писать отчёты", "Отчёты о служении"),
     ("reports.read_all", "Читать отчёты учеников", "Отчёты о служении"),
     ("reports.like", "Ставить лайки отчётам", "Отчёты о служении"),
+    ("forum.view", "Читать форум", "Форум"),
+    ("forum.post", "Писать на форуме", "Форум"),
+    ("forum.moderate", "Модерировать форум", "Форум"),
     ("dictionaries.manage", "Управлять справочниками", "Справочники"),
     ("users.manage", "Управлять пользователями", "Пользователи"),
     ("roles.manage", "Управлять ролями", "Роли"),
@@ -36,14 +39,15 @@ SYSTEM_ROLES = [
     {"key": "secretary", "name": "Секретарь", "is_superadmin": False, "is_default": False, "capabilities": [
         "dashboard.view", "calendar.view", "calendar.manage",
         "disciples.view_all", "disciples.create", "disciples.edit", "disciples.delete", "disciples.approve",
+        "forum.view", "forum.post", "forum.moderate",
         "dictionaries.manage", "users.manage",
     ]},
     {"key": "curator", "name": "Куратор", "is_superadmin": False, "is_default": False, "capabilities": [
         "dashboard.view", "calendar.view", "disciples.view_own", "disciples.edit",
-        "reports.read_all", "reports.like",
+        "reports.read_all", "reports.like", "forum.view", "forum.post",
     ]},
     {"key": "student", "name": "Ученик", "is_superadmin": False, "is_default": True, "capabilities": [
-        "calendar.view", "questions.ask", "reports.write",
+        "calendar.view", "questions.ask", "reports.write", "forum.view", "forum.post",
     ]},
 ]
 
@@ -57,7 +61,7 @@ def capabilities_grouped():
 
 
 def seed_roles(db: Session):
-    """Создать недостающие системные роли (идемпотентно)."""
+    """Создать недостающие системные роли и добавить новые базовые права (идемпотентно)."""
     from app.models import Role
     for spec in SYSTEM_ROLES:
         role = db.query(Role).filter(Role.key == spec["key"]).first()
@@ -67,6 +71,11 @@ def seed_roles(db: Session):
                 is_superadmin=spec["is_superadmin"], is_default=spec["is_default"],
                 capabilities=list(spec["capabilities"]),
             ))
+        else:
+            # добить недостающие базовые права системной роли (напр. новые фичи), не удаляя ручные
+            missing = [c for c in spec["capabilities"] if c not in (role.capabilities or [])]
+            if missing:
+                role.capabilities = list(role.capabilities or []) + missing
     db.commit()
 
 

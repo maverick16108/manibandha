@@ -1,26 +1,19 @@
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
 from app.api.deps import get_current_user, require_cap
 from app.core.database import get_db
-from app.models import ForumPost, ForumTopic, User
-from app.schemas.forum import PostCreate, PostOut, TopicCreate, TopicListItem, TopicOut
+from app.models import ForumPost, ForumSection, ForumTopic, ForumTopicRead, User
+from app.schemas.forum import (
+    Participant, PostCreate, PostOut, SectionCreate, SectionOut, TopicCreate, TopicListItem, TopicOut,
+)
 
 router = APIRouter(prefix="/forum", tags=["forum"])
 
 EDIT_WINDOW = timedelta(hours=1)
-
-
-def _snippet(body: str) -> str:
-    import re
-    s = body or ""
-    s = re.sub(r"@\[audio\]\([^)]*\)", "🎤 Голосовое", s)
-    s = re.sub(r"!\[[^\]]*\]\([^)]*\)", "🖼 Фото", s)
-    s = re.sub(r"\s+", " ", s).strip()
-    return s[:140]
 
 
 def _within_edit_window(p: ForumPost) -> bool:
@@ -41,27 +34,103 @@ def _post_out(p: ForumPost) -> PostOut:
     )
 
 
-@router.get("/topics", response_model=list[TopicListItem])
-def list_topics(db: Session = Depends(get_db), _: User = Depends(require_cap("forum.view"))):
-    topics = (
-        db.query(ForumTopic)
-        .options(joinedload(ForumTopic.posts), joinedload(ForumTopic.author))
-        .order_by(ForumTopic.pinned.desc(), ForumTopic.updated_at.desc())
-        .all()
+# ── Разделы ──
+@router.get("/sections", response_model=list[SectionOut])
+def list_sections(db: Session = Depends(get_db), _: User = Depends(require_cap("forum.view"))):
+    sections = (
+        db.query(ForumSection).options(joinedload(ForumSection.author), joinedload(ForumSection.topics))
+        .order_by(ForumSection.title.asc()).all()
     )
+    return [
+        SectionOut(
+            id=s.id, title=s.title, description=s.description, color=s.color,
+            author_name=s.author.full_name if s.author else None,
+            topics_count=len(s.topics), created_at=s.created_at,
+        ) for s in sections
+    ]
+
+
+@router.post("/sections", response_model=SectionOut, status_code=status.HTTP_201_CREATED)
+def create_section(payload: SectionCreate, db: Session = Depends(get_db), user: User = Depends(require_cap("forum.post"))):
+    title = (payload.title or "").strip()
+    if not title:
+        raise HTTPException(status_code=400, detail="Нужно название раздела")
+    color = (payload.color or "#c8742a").strip()[:16] or "#c8742a"
+    s = ForumSection(title=title[:160], description=(payload.description or "").strip()[:500] or None,
+                     color=color, author_id=user.id)
+    db.add(s)
+    db.commit()
+    db.refresh(s)
+    return SectionOut(id=s.id, title=s.title, description=s.description, color=s.color,
+                      author_name=user.full_name, topics_count=0, created_at=s.created_at)
+
+
+@router.delete("/sections/{section_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_section(section_id: int, db: Session = Depends(get_db), user: User = Depends(require_cap("forum.post"))):
+    from app.core.capabilities import has_cap
+    s = db.get(ForumSection, section_id)
+    if not s:
+        raise HTTPException(status_code=404, detail="Раздел не найден")
+    if s.author_id != user.id and not has_cap(db, user, "forum.moderate"):
+        raise HTTPException(status_code=403, detail="Удалять раздел может автор или модератор")
+    db.delete(s)
+    db.commit()
+
+
+# ── Темы ──
+def _participants(posts: list[ForumPost], limit: int = 5) -> list[Participant]:
+    """Последние участники темы (без повторов), самые недавние первыми."""
+    seen: set[int] = set()
+    out: list[Participant] = []
+    for p in reversed(posts):  # posts отсортированы по created_at asc → идём с конца
+        a = p.author
+        if not a or a.id in seen:
+            continue
+        seen.add(a.id)
+        out.append(Participant(name=a.full_name, avatar=a.avatar_url))
+        if len(out) >= limit:
+            break
+    return out
+
+
+@router.get("/topics", response_model=list[TopicListItem])
+def list_topics(section_id: int | None = Query(None), db: Session = Depends(get_db),
+                user: User = Depends(require_cap("forum.view"))):
+    q = db.query(ForumTopic).options(
+        joinedload(ForumTopic.posts).joinedload(ForumPost.author),
+        joinedload(ForumTopic.section),
+        joinedload(ForumTopic.author),
+    )
+    if section_id:
+        q = q.filter(ForumTopic.section_id == section_id)
+    topics = q.order_by(ForumTopic.pinned.desc(), ForumTopic.updated_at.desc()).all()
+    reads = {r.topic_id: r.last_seen_at for r in db.query(ForumTopicRead).filter(ForumTopicRead.user_id == user.id).all()}
     out = []
     for t in topics:
-        last = t.posts[-1] if t.posts else None
+        pc = len(t.posts)
+        ls = reads.get(t.id)
+        unread = ls is None or (t.updated_at and ls and t.updated_at > ls)
         out.append(TopicListItem(
-            id=t.id, title=t.title,
+            id=t.id, title=t.title, section_id=t.section_id,
+            section_title=t.section.title if t.section else None,
+            section_color=t.section.color if t.section else "#c8742a",
             author_name=t.author.full_name if t.author else None,
-            pinned=t.pinned, created_at=t.created_at, updated_at=t.updated_at,
-            posts_count=len(t.posts),
-            last_post_preview=_snippet(last.body) if last else None,
-            last_post_author=(last.author.full_name if last and last.author else None),
-            last_post_at=last.created_at if last else None,
+            pinned=t.pinned, replies=max(0, pc - 1), views=t.views or 0, posts_count=pc,
+            participants=_participants(t.posts),
+            unread=bool(unread), last_activity=t.updated_at, created_at=t.created_at,
         ))
     return out
+
+
+def _topic_out(t: ForumTopic) -> TopicOut:
+    return TopicOut(
+        id=t.id, title=t.title, section_id=t.section_id,
+        section_title=t.section.title if t.section else None,
+        section_color=t.section.color if t.section else "#c8742a",
+        author_name=t.author.full_name if t.author else None,
+        pinned=t.pinned, created_at=t.created_at,
+        posts=[_post_out(p) for p in t.posts],
+    )
 
 
 @router.post("/topics", response_model=TopicOut, status_code=status.HTTP_201_CREATED)
@@ -72,7 +141,9 @@ def create_topic(payload: TopicCreate, db: Session = Depends(get_db), user: User
         raise HTTPException(status_code=400, detail="Нужен заголовок темы")
     if not body:
         raise HTTPException(status_code=400, detail="Нужно первое сообщение")
-    topic = ForumTopic(title=title[:255], author_id=user.id)
+    if not db.get(ForumSection, payload.section_id):
+        raise HTTPException(status_code=400, detail="Выберите раздел")
+    topic = ForumTopic(section_id=payload.section_id, title=title[:255], author_id=user.id)
     db.add(topic)
     db.flush()
     db.add(ForumPost(topic_id=topic.id, author_id=user.id, body=body))
@@ -81,23 +152,24 @@ def create_topic(payload: TopicCreate, db: Session = Depends(get_db), user: User
     return _topic_out(topic)
 
 
-def _topic_out(t: ForumTopic) -> TopicOut:
-    return TopicOut(
-        id=t.id, title=t.title,
-        author_name=t.author.full_name if t.author else None,
-        pinned=t.pinned, created_at=t.created_at,
-        posts=[_post_out(p) for p in t.posts],
-    )
-
-
 @router.get("/topics/{topic_id}", response_model=TopicOut)
-def get_topic(topic_id: int, db: Session = Depends(get_db), _: User = Depends(require_cap("forum.view"))):
+def get_topic(topic_id: int, db: Session = Depends(get_db), user: User = Depends(require_cap("forum.view"))):
     t = db.query(ForumTopic).options(
         joinedload(ForumTopic.posts).joinedload(ForumPost.author),
+        joinedload(ForumTopic.section),
         joinedload(ForumTopic.author),
     ).filter(ForumTopic.id == topic_id).first()
     if not t:
         raise HTTPException(status_code=404, detail="Тема не найдена")
+    t.views = (t.views or 0) + 1
+    # отметить прочитанной
+    r = db.query(ForumTopicRead).filter(ForumTopicRead.topic_id == topic_id, ForumTopicRead.user_id == user.id).first()
+    if r:
+        r.last_seen_at = func.now()
+    else:
+        db.add(ForumTopicRead(topic_id=topic_id, user_id=user.id))
+    db.commit()
+    db.refresh(t)
     return _topic_out(t)
 
 
@@ -114,6 +186,13 @@ def add_post(topic_id: int, payload: PostCreate, db: Session = Depends(get_db), 
     t.updated_at = func.now()
     db.commit()
     db.refresh(post)
+    # автор только что видел тему
+    r = db.query(ForumTopicRead).filter(ForumTopicRead.topic_id == topic_id, ForumTopicRead.user_id == user.id).first()
+    if r:
+        r.last_seen_at = func.now()
+    else:
+        db.add(ForumTopicRead(topic_id=topic_id, user_id=user.id))
+    db.commit()
     return _post_out(post)
 
 
@@ -152,9 +231,7 @@ def delete_post(post_id: int, db: Session = Depends(get_db), user: User = Depend
     topic_id = post.topic_id
     db.delete(post)
     db.flush()
-    # если это было последнее сообщение темы — удалить и тему
-    remaining = db.query(ForumPost).filter(ForumPost.topic_id == topic_id).count()
-    if remaining == 0:
+    if db.query(ForumPost).filter(ForumPost.topic_id == topic_id).count() == 0:
         t = db.get(ForumTopic, topic_id)
         if t:
             db.delete(t)

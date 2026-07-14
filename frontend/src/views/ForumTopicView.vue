@@ -123,6 +123,10 @@ onBeforeUnmount(() => { clearInterval(nowTimer); clearInterval(poll); backTarget
     </div>
 
     <template v-else-if="topic">
+      <div v-if="topic.section_title" class="mb-1 flex items-center gap-1.5">
+        <span class="h-2.5 w-2.5 rounded-sm" :style="{ background: topic.section_color }"></span>
+        <span class="text-sm font-medium text-ink-700/70">{{ topic.section_title }}</span>
+      </div>
       <h1 class="mb-1 font-display text-2xl font-semibold text-ink-900">{{ topic.title }}</h1>
       <p class="mb-5 text-sm text-ink-700/50">Тему создал {{ topic.author_name || 'Аноним' }}</p>
 

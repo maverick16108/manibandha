@@ -3,7 +3,24 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict
 
 
+class SectionCreate(BaseModel):
+    title: str
+    description: str | None = None
+    color: str | None = None
+
+
+class SectionOut(BaseModel):
+    id: int
+    title: str
+    description: str | None = None
+    color: str = "#c8742a"
+    author_name: str | None = None
+    topics_count: int = 0
+    created_at: datetime
+
+
 class TopicCreate(BaseModel):
+    section_id: int
     title: str
     body: str
 
@@ -23,22 +40,34 @@ class PostOut(BaseModel):
     edit_count: int = 0
 
 
+class Participant(BaseModel):
+    name: str | None = None
+    avatar: str | None = None
+
+
 class TopicListItem(BaseModel):
     id: int
     title: str
+    section_id: int | None = None
+    section_title: str | None = None
+    section_color: str = "#c8742a"
     author_name: str | None = None
     pinned: bool = False
-    created_at: datetime
-    updated_at: datetime
+    replies: int = 0
+    views: int = 0
     posts_count: int = 0
-    last_post_preview: str | None = None
-    last_post_author: str | None = None
-    last_post_at: datetime | None = None
+    participants: list[Participant] = []
+    unread: bool = False
+    last_activity: datetime
+    created_at: datetime
 
 
 class TopicOut(BaseModel):
     id: int
     title: str
+    section_id: int | None = None
+    section_title: str | None = None
+    section_color: str = "#c8742a"
     author_name: str | None = None
     pinned: bool = False
     created_at: datetime

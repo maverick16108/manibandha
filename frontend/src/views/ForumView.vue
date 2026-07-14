@@ -188,8 +188,8 @@ async function removeSection(s) {
                 <span class="truncate font-semibold text-ink-900">{{ s.title }}</span>
               </div>
               <div v-if="s.can_edit" class="flex shrink-0 items-center gap-1">
-                <button class="text-ink-700/40 hover:text-saffron-700" title="Изменить" @click.stop="openEditSection(s)"><AppIcon name="edit" :size="15" /></button>
-                <button class="text-ink-700/30 hover:text-red-600" title="Удалить" @click.stop="removeSection(s)"><AppIcon name="trash" :size="15" /></button>
+                <button class="rounded-lg p-1.5 text-ink-700/50 transition hover:bg-parchment-100 hover:text-saffron-700" title="Изменить" @click.stop="openEditSection(s)"><AppIcon name="edit" :size="20" /></button>
+                <button class="rounded-lg p-1.5 text-ink-700/40 transition hover:bg-red-50 hover:text-red-600" title="Удалить" @click.stop="removeSection(s)"><AppIcon name="trash" :size="20" /></button>
               </div>
             </div>
             <p v-if="s.description" class="mt-1 text-sm text-ink-700/60">{{ s.description }}</p>

@@ -407,13 +407,13 @@ onBeforeUnmount(() => {
           <button class="hidden h-11 w-11 items-center justify-center rounded-full transition sm:flex" :class="screenOn ? 'bg-saffron-500 text-white' : 'bg-parchment-200 text-ink-800 hover:bg-parchment-300'" title="Показать экран" @click="toggleScreen"><AppIcon name="screen" :size="20" /></button>
         </template>
         <!-- переключение раскладки: сетка / активный спикер (для всех) -->
-        <button class="flex h-11 w-11 items-center justify-center rounded-full transition" :class="viewMode==='speaker' ? 'bg-saffron-500 text-white' : 'bg-parchment-200 text-ink-800 hover:bg-parchment-300'" :title="viewMode==='grid' ? 'Активный спикер' : 'Сетка'" @click="viewMode = viewMode==='grid' ? 'speaker' : 'grid'; pinnedId=null"><AppIcon :name="viewMode==='grid' ? 'expand' : 'grid'" :size="20" /></button>
+        <button class="flex h-11 w-11 items-center justify-center rounded-full transition" :class="viewMode==='speaker' ? 'bg-saffron-500 text-white' : 'bg-parchment-200 text-ink-800 hover:bg-parchment-300'" :title="viewMode==='grid' ? 'Активный спикер' : 'Сетка'" @click="viewMode = viewMode==='grid' ? 'speaker' : 'grid'; pinnedId=null"><AppIcon :name="viewMode==='grid' ? 'user' : 'grid'" :size="20" /></button>
         <button class="flex h-11 w-11 items-center justify-center rounded-full text-xl transition" :class="handUp ? 'bg-saffron-500 text-white' : 'bg-parchment-200 hover:bg-parchment-300'" title="Поднять руку" @click="toggleHand">✋</button>
         <button class="relative flex h-11 w-11 items-center justify-center rounded-full bg-parchment-200 text-ink-800 transition hover:bg-parchment-300" title="Чат" @click="chatOpen ? (chatOpen=false) : openChat()">
           <AppIcon name="chat" :size="20" />
           <span v-if="unread" class="absolute -right-1 -top-1 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-red-500 px-1 text-xs font-semibold text-white">{{ unread }}</span>
         </button>
-        <button class="hidden h-11 w-11 items-center justify-center rounded-full bg-parchment-200 text-ink-800 transition hover:bg-parchment-300 sm:flex" title="Во весь экран" @click="toggleFullscreen"><AppIcon name="screen" :size="20" /></button>
+        <button class="hidden h-11 w-11 items-center justify-center rounded-full bg-parchment-200 text-ink-800 transition hover:bg-parchment-300 sm:flex" title="Во весь экран" @click="toggleFullscreen"><AppIcon name="expand" :size="20" /></button>
         <button class="flex h-11 items-center gap-2 rounded-full bg-red-500 px-5 text-white transition hover:bg-red-600" title="Выйти" @click="leave"><AppIcon name="logout" :size="18" /> Выйти</button>
       </div>
 

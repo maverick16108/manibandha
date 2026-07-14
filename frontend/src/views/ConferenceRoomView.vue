@@ -492,9 +492,10 @@ onBeforeUnmount(() => {
 /* ровная заметная рамка говорящего */
 .speaking { outline: 3px solid #22c55e; outline-offset: -3px; box-shadow: 0 0 0 1px #22c55e, 0 0 14px rgba(34, 197, 94, 0.5); }
 
-/* сегментный переключатель «выкл | вкл» */
-.seg-toggle { display: inline-flex; padding: 2px; border-radius: 9999px; background: #efe6d6; }
-.seg-toggle button { padding: 3px 12px; border-radius: 9999px; font-size: 12px; font-weight: 600; color: #6b5b4a; transition: all .15s ease; }
-.seg-toggle button.on { background: #16a34a; color: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.15); }
-.seg-toggle button.off { background: #ef4444; color: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.15); }
+/* сегментный переключатель «выкл | вкл» — в фирменных тонах (без зелёного/красного) */
+.seg-toggle { display: inline-flex; padding: 3px; border-radius: 9999px; background: #ece1d0; box-shadow: inset 0 1px 2px rgba(0,0,0,.06); }
+.seg-toggle button { padding: 4px 14px; border-radius: 9999px; font-size: 12px; font-weight: 600; color: #8a7663; transition: all .15s ease; }
+.seg-toggle button:hover:not(.on):not(.off) { color: #6b5b4a; }
+/* активный сегмент (и «выкл», и «вкл») подсвечивается фирменным шафрановым */
+.seg-toggle button.on, .seg-toggle button.off { background: #c8742a; color: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.2); }
 </style>

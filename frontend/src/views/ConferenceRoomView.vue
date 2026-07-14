@@ -366,29 +366,20 @@ onBeforeUnmount(() => {
     <template v-else>
       <!-- панель ведущего -->
       <div v-if="isHost" class="mb-2 flex flex-wrap items-center gap-x-4 gap-y-2 pt-3 text-sm">
-        <span class="inline-flex items-center gap-1.5">
+        <span class="inline-flex items-center gap-2">
           <AppIcon name="volume" :size="15" class="text-ink-700/50" />
           <span class="text-ink-700/60">Звук всем</span>
-          <span class="seg-toggle">
-            <button :class="allowAll.audio ? '' : 'off'" @click="setAll('audio', false)">выкл</button>
-            <button :class="allowAll.audio ? 'on' : ''" @click="setAll('audio', true)">вкл</button>
-          </span>
+          <button class="switch" :class="allowAll.audio && 'is-on'" role="switch" :aria-checked="allowAll.audio" title="Звук всем" @click="setAll('audio', !allowAll.audio)"><span class="switch-knob"></span></button>
         </span>
-        <span class="inline-flex items-center gap-1.5">
+        <span class="inline-flex items-center gap-2">
           <AppIcon name="video" :size="15" class="text-ink-700/50" />
           <span class="text-ink-700/60">Видео всем</span>
-          <span class="seg-toggle">
-            <button :class="allowAll.video ? '' : 'off'" @click="setAll('video', false)">выкл</button>
-            <button :class="allowAll.video ? 'on' : ''" @click="setAll('video', true)">вкл</button>
-          </span>
+          <button class="switch" :class="allowAll.video && 'is-on'" role="switch" :aria-checked="allowAll.video" title="Видео всем" @click="setAll('video', !allowAll.video)"><span class="switch-knob"></span></button>
         </span>
-        <span class="inline-flex items-center gap-1.5">
+        <span class="inline-flex items-center gap-2">
           <AppIcon name="screen" :size="15" class="text-ink-700/50" />
           <span class="text-ink-700/60">Экран всем</span>
-          <span class="seg-toggle">
-            <button :class="allowAll.screen ? '' : 'off'" @click="setAll('screen', false)">выкл</button>
-            <button :class="allowAll.screen ? 'on' : ''" @click="setAll('screen', true)">вкл</button>
-          </span>
+          <button class="switch" :class="allowAll.screen && 'is-on'" role="switch" :aria-checked="allowAll.screen" title="Экран всем" @click="setAll('screen', !allowAll.screen)"><span class="switch-knob"></span></button>
         </span>
       </div>
 
@@ -492,10 +483,9 @@ onBeforeUnmount(() => {
 /* ровная заметная рамка говорящего */
 .speaking { outline: 3px solid #22c55e; outline-offset: -3px; box-shadow: 0 0 0 1px #22c55e, 0 0 14px rgba(34, 197, 94, 0.5); }
 
-/* сегментный переключатель «выкл | вкл» — в фирменных тонах (без зелёного/красного) */
-.seg-toggle { display: inline-flex; padding: 3px; border-radius: 9999px; background: #ece1d0; box-shadow: inset 0 1px 2px rgba(0,0,0,.06); }
-.seg-toggle button { padding: 4px 14px; border-radius: 9999px; font-size: 12px; font-weight: 600; color: #8a7663; transition: all .15s ease; }
-.seg-toggle button:hover:not(.on):not(.off) { color: #6b5b4a; }
-/* активный сегмент (и «выкл», и «вкл») подсвечивается фирменным шафрановым */
-.seg-toggle button.on, .seg-toggle button.off { background: #c8742a; color: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.2); }
+/* обычный переключатель вкл/выкл (в фирменных тонах) */
+.switch { position: relative; flex: none; width: 42px; height: 24px; border-radius: 9999px; background: #d8cbb8; transition: background .18s ease; box-shadow: inset 0 1px 2px rgba(0,0,0,.08); }
+.switch.is-on { background: #c8742a; }
+.switch-knob { position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 9999px; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.28); transition: transform .18s ease; }
+.switch.is-on .switch-knob { transform: translateX(18px); }
 </style>

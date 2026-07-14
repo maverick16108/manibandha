@@ -299,6 +299,11 @@ function openChat() {
   chatOpen.value = true; unread.value = 0; scrollChat()
   nextTick(() => document.getElementById('conf-chat-input')?.focus()) // сразу фокус в поле ввода
 }
+// ссылки в сообщениях чата делаем кликабельными (с экранированием HTML)
+function linkify(text) {
+  const esc = String(text || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+  return esc.replace(/(https?:\/\/[^\s]+)/g, (u) => `<a href="${u}" target="_blank" rel="noopener noreferrer" class="underline underline-offset-2">${u}</a>`)
+}
 
 // переприкрепить видео при смене раскладки (иначе своё видео пропадает)
 watch([viewMode, pinnedId, screenSharer, () => tiles.value.length], () => nextTick(attachAll))
@@ -467,7 +472,7 @@ onBeforeUnmount(() => {
           <div v-if="!messages.length" class="text-center text-sm text-ink-700/50">Сообщений пока нет</div>
           <div v-for="(m, mi) in messages" :key="mi" class="flex flex-col" :class="m.self ? 'items-end' : 'items-start'">
             <span class="text-xs text-ink-700/50">{{ m.name }}</span>
-            <span class="max-w-[85%] break-words rounded-2xl px-3 py-1.5 text-sm" :class="m.self ? 'bg-saffron-500 text-white' : 'bg-parchment-100 text-ink-800'">{{ m.text }}</span>
+            <span class="max-w-[85%] whitespace-pre-wrap break-words rounded-2xl px-3 py-1.5 text-sm" :class="m.self ? 'bg-saffron-500 text-white' : 'bg-parchment-100 text-ink-800'" v-html="linkify(m.text)"></span>
           </div>
         </div>
         <div class="flex items-center gap-2 border-t border-parchment-200 p-3">

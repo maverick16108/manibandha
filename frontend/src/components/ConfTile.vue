@@ -27,7 +27,7 @@ function initials(name) { return (name || '?').trim()[0]?.toUpperCase() || '?' }
       <template v-if="isHost && !t.isLocal">
         <button class="rounded-lg p-2 text-white hover:bg-black/70" :class="t.allowAudio ? 'bg-black/50' : 'bg-red-500/90'" :title="t.allowAudio ? 'Запретить звук' : 'Разрешить звук'" @click.stop="emit('permit', t.identity, 'audio', !t.allowAudio)"><AppIcon :name="t.allowAudio ? 'volume' : 'mic-off'" :size="20" /></button>
         <button class="rounded-lg p-2 text-white hover:bg-black/70" :class="t.allowVideo ? 'bg-black/50' : 'bg-red-500/90'" :title="t.allowVideo ? 'Запретить видео' : 'Разрешить видео'" @click.stop="emit('permit', t.identity, 'video', !t.allowVideo)"><AppIcon name="video" :size="20" /></button>
-        <button class="rounded-lg bg-black/50 px-2.5 py-2 text-sm font-semibold text-white hover:bg-black/70" title="Оставить говорить только его (заглушить остальных)" @click.stop="emit('permit', 'all', 'audio', false, t.identity)">1×</button>
+        <button class="rounded-lg bg-black/50 p-2 text-white hover:bg-black/70" title="Дать слово только ему — заглушить остальных" @click.stop="emit('permit', 'all', 'audio', false, t.identity)"><AppIcon name="user" :size="20" /></button>
       </template>
     </div>
   </div>

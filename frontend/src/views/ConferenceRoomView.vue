@@ -430,9 +430,9 @@ onBeforeUnmount(() => {
       <!-- нижняя панель -->
       <div class="mt-2 flex shrink-0 items-center justify-center gap-3 pb-2">
         <template v-if="canPublish">
-          <!-- микрофон + выбор устройства (во время загрузки иконка не меняется) -->
-          <div class="relative flex items-center">
-            <button class="flex h-11 items-center justify-center rounded-l-full pl-4 pr-3 transition" :class="[(micOn || micBusy) ? 'bg-parchment-200 text-ink-800 hover:bg-parchment-300' : 'bg-red-500 text-white', micBusy && 'animate-pulse']" title="Микрофон" @click="toggleMic"><AppIcon :name="(micOn || micBusy) ? 'volume' : 'mic-off'" :size="20" /></button>
+          <!-- микрофон + выбор устройства (скрыт, если ведущий забрал право на звук) -->
+          <div v-if="myAllowMic" class="relative flex items-center">
+            <button class="flex h-11 items-center justify-center transition" :class="[(micOn || micBusy) ? 'bg-parchment-200 text-ink-800 hover:bg-parchment-300' : 'bg-red-500 text-white', micBusy && 'animate-pulse', mics.length > 1 ? 'rounded-l-full pl-4 pr-3' : 'w-11 rounded-full']" title="Микрофон" @click="toggleMic"><AppIcon :name="(micOn || micBusy) ? 'volume' : 'mic-off'" :size="20" /></button>
             <button v-if="mics.length > 1" class="flex h-11 items-center justify-center rounded-r-full border-l border-parchment-50/60 pl-1.5 pr-2.5 transition" :class="(micOn || micBusy) ? 'bg-parchment-200 text-ink-800 hover:bg-parchment-300' : 'bg-red-500 text-white'" title="Выбрать микрофон" @click="micMenu = !micMenu; camMenu = false"><AppIcon name="chevron" :size="14" class="-rotate-90" /></button>
             <div v-if="micMenu" class="absolute bottom-14 left-0 z-40 min-w-[13rem] max-w-[16rem] overflow-hidden rounded-xl border border-parchment-200 bg-white py-1 shadow-xl">
               <button v-for="(d, di) in mics" :key="d.deviceId" class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-parchment-100" :class="curMic === d.deviceId ? 'font-semibold text-saffron-700' : 'text-ink-800'" @click="switchMic(d.deviceId)">
@@ -440,9 +440,9 @@ onBeforeUnmount(() => {
               </button>
             </div>
           </div>
-          <!-- камера + выбор устройства (во время загрузки иконка не меняется) -->
-          <div class="relative flex items-center">
-            <button class="flex h-11 items-center justify-center rounded-l-full pl-4 pr-3 transition" :class="[(camOn || camBusy) ? 'bg-parchment-200 text-ink-800 hover:bg-parchment-300' : 'bg-red-500 text-white', camBusy && 'animate-pulse']" title="Камера" @click="toggleCam"><AppIcon name="video" :size="20" /></button>
+          <!-- камера + выбор устройства (скрыта, если ведущий забрал право на видео) -->
+          <div v-if="myAllowCam" class="relative flex items-center">
+            <button class="flex h-11 items-center justify-center transition" :class="[(camOn || camBusy) ? 'bg-parchment-200 text-ink-800 hover:bg-parchment-300' : 'bg-red-500 text-white', camBusy && 'animate-pulse', cams.length > 1 ? 'rounded-l-full pl-4 pr-3' : 'w-11 rounded-full']" title="Камера" @click="toggleCam"><AppIcon name="video" :size="20" /></button>
             <button v-if="cams.length > 1" class="flex h-11 items-center justify-center rounded-r-full border-l border-parchment-50/60 pl-1.5 pr-2.5 transition" :class="(camOn || camBusy) ? 'bg-parchment-200 text-ink-800 hover:bg-parchment-300' : 'bg-red-500 text-white'" title="Выбрать камеру" @click="camMenu = !camMenu; micMenu = false"><AppIcon name="chevron" :size="14" class="-rotate-90" /></button>
             <div v-if="camMenu" class="absolute bottom-14 left-0 z-40 min-w-[13rem] max-w-[16rem] overflow-hidden rounded-xl border border-parchment-200 bg-white py-1 shadow-xl">
               <button v-for="(d, di) in cams" :key="d.deviceId" class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-parchment-100" :class="curCam === d.deviceId ? 'font-semibold text-saffron-700' : 'text-ink-800'" @click="switchCam(d.deviceId)">
@@ -450,7 +450,7 @@ onBeforeUnmount(() => {
               </button>
             </div>
           </div>
-          <button class="hidden h-11 w-11 items-center justify-center rounded-full transition sm:flex" :class="screenOn ? 'bg-saffron-500 text-white' : 'bg-parchment-200 text-ink-800 hover:bg-parchment-300'" title="Показать экран" @click="toggleScreen"><AppIcon name="screen" :size="20" /></button>
+          <button v-if="myAllowScreen" class="hidden h-11 w-11 items-center justify-center rounded-full transition sm:flex" :class="screenOn ? 'bg-saffron-500 text-white' : 'bg-parchment-200 text-ink-800 hover:bg-parchment-300'" title="Показать экран" @click="toggleScreen"><AppIcon name="screen" :size="20" /></button>
         </template>
         <!-- переключение раскладки: сетка / активный спикер (для всех) -->
         <button class="flex h-11 w-11 items-center justify-center rounded-full transition" :class="viewMode==='speaker' ? 'bg-saffron-500 text-white' : 'bg-parchment-200 text-ink-800 hover:bg-parchment-300'" :title="viewMode==='grid' ? 'Активный спикер' : 'Сетка'" @click="viewMode = viewMode==='grid' ? 'speaker' : 'grid'; pinnedId=null"><AppIcon :name="viewMode==='grid' ? 'user' : 'grid'" :size="20" /></button>

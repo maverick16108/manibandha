@@ -48,7 +48,7 @@ async function load() {
   try {
     const [g, l] = await Promise.all([
       client.get('/reports/group', { params: { ...params(), group_by: groupBy.value } }),
-      client.get('/disciples', { params: { ...params(), limit: 500 } }),
+      client.get('/disciples', { params: { ...params(), named: true, limit: 500 } }),
     ])
     groups.value = g.data
     rows.value = l.data.items

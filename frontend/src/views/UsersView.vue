@@ -30,7 +30,7 @@ async function load() {
   try {
     const [u, d, r] = await Promise.all([
       client.get('/users'),
-      client.get('/disciples', { params: { limit: 500 } }),
+      client.get('/disciples', { params: { named: true, limit: 500 } }),
       client.get('/roles'),
     ])
     users.value = u.data

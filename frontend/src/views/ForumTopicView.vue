@@ -116,7 +116,7 @@ onBeforeUnmount(() => { clearInterval(nowTimer); clearInterval(poll); backTarget
 </script>
 
 <template>
-  <div class="mx-auto max-w-4xl">
+  <div class="mx-auto max-w-6xl">
     <div v-if="loading" class="space-y-4">
       <AppSkeleton w="w-64" h="h-8" />
       <div class="card space-y-3 p-5"><AppSkeleton /><AppSkeleton w="w-4/5" /></div>

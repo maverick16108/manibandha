@@ -69,7 +69,7 @@ onMounted(async () => {
   form.disciple_id = auth.user?.disciple_id || ''
   if (!auth.user?.disciple_id) {
     try {
-      const { data } = await client.get('/disciples', { params: { limit: 500 } })
+      const { data } = await client.get('/disciples', { params: { named: true, limit: 500 } })
       disciples.value = data.items
     } catch { /* students can't list */ }
   }

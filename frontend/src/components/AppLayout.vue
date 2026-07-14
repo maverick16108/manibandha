@@ -50,6 +50,7 @@ function badgeFor(name) {
   if (name === 'questions') return navCounts.questions
   if (name === 'service-reports') return navCounts.reports
   if (name === 'approvals') return navCounts.approvals
+  if (name === 'forum') return navCounts.forum
   return 0
 }
 let countsTimer = null

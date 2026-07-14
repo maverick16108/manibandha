@@ -97,7 +97,7 @@ async function removeSection(s) {
 </script>
 
 <template>
-  <div>
+  <div class="mx-auto max-w-6xl">
     <!-- Панель управления -->
     <div class="mb-4 flex flex-wrap items-center gap-2">
       <!-- выбор раздела -->

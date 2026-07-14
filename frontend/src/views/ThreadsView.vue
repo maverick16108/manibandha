@@ -18,25 +18,29 @@ usePageTitle(() => (isReport.value ? 'Отчёты о служении' : 'Во�
 const threads = ref([])
 const loading = ref(true)
 const disciples = ref([])
+const mentors = ref([])
 const filterDisciple = ref('')
+const filterMentor = ref('')
 const MONTHS = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь']
 
 // guru/staff can filter by disciple; a student only ever sees their own
 const showFilter = computed(() => !auth.user?.disciple_id)
 const discipleOptions = computed(() => [{ value: '', label: 'Все ученики' }, ...disciples.value.map((d) => ({ value: d.id, label: d.spiritual_name || d.material_name }))])
+const mentorOptions = computed(() => [{ value: '', label: 'Все наставники' }, ...mentors.value.map((d) => ({ value: d.id, label: d.spiritual_name || d.material_name }))])
 
 async function load(silent = false) {
   if (!silent) loading.value = true
   try {
     const params = { kind: kind.value }
     if (filterDisciple.value) params.disciple_id = filterDisciple.value
+    if (filterMentor.value) params.mentor_id = filterMentor.value
     const { data } = await client.get('/threads', { params })
     threads.value = data
   } finally {
     loading.value = false
   }
 }
-watch([kind, filterDisciple], () => load())
+watch([kind, filterDisciple, filterMentor], () => load())
 
 // живое обновление списка (новые вопросы/отчёты появляются сразу)
 let poll = null
@@ -56,8 +60,12 @@ function periodLabel(p) {
 onMounted(async () => {
   if (showFilter.value) {
     try {
-      const { data } = await client.get('/disciples', { params: { limit: 500 } })
-      disciples.value = data.items
+      const [ds, ms] = await Promise.all([
+        client.get('/disciples', { params: { named: true, limit: 500 } }),
+        client.get('/disciples', { params: { is_mentor: true, named: true, limit: 500 } }),
+      ])
+      disciples.value = ds.data.items
+      mentors.value = ms.data.items
     } catch { /* ignore */ }
   }
   await load()
@@ -75,8 +83,9 @@ onMounted(async () => {
       </RouterLink>
     </div>
 
-    <div v-if="showFilter" class="card mb-4 p-3 sm:max-w-sm">
-      <AppSelect v-model="filterDisciple" :options="discipleOptions" placeholder="Все ученики" />
+    <div v-if="showFilter" class="mb-4 flex flex-col gap-3 sm:flex-row">
+      <div class="card p-3 sm:w-64"><AppSelect v-model="filterDisciple" :options="discipleOptions" placeholder="Все ученики" /></div>
+      <div class="card p-3 sm:w-64"><AppSelect v-model="filterMentor" :options="mentorOptions" placeholder="Все наставники" /></div>
     </div>
 
     <div v-if="loading" class="space-y-3">

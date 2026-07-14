@@ -44,6 +44,7 @@ def list_disciples(
     ready: bool | None = None,
     ready_pranama: bool | None = None,
     is_mentor: bool | None = Query(None, description="только наставники"),
+    named: bool | None = Query(None, description="только с заполненной анкетой (есть имя) — для комбобоксов выбора ученика; отсекает только что зарегистрированных без анкеты"),
     pending: bool | None = Query(None, description="true — ожидают апрува регистрации"),
     event_month: str | None = Query(None, description="YYYY-MM — событие (пранама/инициация) в этом месяце"),
     sort: str = Query("material_name", description="material_name|spiritual_name|created_at|initiation_status"),
@@ -73,6 +74,13 @@ def list_disciples(
         query = query.filter(Disciple.ready_for_pranama.is_(ready_pranama))
     if is_mentor is not None:
         query = query.filter(Disciple.is_mentor.is_(is_mentor))
+    if named:
+        # «Кандидат и выше» = анкета заполнена (есть мирское или духовное имя).
+        # Только что зарегистрированные (material_name="") в комбобоксы не попадают.
+        query = query.filter(or_(
+            and_(Disciple.material_name.isnot(None), Disciple.material_name != ""),
+            and_(Disciple.spiritual_name.isnot(None), Disciple.spiritual_name != ""),
+        ))
     if pending is not None:
         query = query.filter(Disciple.is_approved.is_(not pending))
     if event_month:

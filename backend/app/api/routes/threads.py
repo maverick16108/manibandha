@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.api.deps import get_current_user
 from app.core.database import get_db
 from app.core.enums import Role, ThreadKind
-from app.models import Disciple, MessageLike, Thread, ThreadMessage, ThreadRead, User
+from app.models import Disciple, ForumTopic, ForumTopicRead, MessageLike, Thread, ThreadMessage, ThreadRead, User
 from app.schemas.thread import MessageCreate, MessageOut, ThreadCreate, ThreadListItem, ThreadOut
 
 router = APIRouter(prefix="/threads", tags=["threads"])
@@ -101,6 +101,7 @@ def list_threads(
     user: User = Depends(get_current_user),
     kind: ThreadKind | None = None,
     disciple_id: int | None = None,
+    mentor_id: int | None = None,
     period: str | None = None,
 ):
     q = _accessible(db, user).options(joinedload(Thread.disciple), joinedload(Thread.messages))
@@ -108,6 +109,9 @@ def list_threads(
         q = q.filter(Thread.kind == kind)
     if disciple_id:
         q = q.filter(Thread.disciple_id == disciple_id)
+    if mentor_id:
+        # ветки учеников, закреплённых за наставником (_accessible уже джойнит Disciple)
+        q = q.filter(Disciple.mentor_id == mentor_id)
     if period:
         q = q.filter(Thread.period == period)
     rows = q.order_by(Thread.updated_at.desc()).all()
@@ -191,6 +195,18 @@ def nav_counts(db: Session = Depends(get_db), user: User = Depends(get_current_u
     }
     if "disciples.approve" in caps:
         res["approvals"] = db.query(Disciple).filter(Disciple.is_approved.is_(False)).count()
+
+    # Форум: сколько тем с новой (непросмотренной) активностью — как индикатор в
+    # списке тем (topic.updated_at > last_seen, либо тема ещё не открывалась).
+    res["forum"] = 0
+    if "forum.view" in caps:
+        f_reads = {r.topic_id: r.last_seen_at for r in db.query(ForumTopicRead).filter(ForumTopicRead.user_id == user.id).all()}
+        fc = 0
+        for t in db.query(ForumTopic).all():
+            ls = f_reads.get(t.id)
+            if ls is None or (t.updated_at and ls and t.updated_at > ls):
+                fc += 1
+        res["forum"] = fc
     return res
 
 

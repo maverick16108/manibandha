@@ -196,7 +196,7 @@ onBeforeUnmount(() => { try { room?.disconnect() } catch { /* ignore */ } })
 
     <template v-else>
       <!-- панель ведущего -->
-      <div v-if="isHost" class="mb-2 flex flex-wrap items-center gap-2 text-sm">
+      <div v-if="isHost" class="mb-2 flex flex-wrap items-center gap-2 pt-3 text-sm">
         <span class="font-medium text-ink-700/60">Модерация:</span>
         <button class="rounded-md border border-parchment-300 px-2.5 py-1 text-ink-700 hover:bg-parchment-100" @click="moderate('all','audio',true)">Выкл. звук всем</button>
         <button class="rounded-md border border-parchment-300 px-2.5 py-1 text-ink-700 hover:bg-parchment-100" @click="moderate('all','video',true)">Выкл. видео всем</button>
@@ -205,7 +205,7 @@ onBeforeUnmount(() => { try { room?.disconnect() } catch { /* ignore */ } })
           <button class="rounded-md px-2.5 py-1 transition" :class="viewMode==='speaker' ? 'bg-saffron-500 text-white' : 'text-ink-700 hover:bg-parchment-100'" @click="viewMode='speaker'; pinnedId=null">Активный спикер</button>
         </div>
       </div>
-      <div v-else class="mb-2 flex justify-end gap-1 text-sm">
+      <div v-else class="mb-2 flex justify-end gap-1 pt-3 text-sm">
         <button class="rounded-md px-2.5 py-1 transition" :class="viewMode==='grid' ? 'bg-saffron-500 text-white' : 'text-ink-700 hover:bg-parchment-100'" @click="viewMode='grid'; pinnedId=null">Сетка</button>
         <button class="rounded-md px-2.5 py-1 transition" :class="viewMode==='speaker' ? 'bg-saffron-500 text-white' : 'text-ink-700 hover:bg-parchment-100'" @click="viewMode='speaker'; pinnedId=null">Активный спикер</button>
       </div>

@@ -14,6 +14,9 @@ const router = useRouter()
 const route = useRoute()
 const sidebarOpen = ref(false)
 const profileMenu = ref(false)
+// свёрнутое боковое меню на десктопе (запоминаем выбор)
+const collapsed = ref(localStorage.getItem('sidebarCollapsed') === '1')
+watch(collapsed, (v) => localStorage.setItem('sidebarCollapsed', v ? '1' : '0'))
 onEscape(() => { profileMenu.value = false; sidebarOpen.value = false })
 // незаапрувленный кандидат — без левого меню, только экран ожидания
 const showSidebar = computed(() => !auth.isPending)
@@ -74,12 +77,15 @@ function logout() {
     <!-- Sidebar (скрыт для незаапрувленного кандидата) -->
     <aside
       v-if="showSidebar"
-      class="fixed inset-y-0 left-0 z-30 flex w-64 transform flex-col border-r border-parchment-200 bg-white transition-transform lg:translate-x-0"
-      :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full'"
+      class="fixed inset-y-0 left-0 z-30 flex w-64 transform flex-col border-r border-parchment-200 bg-white transition-transform"
+      :class="[sidebarOpen ? 'translate-x-0' : '-translate-x-full', collapsed ? 'lg:-translate-x-full' : 'lg:translate-x-0']"
     >
       <div class="flex h-16 shrink-0 items-center gap-2.5 border-b border-parchment-200 px-5">
         <img src="/lotus-mark.png" alt="" class="h-9 w-auto" />
         <span class="font-display text-2xl font-semibold leading-none text-ink-900">Манибандха</span>
+        <button class="ml-auto hidden rounded-lg p-1.5 text-ink-700/60 hover:bg-parchment-100 lg:block" title="Свернуть меню" @click="collapsed = true">
+          <AppIcon name="chevron" :size="18" class="rotate-90" />
+        </button>
       </div>
 
       <nav class="flex-1 overflow-y-auto p-3">
@@ -135,10 +141,13 @@ function logout() {
     <div v-if="profileMenu" class="fixed inset-0 z-20" @click="profileMenu = false"></div>
 
     <!-- Main -->
-    <div :class="showSidebar && 'lg:pl-64'">
+    <div :class="showSidebar && !collapsed && 'lg:pl-64'">
       <header class="sticky top-0 z-10 flex h-16 items-center gap-3 border-b border-parchment-200 bg-parchment-50/90 px-4 backdrop-blur sm:px-6">
         <button v-if="showSidebar" class="-ml-1 shrink-0 rounded-lg p-2 text-ink-800 hover:bg-parchment-200 lg:hidden" @click="sidebarOpen = true">
           <AppIcon name="menu" :size="28" :stroke="2" />
+        </button>
+        <button v-if="showSidebar && collapsed" class="-ml-1 hidden shrink-0 rounded-lg p-2 text-ink-800 hover:bg-parchment-200 lg:block" title="Показать меню" @click="collapsed = false">
+          <AppIcon name="menu" :size="26" :stroke="2" />
         </button>
         <button v-if="showSidebar && showBack" class="btn-outline shrink-0" @click="goBack">
           <AppIcon name="chevron" :size="16" class="rotate-90" /> Назад

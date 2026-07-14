@@ -125,3 +125,41 @@
 .month-rail::-webkit-scrollbar-track { background: transparent; }
 .month-rail::-webkit-scrollbar-thumb { background: rgba(200,116,42,0.45); border-radius: 9999px; }
 .month-rail::-webkit-scrollbar-thumb:hover { background: rgba(200,116,42,0.65); }
+
+/* ── Кастомные чекбоксы и радио (весь проект) ── */
+input[type="checkbox"],
+input[type="radio"] {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  width: 1.15rem;
+  height: 1.15rem;
+  flex: none;
+  margin: 0;
+  border: 2px solid #d8c4a6;
+  border-radius: 0.35rem;
+  background-color: #fff;
+  background-position: center;
+  background-repeat: no-repeat;
+  cursor: pointer;
+  vertical-align: middle;
+  transition: background-color 0.12s ease, border-color 0.12s ease;
+}
+input[type="radio"] { border-radius: 9999px; }
+input[type="checkbox"]:hover,
+input[type="radio"]:hover { border-color: #c8742a; }
+input[type="checkbox"]:checked {
+  background-color: #c8742a;
+  border-color: #c8742a;
+  background-size: 74%;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='white' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'><path d='M3 8.5l3.2 3.2L13 4.5'/></svg>");
+}
+input[type="radio"]:checked {
+  background-color: #c8742a;
+  border-color: #c8742a;
+  background-image: radial-gradient(circle, #fff 0 32%, transparent 34%);
+}
+input[type="checkbox"]:focus-visible,
+input[type="radio"]:focus-visible { outline: 2px solid rgba(200, 116, 42, 0.5); outline-offset: 1px; }
+input[type="checkbox"]:disabled,
+input[type="radio"]:disabled { opacity: 0.5; cursor: default; }

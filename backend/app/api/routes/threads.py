@@ -207,6 +207,12 @@ def nav_counts(db: Session = Depends(get_db), user: User = Depends(get_current_u
             if ls is None or (t.updated_at and ls and t.updated_at > ls):
                 fc += 1
         res["forum"] = fc
+
+    # Конференции: идущие + запланированные
+    res["conference"] = 0
+    if "conference.view" in caps:
+        from app.models import Conference
+        res["conference"] = db.query(Conference).filter(Conference.status.in_(("live", "scheduled"))).count()
     return res
 
 

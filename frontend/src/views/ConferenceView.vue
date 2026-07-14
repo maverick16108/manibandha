@@ -5,6 +5,8 @@ import client from '../api/client'
 import { useAuthStore } from '../stores/auth'
 import AppIcon from '../components/AppIcon.vue'
 import AppSkeleton from '../components/AppSkeleton.vue'
+import AppDatePicker from '../components/AppDatePicker.vue'
+import AppSelect from '../components/AppSelect.vue'
 import { confirmDialog } from '../composables/confirm'
 import { usePageTitle } from '../composables/pageTitle'
 
@@ -17,7 +19,12 @@ const items = ref([])
 const loading = ref(true)
 
 const showForm = ref(false)
-const form = ref({ title: '', description: '', mode: 'interactive', scheduled_at: '' })
+const form = ref({ title: '', description: '', mode: 'interactive' })
+const schedDate = ref('')   // YYYY-MM-DD
+const schedHour = ref(19)
+const schedMin = ref(0)
+const hourOptions = Array.from({ length: 24 }, (_, i) => ({ value: i, label: String(i).padStart(2, '0') }))
+const minOptions = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55].map((m) => ({ value: m, label: String(m).padStart(2, '0') }))
 const saving = ref(false)
 
 async function load(silent = false) {
@@ -43,10 +50,15 @@ async function create() {
   saving.value = true
   try {
     const payload = { title: form.value.title.trim(), description: form.value.description.trim() || null, mode: form.value.mode }
-    if (form.value.scheduled_at) payload.scheduled_at = new Date(form.value.scheduled_at).toISOString()
+    if (schedDate.value) {
+      const hh = String(schedHour.value).padStart(2, '0')
+      const mm = String(schedMin.value).padStart(2, '0')
+      payload.scheduled_at = new Date(`${schedDate.value}T${hh}:${mm}:00`).toISOString()
+    }
     const { data } = await client.post('/conferences', payload)
     showForm.value = false
-    form.value = { title: '', description: '', mode: 'interactive', scheduled_at: '' }
+    form.value = { title: '', description: '', mode: 'interactive' }
+    schedDate.value = ''; schedHour.value = 19; schedMin.value = 0
     await load(true)
     router.push({ name: 'conference-room', params: { id: data.id } })
   } finally { saving.value = false }
@@ -78,7 +90,15 @@ async function remove(c) {
       </div>
       <div>
         <label class="label">Запланировать (необязательно)</label>
-        <input v-model="form.scheduled_at" type="datetime-local" class="input sm:max-w-xs" />
+        <div class="flex flex-wrap items-center gap-2">
+          <div class="w-44"><AppDatePicker v-model="schedDate" /></div>
+          <template v-if="schedDate">
+            <span class="text-ink-700/50">в</span>
+            <div class="w-20"><AppSelect v-model="schedHour" :options="hourOptions" /></div>
+            <span class="text-ink-700/60">:</span>
+            <div class="w-20"><AppSelect v-model="schedMin" :options="minOptions" /></div>
+          </template>
+        </div>
       </div>
       <div class="flex gap-2">
         <button class="btn-primary" :disabled="saving || !form.title.trim()" @click="create">{{ saving ? '…' : 'Создать и войти' }}</button>

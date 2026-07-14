@@ -4,6 +4,7 @@ import { RouterLink, useRoute, useRouter } from 'vue-router'
 import client from '../api/client'
 import AppSelect from '../components/AppSelect.vue'
 import MarkdownEditor from '../components/MarkdownEditor.vue'
+import PhotoUpload from '../components/PhotoUpload.vue'
 import { usePageTitle } from '../composables/pageTitle'
 import { backTarget } from '../composables/backTarget'
 
@@ -16,6 +17,7 @@ const sections = ref([])
 const sectionId = ref(route.query.section ? Number(route.query.section) : '')
 const title = ref('')
 const body = ref('')
+const cover = ref('')
 const error = ref('')
 const saving = ref(false)
 
@@ -37,7 +39,7 @@ async function submit() {
   if (!body.value.trim()) { error.value = 'Напишите первое сообщение'; return }
   saving.value = true
   try {
-    const { data } = await client.post('/forum/topics', { section_id: sectionId.value, title: title.value.trim(), body: body.value })
+    const { data } = await client.post('/forum/topics', { section_id: sectionId.value, title: title.value.trim(), body: body.value, cover_url: cover.value || null })
     try { await client.delete('/drafts/forum:new') } catch { /* игнор */ }
     router.push({ name: 'forum-topic', params: { id: data.id } })
   } catch (e) {
@@ -62,6 +64,10 @@ async function submit() {
       <div>
         <label class="label">Заголовок темы *</label>
         <input v-model="title" class="input" required placeholder="О чём тема" />
+      </div>
+      <div>
+        <label class="label">Обложка (необязательно)</label>
+        <PhotoUpload v-model="cover" />
       </div>
       <div>
         <label class="label">Первое сообщение *</label>

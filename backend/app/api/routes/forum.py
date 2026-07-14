@@ -8,7 +8,7 @@ from app.api.deps import get_current_user, require_cap
 from app.core.database import get_db
 from app.models import ForumPost, ForumSection, ForumTopic, ForumTopicRead, User
 from app.schemas.forum import (
-    Participant, PostCreate, PostOut, SectionCreate, SectionOut, TopicCreate, TopicListItem, TopicOut,
+    Participant, PostCreate, PostOut, SectionCreate, SectionOut, SectionUpdate, TopicCreate, TopicListItem, TopicOut,
 )
 
 router = APIRouter(prefix="/forum", tags=["forum"])
@@ -35,19 +35,24 @@ def _post_out(p: ForumPost) -> PostOut:
 
 
 # ── Разделы ──
+def _section_out(s: ForumSection, user: User, is_mod: bool, count: int | None = None) -> SectionOut:
+    return SectionOut(
+        id=s.id, title=s.title, description=s.description, color=s.color, cover_url=s.cover_url,
+        author_id=s.author_id, author_name=s.author.full_name if s.author else None,
+        topics_count=count if count is not None else len(s.topics),
+        can_edit=(s.author_id == user.id or is_mod), created_at=s.created_at,
+    )
+
+
 @router.get("/sections", response_model=list[SectionOut])
-def list_sections(db: Session = Depends(get_db), _: User = Depends(require_cap("forum.view"))):
+def list_sections(db: Session = Depends(get_db), user: User = Depends(require_cap("forum.view"))):
+    from app.core.capabilities import has_cap
+    is_mod = has_cap(db, user, "forum.moderate")
     sections = (
         db.query(ForumSection).options(joinedload(ForumSection.author), joinedload(ForumSection.topics))
         .order_by(ForumSection.title.asc()).all()
     )
-    return [
-        SectionOut(
-            id=s.id, title=s.title, description=s.description, color=s.color,
-            author_name=s.author.full_name if s.author else None,
-            topics_count=len(s.topics), created_at=s.created_at,
-        ) for s in sections
-    ]
+    return [_section_out(s, user, is_mod) for s in sections]
 
 
 @router.post("/sections", response_model=SectionOut, status_code=status.HTTP_201_CREATED)
@@ -57,22 +62,48 @@ def create_section(payload: SectionCreate, db: Session = Depends(get_db), user: 
         raise HTTPException(status_code=400, detail="Нужно название раздела")
     color = (payload.color or "#c8742a").strip()[:16] or "#c8742a"
     s = ForumSection(title=title[:160], description=(payload.description or "").strip()[:500] or None,
-                     color=color, author_id=user.id)
+                     color=color, cover_url=(payload.cover_url or None), author_id=user.id)
     db.add(s)
     db.commit()
     db.refresh(s)
-    return SectionOut(id=s.id, title=s.title, description=s.description, color=s.color,
-                      author_name=user.full_name, topics_count=0, created_at=s.created_at)
+    return _section_out(s, user, is_mod=True, count=0)
+
+
+def _section_editable(db: Session, user: User, s: ForumSection):
+    from app.core.capabilities import has_cap
+    if s.author_id != user.id and not has_cap(db, user, "forum.moderate"):
+        raise HTTPException(status_code=403, detail="Менять раздел может создатель или модератор")
+
+
+@router.patch("/sections/{section_id}", response_model=SectionOut)
+def update_section(section_id: int, payload: SectionUpdate, db: Session = Depends(get_db), user: User = Depends(require_cap("forum.post"))):
+    s = db.get(ForumSection, section_id)
+    if not s:
+        raise HTTPException(status_code=404, detail="Раздел не найден")
+    _section_editable(db, user, s)
+    if payload.title is not None:
+        t = payload.title.strip()
+        if not t:
+            raise HTTPException(status_code=400, detail="Название не может быть пустым")
+        s.title = t[:160]
+    if payload.description is not None:
+        s.description = payload.description.strip()[:500] or None
+    if payload.color is not None:
+        s.color = (payload.color.strip()[:16] or s.color)
+    if payload.cover_url is not None:
+        s.cover_url = payload.cover_url or None
+    db.commit()
+    db.refresh(s)
+    from app.core.capabilities import has_cap
+    return _section_out(s, user, is_mod=has_cap(db, user, "forum.moderate"))
 
 
 @router.delete("/sections/{section_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_section(section_id: int, db: Session = Depends(get_db), user: User = Depends(require_cap("forum.post"))):
-    from app.core.capabilities import has_cap
     s = db.get(ForumSection, section_id)
     if not s:
         raise HTTPException(status_code=404, detail="Раздел не найден")
-    if s.author_id != user.id and not has_cap(db, user, "forum.moderate"):
-        raise HTTPException(status_code=403, detail="Удалять раздел может автор или модератор")
+    _section_editable(db, user, s)
     db.delete(s)
     db.commit()
 
@@ -111,7 +142,7 @@ def list_topics(section_id: int | None = Query(None), db: Session = Depends(get_
         ls = reads.get(t.id)
         unread = ls is None or (t.updated_at and ls and t.updated_at > ls)
         out.append(TopicListItem(
-            id=t.id, title=t.title, section_id=t.section_id,
+            id=t.id, title=t.title, cover_url=t.cover_url, section_id=t.section_id,
             section_title=t.section.title if t.section else None,
             section_color=t.section.color if t.section else "#c8742a",
             author_name=t.author.full_name if t.author else None,
@@ -124,7 +155,7 @@ def list_topics(section_id: int | None = Query(None), db: Session = Depends(get_
 
 def _topic_out(t: ForumTopic) -> TopicOut:
     return TopicOut(
-        id=t.id, title=t.title, section_id=t.section_id,
+        id=t.id, title=t.title, cover_url=t.cover_url, section_id=t.section_id,
         section_title=t.section.title if t.section else None,
         section_color=t.section.color if t.section else "#c8742a",
         author_name=t.author.full_name if t.author else None,
@@ -143,7 +174,8 @@ def create_topic(payload: TopicCreate, db: Session = Depends(get_db), user: User
         raise HTTPException(status_code=400, detail="Нужно первое сообщение")
     if not db.get(ForumSection, payload.section_id):
         raise HTTPException(status_code=400, detail="Выберите раздел")
-    topic = ForumTopic(section_id=payload.section_id, title=title[:255], author_id=user.id)
+    topic = ForumTopic(section_id=payload.section_id, title=title[:255], author_id=user.id,
+                       cover_url=(payload.cover_url or None))
     db.add(topic)
     db.flush()
     db.add(ForumPost(topic_id=topic.id, author_id=user.id, body=body))

@@ -7,6 +7,14 @@ class SectionCreate(BaseModel):
     title: str
     description: str | None = None
     color: str | None = None
+    cover_url: str | None = None
+
+
+class SectionUpdate(BaseModel):
+    title: str | None = None
+    description: str | None = None
+    color: str | None = None
+    cover_url: str | None = None
 
 
 class SectionOut(BaseModel):
@@ -14,8 +22,11 @@ class SectionOut(BaseModel):
     title: str
     description: str | None = None
     color: str = "#c8742a"
+    cover_url: str | None = None
+    author_id: int | None = None
     author_name: str | None = None
     topics_count: int = 0
+    can_edit: bool = False
     created_at: datetime
 
 
@@ -23,6 +34,7 @@ class TopicCreate(BaseModel):
     section_id: int
     title: str
     body: str
+    cover_url: str | None = None
 
 
 class PostCreate(BaseModel):
@@ -48,6 +60,7 @@ class Participant(BaseModel):
 class TopicListItem(BaseModel):
     id: int
     title: str
+    cover_url: str | None = None
     section_id: int | None = None
     section_title: str | None = None
     section_color: str = "#c8742a"
@@ -65,6 +78,7 @@ class TopicListItem(BaseModel):
 class TopicOut(BaseModel):
     id: int
     title: str
+    cover_url: str | None = None
     section_id: int | None = None
     section_title: str | None = None
     section_color: str = "#c8742a"

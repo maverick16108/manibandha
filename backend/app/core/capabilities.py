@@ -50,6 +50,9 @@ SYSTEM_ROLES = [
     {"key": "student", "name": "Ученик", "is_superadmin": False, "is_default": True, "capabilities": [
         "calendar.view", "questions.ask", "reports.write", "forum.view", "forum.post",
     ]},
+    {"key": "forum_moderator", "name": "Модератор форума", "is_superadmin": False, "is_default": False, "capabilities": [
+        "forum.view", "forum.post", "forum.moderate",
+    ]},
 ]
 
 

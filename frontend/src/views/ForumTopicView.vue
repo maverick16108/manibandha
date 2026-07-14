@@ -128,7 +128,8 @@ onBeforeUnmount(() => { clearInterval(nowTimer); clearInterval(poll); backTarget
         <span class="text-sm font-medium text-ink-700/70">{{ topic.section_title }}</span>
       </div>
       <h1 class="mb-1 font-display text-2xl font-semibold text-ink-900">{{ topic.title }}</h1>
-      <p class="mb-5 text-sm text-ink-700/50">Тему создал {{ topic.author_name || 'Аноним' }}</p>
+      <p class="mb-4 text-sm text-ink-700/50">Тему создал {{ topic.author_name || 'Аноним' }}</p>
+      <img v-if="topic.cover_url" :src="topic.cover_url" alt="" class="mb-5 max-h-72 w-full rounded-xl object-cover" />
 
       <div class="space-y-3">
         <article v-for="p in posts" :key="p.id" data-post class="card p-4 sm:p-5">
@@ -155,7 +156,7 @@ onBeforeUnmount(() => { clearInterval(nowTimer); clearInterval(poll); backTarget
           <div class="min-w-0 flex-1 text-sm font-semibold text-saffron-700">Редактирование</div>
           <button class="shrink-0 rounded-full p-1 text-ink-700/50 hover:bg-parchment-200" @click="cancelEdit"><AppIcon name="close" :size="16" /></button>
         </div>
-        <MarkdownEditor v-model="body" :rows="4" type-anywhere hide-hint :draft-scope="`forum-topic:${id}`" placeholder="Написать сообщение…" @submit="send" />
+        <MarkdownEditor v-model="body" :rows="4" type-anywhere hide-hint :draft-scope="editingPost ? '' : `forum-topic:${id}`" placeholder="Написать сообщение…" @submit="send" />
         <div class="mt-1 flex justify-end gap-2">
           <button v-if="editingPost" class="btn-ghost" @click="cancelEdit">Отмена</button>
           <button class="btn-primary" :disabled="sending || !body.trim()" @click="send">{{ editingPost ? (sending ? '…' : 'Сохранить') : (sending ? '…' : 'Отправить') }}</button>

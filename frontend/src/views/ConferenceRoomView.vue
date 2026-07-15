@@ -167,9 +167,11 @@ async function connect() {
     await room.connect(data.url, data.token)
     state.value = 'connected'
     if (canPublish.value) {
-      camBusy.value = true; micBusy.value = true
-      try { await room.localParticipant.setCameraEnabled(true); camOn.value = true } catch { /* нет доступа */ } finally { camBusy.value = false }
-      try { await room.localParticipant.setMicrophoneEnabled(true); micOn.value = true } catch { /* нет доступа */ } finally { micBusy.value = false }
+      // включаем только то, что реально разрешено (ведущий мог отключить по умолчанию)
+      const mayCam = data.is_host || data.cam_allowed !== false
+      const mayMic = data.is_host || data.mic_allowed !== false
+      if (mayCam) { camBusy.value = true; try { await room.localParticipant.setCameraEnabled(true); camOn.value = true } catch { /* нет доступа */ } finally { camBusy.value = false } }
+      if (mayMic) { micBusy.value = true; try { await room.localParticipant.setMicrophoneEnabled(true); micOn.value = true } catch { /* нет доступа */ } finally { micBusy.value = false } }
       loadDevices()
       try { navigator.mediaDevices.addEventListener('devicechange', loadDevices) } catch { /* ignore */ }
     }
@@ -461,27 +463,40 @@ onBeforeUnmount(() => {
       <!-- нижняя панель -->
       <div class="mt-2 flex shrink-0 items-center justify-center gap-3 pb-2">
         <template v-if="canPublish">
-          <!-- микрофон + выбор устройства (скрыт, если ведущий забрал право на звук) -->
-          <div v-if="myAllowMic" class="relative flex items-center">
-            <button class="flex h-11 items-center justify-center transition" :class="[(micOn || micBusy) ? 'bg-parchment-200 text-ink-800 hover:bg-parchment-300' : 'bg-red-500 text-white', micBusy && 'animate-pulse', mics.length > 1 ? 'rounded-l-full pl-4 pr-3' : 'w-11 rounded-full']" title="Микрофон" @click="toggleMic"><AppIcon :name="(micOn || micBusy) ? 'volume' : 'mic-off'" :size="20" /></button>
-            <button v-if="mics.length > 1" class="flex h-11 items-center justify-center rounded-r-full border-l border-parchment-50/60 pl-1.5 pr-2.5 transition" :class="(micOn || micBusy) ? 'bg-parchment-200 text-ink-800 hover:bg-parchment-300' : 'bg-red-500 text-white'" title="Выбрать микрофон" @click="micMenu = !micMenu; camMenu = false"><AppIcon name="chevron" :size="14" class="-rotate-90" /></button>
+          <!-- микрофон + выбор устройства (тусклый и некликабельный, если ведущий отключил звук) -->
+          <div class="relative flex items-center">
+            <button class="flex h-11 items-center justify-center transition" :disabled="!myAllowMic"
+                    :title="myAllowMic ? 'Микрофон' : 'Микрофон отключён ведущим'"
+                    :class="[(mics.length > 1 && myAllowMic) ? 'rounded-l-full pl-4 pr-3' : 'w-11 rounded-full',
+                             !myAllowMic ? 'cursor-not-allowed bg-parchment-200 text-ink-700/40 opacity-50'
+                             : [(micOn || micBusy) ? 'bg-parchment-200 text-ink-800 hover:bg-parchment-300' : 'bg-red-500 text-white', micBusy && 'animate-pulse']]"
+                    @click="toggleMic"><AppIcon :name="(micOn || micBusy) ? 'volume' : 'mic-off'" :size="20" /></button>
+            <button v-if="mics.length > 1 && myAllowMic" class="flex h-11 items-center justify-center rounded-r-full border-l border-parchment-50/60 pl-1.5 pr-2.5 transition" :class="(micOn || micBusy) ? 'bg-parchment-200 text-ink-800 hover:bg-parchment-300' : 'bg-red-500 text-white'" title="Выбрать микрофон" @click="micMenu = !micMenu; camMenu = false"><AppIcon name="chevron" :size="14" class="-rotate-90" /></button>
             <div v-if="micMenu" class="absolute bottom-14 left-0 z-40 min-w-[13rem] max-w-[16rem] overflow-hidden rounded-xl border border-parchment-200 bg-white py-1 shadow-xl">
               <button v-for="(d, di) in mics" :key="d.deviceId" class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-parchment-100" :class="curMic === d.deviceId ? 'font-semibold text-saffron-700' : 'text-ink-800'" @click="switchMic(d.deviceId)">
                 <AppIcon name="volume" :size="14" class="shrink-0 opacity-60" /><span class="truncate">{{ devLabel(d, di, 'Микрофон') }}</span>
               </button>
             </div>
           </div>
-          <!-- камера + выбор устройства (скрыта, если ведущий забрал право на видео) -->
-          <div v-if="myAllowCam" class="relative flex items-center">
-            <button class="flex h-11 items-center justify-center transition" :class="[(camOn || camBusy) ? 'bg-parchment-200 text-ink-800 hover:bg-parchment-300' : 'bg-red-500 text-white', camBusy && 'animate-pulse', cams.length > 1 ? 'rounded-l-full pl-4 pr-3' : 'w-11 rounded-full']" title="Камера" @click="toggleCam"><AppIcon name="video" :size="20" /></button>
-            <button v-if="cams.length > 1" class="flex h-11 items-center justify-center rounded-r-full border-l border-parchment-50/60 pl-1.5 pr-2.5 transition" :class="(camOn || camBusy) ? 'bg-parchment-200 text-ink-800 hover:bg-parchment-300' : 'bg-red-500 text-white'" title="Выбрать камеру" @click="camMenu = !camMenu; micMenu = false"><AppIcon name="chevron" :size="14" class="-rotate-90" /></button>
+          <!-- камера + выбор устройства (тусклая и некликабельная, если ведущий отключил видео) -->
+          <div class="relative flex items-center">
+            <button class="flex h-11 items-center justify-center transition" :disabled="!myAllowCam"
+                    :title="myAllowCam ? 'Камера' : 'Камера отключена ведущим'"
+                    :class="[(cams.length > 1 && myAllowCam) ? 'rounded-l-full pl-4 pr-3' : 'w-11 rounded-full',
+                             !myAllowCam ? 'cursor-not-allowed bg-parchment-200 text-ink-700/40 opacity-50'
+                             : [(camOn || camBusy) ? 'bg-parchment-200 text-ink-800 hover:bg-parchment-300' : 'bg-red-500 text-white', camBusy && 'animate-pulse']]"
+                    @click="toggleCam"><AppIcon name="video" :size="20" /></button>
+            <button v-if="cams.length > 1 && myAllowCam" class="flex h-11 items-center justify-center rounded-r-full border-l border-parchment-50/60 pl-1.5 pr-2.5 transition" :class="(camOn || camBusy) ? 'bg-parchment-200 text-ink-800 hover:bg-parchment-300' : 'bg-red-500 text-white'" title="Выбрать камеру" @click="camMenu = !camMenu; micMenu = false"><AppIcon name="chevron" :size="14" class="-rotate-90" /></button>
             <div v-if="camMenu" class="absolute bottom-14 left-0 z-40 min-w-[13rem] max-w-[16rem] overflow-hidden rounded-xl border border-parchment-200 bg-white py-1 shadow-xl">
               <button v-for="(d, di) in cams" :key="d.deviceId" class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-parchment-100" :class="curCam === d.deviceId ? 'font-semibold text-saffron-700' : 'text-ink-800'" @click="switchCam(d.deviceId)">
                 <AppIcon name="video" :size="14" class="shrink-0 opacity-60" /><span class="truncate">{{ devLabel(d, di, 'Камера') }}</span>
               </button>
             </div>
           </div>
-          <button v-if="myAllowScreen" class="hidden h-11 w-11 items-center justify-center rounded-full transition sm:flex" :class="screenOn ? 'bg-saffron-500 text-white' : 'bg-parchment-200 text-ink-800 hover:bg-parchment-300'" title="Показать экран" @click="toggleScreen"><AppIcon name="screen" :size="20" /></button>
+          <button class="hidden h-11 w-11 items-center justify-center rounded-full transition sm:flex" :disabled="!myAllowScreen"
+                  :title="myAllowScreen ? 'Показать экран' : 'Показ экрана отключён ведущим'"
+                  :class="!myAllowScreen ? 'cursor-not-allowed bg-parchment-200 text-ink-700/40 opacity-50' : (screenOn ? 'bg-saffron-500 text-white' : 'bg-parchment-200 text-ink-800 hover:bg-parchment-300')"
+                  @click="toggleScreen"><AppIcon name="screen" :size="20" /></button>
         </template>
         <!-- переключение раскладки: сетка / активный спикер (для всех) -->
         <button class="flex h-11 w-11 items-center justify-center rounded-full transition" :class="viewMode==='speaker' ? 'bg-saffron-500 text-white' : 'bg-parchment-200 text-ink-800 hover:bg-parchment-300'" :title="viewMode==='grid' ? 'Активный спикер' : 'Сетка'" @click="viewMode = viewMode==='grid' ? 'speaker' : 'grid'; pinnedId=null"><AppIcon :name="viewMode==='grid' ? 'user' : 'grid'" :size="20" /></button>

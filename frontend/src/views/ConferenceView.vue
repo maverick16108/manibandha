@@ -8,6 +8,7 @@ import AppSkeleton from '../components/AppSkeleton.vue'
 import AppDatePicker from '../components/AppDatePicker.vue'
 import AppSelect from '../components/AppSelect.vue'
 import { confirmDialog } from '../composables/confirm'
+import { showToast } from '../composables/toast'
 import { usePageTitle } from '../composables/pageTitle'
 
 usePageTitle('Конференция')
@@ -114,7 +115,7 @@ async function saveEdit() {
 function copyLink(c) {
   if (!c.code) return
   const url = `${location.origin}/c/${c.code}`
-  navigator.clipboard?.writeText(url).then(() => alert('Ссылка на конференцию скопирована:\n' + url)).catch(() => prompt('Ссылка на конференцию:', url))
+  navigator.clipboard?.writeText(url).then(() => showToast('Ссылка на конференцию скопирована')).catch(() => prompt('Ссылка на конференцию:', url))
 }
 // enter=true — начать сейчас и войти; enter=false — запланировать на дату
 async function submit(enter) {

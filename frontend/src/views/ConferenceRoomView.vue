@@ -429,10 +429,6 @@ onBeforeUnmount(() => {
     </div>
 
     <template v-else>
-      <!-- индикатор записи (видят все) -->
-      <div v-if="recording" class="pointer-events-none absolute bottom-16 left-3 z-20 flex items-center gap-1.5 rounded-full bg-red-500/90 px-2.5 py-1 text-xs font-semibold text-white shadow">
-        <span class="h-2 w-2 animate-pulse rounded-full bg-white"></span> Идёт запись
-      </div>
       <!-- панель ведущего -->
       <div v-if="isHost" class="mb-2 flex flex-wrap items-center gap-x-4 gap-y-2 pt-3 text-sm">
         <span class="inline-flex items-center gap-2">
@@ -457,7 +453,8 @@ onBeforeUnmount(() => {
       </div>
 
       <!-- крупный слот (экран/спикер) + лента участников справа с вертикальной прокруткой -->
-      <div v-if="screenSharer || spotlightTile" class="mb-2 flex min-h-0 flex-1 gap-2 pt-2">
+      <div v-if="screenSharer || spotlightTile" class="relative mb-2 flex min-h-0 flex-1 gap-2 pt-2">
+        <div v-if="recording" class="absolute left-2 top-3 z-30 h-3 w-3 animate-pulse rounded-full bg-red-500 shadow ring-2 ring-white/70" title="Идёт запись"></div>
         <!-- крупно -->
         <div v-if="screenSharer" data-screen class="min-w-0 flex-1 overflow-hidden rounded-xl bg-ink-900">
           <video autoplay playsinline muted class="h-full w-full object-contain"></video>
@@ -484,7 +481,8 @@ onBeforeUnmount(() => {
       </div>
 
       <!-- обычная сетка (нет крупного слота) -->
-      <div v-else class="grid flex-1 gap-2 overflow-y-auto pt-2" :class="gridCols">
+      <div v-else class="relative grid flex-1 gap-2 overflow-y-auto pt-2" :class="gridCols">
+        <div v-if="recording" class="pointer-events-none absolute left-2 top-3 z-30 h-3 w-3 animate-pulse rounded-full bg-red-500 shadow ring-2 ring-white/70" title="Идёт запись"></div>
         <ConfTile v-for="t in tiles" :key="t.identity" :t="t" :raised="raised" :pinned-id="pinnedId" :is-host="isHost"
                   @pin="pinTile" @permit="permit" @kick="kick" />
       </div>

@@ -6,6 +6,7 @@ import { ROLE_LABELS } from '../lib/format'
 import { pageTitle } from '../composables/pageTitle'
 import { onEscape } from '../composables/useEscape'
 import { navCounts, refreshNavCounts } from '../composables/navCounts'
+import { toastState } from '../composables/toast'
 import { backTarget } from '../composables/backTarget'
 import AppIcon from './AppIcon.vue'
 
@@ -178,5 +179,12 @@ function logout() {
         <RouterView />
       </main>
     </div>
+
+    <!-- всплывающее уведомление (тост) -->
+    <transition enter-active-class="transition duration-200" enter-from-class="translate-y-3 opacity-0" leave-active-class="transition duration-200" leave-to-class="translate-y-3 opacity-0">
+      <div v-if="toastState.show" class="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-full bg-ink-900 px-4 py-2.5 text-sm font-medium text-white shadow-lg">
+        {{ toastState.msg }}
+      </div>
+    </transition>
   </div>
 </template>

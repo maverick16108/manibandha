@@ -26,6 +26,11 @@ async function load() {
 }
 onMounted(load)
 
+function step(key, delta, min) {
+  const v = Number(form.value[key]) || 0
+  form.value[key] = Math.max(min, v + delta)
+}
+
 async function save() {
   saving.value = true
   saved.value = false
@@ -60,7 +65,11 @@ async function save() {
         </div>
         <label class="label">Сколько минут можно изменять/удалять своё сообщение</label>
         <div class="flex items-center gap-2">
-          <input v-model.number="form.forum_edit_window_minutes" type="number" min="0" class="input w-40" />
+          <div class="stepper">
+            <button type="button" @click="step('forum_edit_window_minutes', -5, 0)">−</button>
+            <input v-model.number="form.forum_edit_window_minutes" type="number" min="0" />
+            <button type="button" @click="step('forum_edit_window_minutes', 5, 0)">+</button>
+          </div>
           <span class="text-sm text-ink-700/60">минут</span>
         </div>
         <p class="mt-1.5 text-xs text-ink-700/50">По истечении этого времени автор больше не сможет изменить или удалить сообщение (модератор — всегда может). 0 — запретить сразу.</p>
@@ -74,7 +83,11 @@ async function save() {
         </div>
         <label class="label">Через сколько дней без входа теряется авторизация</label>
         <div class="flex items-center gap-2">
-          <input v-model.number="form.auth_expire_days" type="number" min="1" class="input w-40" />
+          <div class="stepper">
+            <button type="button" @click="step('auth_expire_days', -1, 1)">−</button>
+            <input v-model.number="form.auth_expire_days" type="number" min="1" />
+            <button type="button" @click="step('auth_expire_days', 1, 1)">+</button>
+          </div>
           <span class="text-sm text-ink-700/60">дней</span>
         </div>
         <p class="mt-1.5 text-xs text-ink-700/50">Скользящее окно: при каждом заходе на сайт срок продлевается заново. Если пользователь не заходил столько дней — потребуется войти снова.</p>
@@ -87,3 +100,19 @@ async function save() {
     </template>
   </div>
 </template>
+
+<style scoped>
+/* кастомный числовой степпер (без нативных стрелок) */
+.stepper { display: inline-flex; align-items: stretch; overflow: hidden; border: 1px solid #d8c9b0; border-radius: 0.5rem; background: #fff; }
+.stepper button {
+  width: 2.5rem; font-size: 1.25rem; line-height: 1; color: #7a6a55;
+  transition: background-color 0.12s ease;
+}
+.stepper button:hover { background: #f3ead9; color: #c8742a; }
+.stepper input {
+  width: 4.5rem; text-align: center; font-size: 0.95rem; font-weight: 600; color: #2b2320;
+  border-left: 1px solid #e7dcc7; border-right: 1px solid #e7dcc7; outline: none; -moz-appearance: textfield;
+}
+.stepper input::-webkit-outer-spin-button,
+.stepper input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+</style>

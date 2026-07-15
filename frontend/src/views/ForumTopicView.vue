@@ -152,6 +152,12 @@ function doQuoteSelection() {
   window.getSelection()?.removeAllRanges()
 }
 function hideQuoteBar() { quoteBar.show = false }
+// при прокрутке закрываем всплывающие меню (иначе «висят» на месте, а страница уезжает)
+function onWindowScroll() {
+  hideQuoteBar()
+  if (picker.open) closePicker()
+  if (whoMenu.open) closeWho()
+}
 
 async function send() {
   if (editingPost.value) { await saveEdit(); return }
@@ -215,13 +221,13 @@ onMounted(() => {
   poll = setInterval(() => load(true), 5000) // живой опрос — новые сообщения/лайки видны почти сразу
   document.addEventListener('mouseup', onDocMouseUp)
   document.addEventListener('keydown', onEsc)
-  window.addEventListener('scroll', hideQuoteBar, { passive: true })
+  window.addEventListener('scroll', onWindowScroll, { passive: true })
 })
 onBeforeUnmount(() => {
   clearInterval(nowTimer); clearInterval(poll); backTarget.value = null
   document.removeEventListener('mouseup', onDocMouseUp)
   document.removeEventListener('keydown', onEsc)
-  window.removeEventListener('scroll', hideQuoteBar)
+  window.removeEventListener('scroll', onWindowScroll)
 })
 </script>
 

@@ -393,7 +393,7 @@ onBeforeUnmount(() => {
       <div v-if="screenSharer || spotlightTile" class="mb-2 flex min-h-0 flex-1 gap-2 pt-2">
         <!-- крупно -->
         <div v-if="screenSharer" data-screen class="min-w-0 flex-1 overflow-hidden rounded-xl bg-ink-900">
-          <video autoplay playsinline class="h-full w-full object-contain"></video>
+          <video autoplay playsinline muted class="h-full w-full object-contain"></video>
         </div>
         <div v-else class="relative min-w-0 flex-1 overflow-hidden rounded-xl bg-ink-900" :class="spotlightTile.speaking && 'speaking'">
           <video :data-cam="spotlightTile.identity" autoplay playsinline :muted="spotlightTile.isLocal" class="h-full w-full object-cover" :class="!spotlightTile.camOn && 'hidden'"></video>

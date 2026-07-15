@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import client from '../api/client'
 import { useAuthStore } from '../stores/auth'
 import AppIcon from '../components/AppIcon.vue'
@@ -38,7 +38,19 @@ async function load() {
   loading.value = true
   try { const { data } = await client.get('/conferences/recordings'); recordings.value = data.recordings || [] } finally { loading.value = false }
 }
-onMounted(() => { backTarget.value = { name: 'conference' }; load() })
+// поиск при наборе в любом месте страницы
+const searchInput = ref(null)
+function onDocType(e) {
+  if (e.ctrlKey || e.metaKey || e.altKey) return
+  const t = e.target
+  if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
+  if (editing.value !== null) return
+  if (e.key === 'Escape') { search.value = ''; return }
+  if (e.key === 'Backspace') { if (search.value) { search.value = search.value.slice(0, -1); e.preventDefault() }; return }
+  if (e.key.length === 1) { search.value += e.key; e.preventDefault(); nextTick(() => searchInput.value?.focus()) }
+}
+onMounted(() => { backTarget.value = { name: 'conference' }; load(); document.addEventListener('keydown', onDocType) })
+onBeforeUnmount(() => document.removeEventListener('keydown', onDocType))
 
 function recUrl(r) { return `${r.url}?token=${encodeURIComponent(auth.token)}` }
 function fmt(iso) { return iso ? new Date(iso).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '' }
@@ -78,7 +90,7 @@ async function remove(r) {
     <div v-if="!loading && recordings.length" class="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
       <div class="flex items-center gap-2 rounded-md border border-parchment-300 bg-white px-3 py-2 sm:w-72">
         <AppIcon name="search" :size="16" class="shrink-0 text-ink-700/40" />
-        <input v-model="search" class="w-full bg-transparent text-sm text-ink-800 outline-none placeholder:text-ink-700/40" placeholder="Поиск по названию, описанию" />
+        <input ref="searchInput" v-model="search" class="w-full bg-transparent text-sm text-ink-800 outline-none placeholder:text-ink-700/40" placeholder="Поиск по названию, описанию" />
       </div>
       <div class="flex items-center gap-2">
         <span class="text-sm text-ink-700/60">с</span>

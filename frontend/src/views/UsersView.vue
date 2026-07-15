@@ -21,6 +21,14 @@ const roles = ref([]) // [{id, name, ...}] — динамические роли
 const search = ref('')
 const roleFilter = ref('')
 const roleFilterOptions = computed(() => [{ value: '', label: 'Все роли' }, ...roleOptions])
+// legacy-роль (enum) выводим из выбранных ролей — для доступа к анкетам/скоупу на бэке
+const primaryRole = computed(() => {
+  const keys = roles.value.filter((r) => form.role_ids.includes(r.id)).map((r) => r.key)
+  if (keys.includes('superadmin') || keys.includes('guru')) return 'guru'
+  if (keys.includes('secretary')) return 'secretary'
+  if (keys.includes('curator')) return 'curator'
+  return 'student'
+})
 const filteredUsers = computed(() => {
   const q = search.value.trim().toLowerCase()
   return users.value.filter((u) => {
@@ -78,9 +86,23 @@ async function startEdit(u) {
   } catch {
     form.role_ids = []
   }
+  // старый пользователь без назначенных ролей — подставим чип по его legacy-роли, чтобы не сбросить
+  if (!form.role_ids.length && u.role) {
+    const m = roles.value.find((r) => r.key === u.role)
+    if (m) form.role_ids = [m.id]
+  }
 }
 
-function onKey(e) { if (e.key === 'Escape' && showForm.value) showForm.value = false }
+const searchInput = ref(null)
+function onKey(e) {
+  if (e.key === 'Escape' && showForm.value) { showForm.value = false; return }
+  if (showForm.value || e.ctrlKey || e.metaKey || e.altKey) return
+  const t = e.target
+  if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
+  if (e.key === 'Escape') { search.value = ''; return }
+  if (e.key === 'Backspace') { if (search.value) { search.value = search.value.slice(0, -1); e.preventDefault() }; return }
+  if (e.key.length === 1) { search.value += e.key; e.preventDefault(); nextTick(() => searchInput.value?.focus()) }
+}
 onMounted(() => document.addEventListener('keydown', onKey))
 onBeforeUnmount(() => document.removeEventListener('keydown', onKey))
 
@@ -88,15 +110,16 @@ async function save() {
   error.value = ''
   try {
     const discipleId = form.disciple_id || null
+    const role = primaryRole.value
     let userId
     if (editing.value) {
-      const payload = { full_name: form.full_name, phone: form.phone || null, role: form.role, is_active: form.is_active, disciple_id: discipleId }
+      const payload = { full_name: form.full_name, phone: form.phone || null, role, is_active: form.is_active, disciple_id: discipleId }
       if (form.password) payload.password = form.password
       await client.patch(`/users/${editing.value}`, payload)
       userId = editing.value
     } else {
       const { role_ids, ...userPayload } = form
-      const { data } = await client.post('/users', { ...userPayload, disciple_id: discipleId })
+      const { data } = await client.post('/users', { ...userPayload, role, disciple_id: discipleId })
       userId = data.id
     }
     await client.put(`/users/${userId}/roles`, { role_ids: form.role_ids })
@@ -122,7 +145,7 @@ onMounted(load)
       <button class="btn-primary shrink-0" @click="startNew">+ Добавить</button>
       <div class="relative min-w-0 flex-1 sm:max-w-xs">
         <AppIcon name="disciples" :size="16" class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-700/40" />
-        <input v-model="search" class="input pl-9" placeholder="Поиск по имени, email, телефону" />
+        <input ref="searchInput" v-model="search" class="input pl-9" placeholder="Поиск по имени, email, телефону" />
       </div>
       <div class="w-44 shrink-0"><AppSelect v-model="roleFilter" :options="roleFilterOptions" /></div>
     </div>
@@ -154,15 +177,10 @@ onMounted(load)
           <div><label class="label">Имя *</label><input ref="nameInput" v-model="form.full_name" class="input" required /></div>
           <div v-if="!editing"><label class="label">Email *</label><input v-model="form.email" type="email" class="input" required /></div>
           <div><label class="label">Телефон (для входа по SMS)</label><PhoneInput v-model="form.phone" /></div>
-          <div class="grid grid-cols-2 gap-3">
-            <div><label class="label">Роль</label>
-              <AppSelect v-model="form.role" :options="roleOptions" />
-            </div>
-            <div><label class="label">{{ editing ? 'Новый пароль' : 'Пароль *' }}</label>
-              <input v-model="form.password" type="password" class="input" :required="!editing" :placeholder="editing ? 'оставьте пустым' : ''" />
-            </div>
+          <div><label class="label">{{ editing ? 'Новый пароль' : 'Пароль *' }}</label>
+            <input v-model="form.password" type="password" class="input" :required="!editing" :placeholder="editing ? 'оставьте пустым' : ''" />
           </div>
-          <div v-if="form.role === 'student'">
+          <div v-if="primaryRole === 'student'">
             <label class="label">Анкета ученика</label>
             <AppSelect v-model="form.disciple_id" :options="discipleOptions" placeholder="— не привязан —" />
           </div>

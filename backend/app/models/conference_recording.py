@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, String, func
+from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -15,6 +15,8 @@ class ConferenceRecording(Base):
     conference_id: Mapped[int] = mapped_column(ForeignKey("conferences.id", ondelete="CASCADE"), nullable=False, index=True)
     egress_id: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
     filename: Mapped[str | None] = mapped_column(String(255), nullable=True)  # имя файла в каталоге записей
+    title: Mapped[str | None] = mapped_column(String(255), nullable=True)  # своё название записи
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="active", server_default="active", nullable=False)  # active | done | failed
     duration_ms: Mapped[int] = mapped_column(BigInteger, default=0, server_default="0", nullable=False)
     size_bytes: Mapped[int] = mapped_column(BigInteger, default=0, server_default="0", nullable=False)

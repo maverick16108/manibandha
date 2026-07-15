@@ -476,12 +476,14 @@ def unban_participant(conf_id: int, identity: str, db: Session = Depends(get_db)
     return {"ok": True, "bans": _bans_out(db, c.id)}
 
 
-def _rec_out(r: ConferenceRecording, title: str | None = None) -> dict:
+def _rec_out(r: ConferenceRecording, conf_title: str | None = None, can_edit: bool = False) -> dict:
     return {
-        "id": r.id, "conference_id": r.conference_id, "conference_title": title,
+        "id": r.id, "conference_id": r.conference_id, "conference_title": conf_title,
+        "title": r.title or conf_title or "Запись", "description": r.description,
         "status": r.status, "duration_ms": r.duration_ms or 0, "size_bytes": r.size_bytes or 0,
         "started_at": r.started_at.isoformat() if r.started_at else None,
         "ended_at": r.ended_at.isoformat() if r.ended_at else None,
+        "can_edit": can_edit,
         "url": f"{settings.API_PREFIX}/conferences/recordings/{r.id}/file" if (r.status == "done" and r.filename) else None,
     }
 
@@ -556,7 +558,30 @@ def list_recordings(db: Session = Depends(get_db), user: User = Depends(require_
         .filter(ConferenceRecording.status == "done", ConferenceRecording.filename.isnot(None))
         .order_by(ConferenceRecording.started_at.desc()).all()
     )
-    return {"recordings": [_rec_out(r, r.conference.title if r.conference else None) for r in rows]}
+    is_host_cap = has_cap(db, user, "conference.host")
+    def _ce(r):
+        return bool(r.conference and (r.conference.host_id == user.id or is_host_cap))
+    return {"recordings": [_rec_out(r, r.conference.title if r.conference else None, _ce(r)) for r in rows]}
+
+
+@router.patch("/recordings/{rec_id}")
+def update_recording(rec_id: int, payload: dict = Body(...), db: Session = Depends(get_db), user: User = Depends(require_cap("conference.view"))):
+    """Модератор может задать своё название и описание записи."""
+    r = db.get(ConferenceRecording, rec_id)
+    if not r:
+        raise HTTPException(status_code=404, detail="Запись не найдена")
+    c = db.get(Conference, r.conference_id)
+    if not c or (c.host_id != user.id and not has_cap(db, user, "conference.host")):
+        raise HTTPException(status_code=403, detail="Менять запись может ведущий или модератор")
+    if "title" in payload:
+        t = (payload.get("title") or "").strip()
+        r.title = t[:255] or None
+    if "description" in payload:
+        d = (payload.get("description") or "").strip()
+        r.description = d or None
+    db.commit()
+    db.refresh(r)
+    return _rec_out(r, c.title, True)
 
 
 @router.get("/recordings/{rec_id}/file")

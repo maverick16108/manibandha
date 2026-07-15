@@ -42,23 +42,6 @@ onMounted(async () => {
 })
 onBeforeUnmount(() => { clearInterval(poll); clearInterval(tick) })
 
-// архив записей
-const archiveOpen = ref(false)
-const recordings = ref([])
-const recLoading = ref(false)
-const playingRec = ref(null)
-async function openArchive() {
-  archiveOpen.value = true; recLoading.value = true
-  try { const { data } = await client.get('/conferences/recordings'); recordings.value = data.recordings || [] } finally { recLoading.value = false }
-}
-function recUrl(r) { return `${r.url}?token=${encodeURIComponent(auth.token)}` }
-function fmtDur(ms) {
-  let s = Math.floor((ms || 0) / 1000); const h = Math.floor(s / 3600); s -= h * 3600
-  const m = Math.floor(s / 60); s -= m * 60; const pad = (n) => String(n).padStart(2, '0')
-  return h ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`
-}
-function fmtSize(b) { const mb = (b || 0) / 1048576; return mb >= 1024 ? `${(mb / 1024).toFixed(1)} ГБ` : `${Math.max(1, Math.round(mb))} МБ` }
-
 function elapsed(iso) {
   if (!iso) return ''
   let s = Math.max(0, Math.floor((nowTs.value - new Date(iso).getTime()) / 1000))
@@ -162,7 +145,7 @@ async function remove(c) {
     <div class="mb-6 flex items-center justify-between gap-3">
       <p class="text-ink-700/60">Онлайн-встречи и трансляции гуру с учениками</p>
       <div class="flex shrink-0 items-center gap-2">
-        <button v-if="recEnabled" class="btn-outline" title="Архив записей" @click="openArchive"><AppIcon name="play" :size="15" /> Записи</button>
+        <button v-if="recEnabled" class="btn-outline" title="Архив записей" @click="router.push({ name: 'conference-recordings' })"><AppIcon name="play" :size="15" /> Записи</button>
         <button v-if="canHost" class="btn-primary" @click="editingId ? resetForm() : (showForm = !showForm)"><AppIcon name="video" :size="16" /> Создать</button>
       </div>
     </div>
@@ -299,32 +282,5 @@ async function remove(c) {
         Конференций пока нет.<span v-if="canHost"> Создайте первую.</span>
       </div>
     </template>
-
-    <!-- архив записей -->
-    <div v-if="archiveOpen" class="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-ink-900/50 p-4 sm:p-8" @click.self="archiveOpen = false; playingRec = null">
-      <div class="card w-full max-w-3xl p-5">
-        <div class="mb-4 flex items-center justify-between">
-          <h3 class="font-display text-xl font-semibold text-ink-900">Архив записей</h3>
-          <button class="rounded-full p-1.5 text-ink-700/50 hover:bg-parchment-100" @click="archiveOpen = false; playingRec = null"><AppIcon name="close" :size="20" /></button>
-        </div>
-        <div v-if="recLoading" class="space-y-2"><AppSkeleton v-for="i in 3" :key="i" h="h-12" /></div>
-        <div v-else-if="!recordings.length" class="p-8 text-center text-ink-700/50">Записей пока нет</div>
-        <div v-else class="space-y-2">
-          <div v-for="r in recordings" :key="r.id" class="rounded-xl border border-parchment-200 p-3">
-            <div class="flex items-center justify-between gap-3">
-              <div class="min-w-0">
-                <div class="truncate font-medium text-ink-900">{{ r.conference_title || 'Конференция' }}</div>
-                <div class="text-xs text-ink-700/50">{{ fmt(r.started_at) }} · {{ fmtDur(r.duration_ms) }} · {{ fmtSize(r.size_bytes) }}</div>
-              </div>
-              <div class="flex shrink-0 items-center gap-2">
-                <button class="btn-outline text-sm" @click="playingRec = playingRec === r.id ? null : r.id"><AppIcon name="play" :size="14" /> {{ playingRec === r.id ? 'Скрыть' : 'Смотреть' }}</button>
-                <a :href="recUrl(r)" download class="btn-ghost text-sm" title="Скачать"><AppIcon name="download" :size="16" /></a>
-              </div>
-            </div>
-            <video v-if="playingRec === r.id" :src="recUrl(r)" controls autoplay class="mt-3 w-full rounded-lg bg-ink-900"></video>
-          </div>
-        </div>
-      </div>
-    </div>
   </div>
 </template>

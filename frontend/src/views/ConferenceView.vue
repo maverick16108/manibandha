@@ -176,8 +176,7 @@ async function remove(c) {
 
 <template>
   <div class="mx-auto max-w-6xl">
-    <div class="mb-6 flex items-center justify-between gap-3">
-      <p class="text-ink-700/60">Онлайн-встречи и трансляции гуру с учениками</p>
+    <div class="mb-6 flex items-center justify-end gap-3">
       <div class="flex shrink-0 items-center gap-2">
         <button v-if="recEnabled" class="btn-outline" title="Архив записей" @click="router.push({ name: 'conference-recordings' })"><AppIcon name="play" :size="15" /> Записи</button>
         <button v-if="canHost" class="btn-primary" @click="editingId ? resetForm() : (showForm = !showForm)"><AppIcon name="video" :size="16" /> Создать</button>

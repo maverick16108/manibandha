@@ -104,7 +104,7 @@ onMounted(load)
   <div class="mx-auto max-w-6xl">
     <div class="mb-6 flex flex-wrap items-center justify-between gap-3">
       <p class="text-ink-700/60">Где находится гуру и что происходит</p>
-      <div class="flex items-center gap-2">
+      <div class="flex flex-wrap items-center gap-2">
         <!-- переключатель вида -->
         <div class="flex rounded-lg border border-parchment-300 p-0.5">
           <button class="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm transition"
@@ -120,7 +120,7 @@ onMounted(load)
             <AppIcon name="pin" :size="15" /> Карта
           </button>
         </div>
-        <RouterLink v-if="auth.isStaff" :to="{ name: 'event-new' }" class="btn-primary">+ Событие</RouterLink>
+        <RouterLink v-if="auth.isStaff" :to="{ name: 'event-new' }" class="btn-primary shrink-0 whitespace-nowrap">+ Событие</RouterLink>
       </div>
     </div>
 

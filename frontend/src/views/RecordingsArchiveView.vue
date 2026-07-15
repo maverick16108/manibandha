@@ -5,6 +5,7 @@ import { useAuthStore } from '../stores/auth'
 import AppIcon from '../components/AppIcon.vue'
 import AppSkeleton from '../components/AppSkeleton.vue'
 import { backTarget } from '../composables/backTarget'
+import { confirmDialog } from '../composables/confirm'
 import { usePageTitle } from '../composables/pageTitle'
 
 usePageTitle('Записи конференций')
@@ -42,6 +43,15 @@ async function saveEdit(r) {
     editing.value = null
   } catch (e) { alert(e.response?.data?.detail || 'Не удалось сохранить') } finally { saving.value = false }
 }
+async function remove(r) {
+  const ok = await confirmDialog({ message: `Удалить запись «${r.title}»? Файл будет удалён с сервера безвозвратно.`, confirmText: 'Удалить', danger: true })
+  if (!ok) return
+  try {
+    await client.delete(`/conferences/recordings/${r.id}`)
+    recordings.value = recordings.value.filter((x) => x.id !== r.id)
+    if (playing.value === r.id) playing.value = null
+  } catch (e) { alert(e.response?.data?.detail || 'Не удалось удалить') }
+}
 </script>
 
 <template>
@@ -70,6 +80,7 @@ async function saveEdit(r) {
               <button class="btn-outline text-sm" @click="playing = playing === r.id ? null : r.id"><AppIcon name="play" :size="14" /> {{ playing === r.id ? 'Скрыть' : 'Смотреть' }}</button>
               <a :href="recUrl(r)" download class="btn-ghost p-2" title="Скачать"><AppIcon name="download" :size="18" /></a>
               <button v-if="r.can_edit" class="btn-ghost p-2" title="Изменить название и описание" @click="startEdit(r)"><AppIcon name="edit" :size="18" /></button>
+              <button v-if="r.can_edit" class="rounded-lg p-2 text-ink-700/40 transition hover:bg-red-50 hover:text-red-600" title="Удалить запись" @click="remove(r)"><AppIcon name="trash" :size="18" /></button>
             </div>
           </div>
           <video v-if="playing === r.id" :src="recUrl(r)" controls autoplay class="mt-3 w-full rounded-lg bg-ink-900"></video>

@@ -584,6 +584,28 @@ def update_recording(rec_id: int, payload: dict = Body(...), db: Session = Depen
     return _rec_out(r, c.title, True)
 
 
+@router.delete("/recordings/{rec_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_recording(rec_id: int, db: Session = Depends(get_db), user: User = Depends(require_cap("conference.view"))):
+    """Удалить запись (файл с сервера и запись из архива)."""
+    r = db.get(ConferenceRecording, rec_id)
+    if not r:
+        raise HTTPException(status_code=404, detail="Запись не найдена")
+    c = db.get(Conference, r.conference_id)
+    if not c or (c.host_id != user.id and not has_cap(db, user, "conference.host")):
+        raise HTTPException(status_code=403, detail="Удалить запись может ведущий или модератор")
+    if r.status == "active" and r.egress_id:
+        _stop_egress(r.egress_id)
+    if r.filename:
+        import os
+        path = os.path.join(settings.RECORDINGS_DIR, os.path.basename(r.filename))
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+    db.delete(r)
+    db.commit()
+
+
 @router.get("/recordings/{rec_id}/file")
 def recording_file(rec_id: int, token: str | None = Query(None), authorization: str | None = Header(None), db: Session = Depends(get_db)):
     """Отдать файл записи (с поддержкой Range для <video>). Авторизация — заголовком или ?token=."""

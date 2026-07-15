@@ -9,7 +9,7 @@ from sqlalchemy import case, func
 from sqlalchemy.orm import Session, joinedload
 
 from app.api.deps import require_cap
-from app.core.capabilities import has_cap
+from app.core.capabilities import has_cap, user_is_superadmin
 from app.core.config import settings
 from app.core.database import SessionLocal, get_db
 from app.models import Conference, ConferenceBan, ConferenceRecording, User
@@ -90,6 +90,63 @@ def _stop_egress(egress_id: str):
         pass
 
 
+def _mp4_duration_ms(path: str) -> int:
+    """Длительность MP4 из атома mvhd (без внешних утилит)."""
+    import os
+    import struct
+    try:
+        total = os.path.getsize(path)
+        with open(path, "rb") as f:
+            def find_box(end, target):
+                while f.tell() < end:
+                    hdr = f.read(8)
+                    if len(hdr) < 8:
+                        return None
+                    size, typ = struct.unpack(">I4s", hdr)
+                    start = f.tell() - 8
+                    if size == 1:
+                        size = struct.unpack(">Q", f.read(8))[0]
+                    elif size == 0:
+                        size = end - start
+                    if typ == target:
+                        return (start, size)
+                    f.seek(start + size)
+                return None
+            moov = find_box(total, b"moov")
+            if not moov:
+                return 0
+            f.seek(moov[0] + 8)
+            mvhd = find_box(moov[0] + moov[1], b"mvhd")
+            if not mvhd:
+                return 0
+            f.seek(mvhd[0] + 8)
+            version = f.read(1)[0]
+            f.read(3)
+            if version == 1:
+                f.read(16); timescale = struct.unpack(">I", f.read(4))[0]; duration = struct.unpack(">Q", f.read(8))[0]
+            else:
+                f.read(8); timescale = struct.unpack(">I", f.read(4))[0]; duration = struct.unpack(">I", f.read(4))[0]
+            return int(duration * 1000 / timescale) if timescale else 0
+    except Exception:  # noqa: BLE001
+        return 0
+
+
+def _probe_file(rec: ConferenceRecording):
+    """Уточнить размер и длительность из самого файла (egress не всегда отдаёт корректно)."""
+    import os
+    if not rec.filename:
+        return
+    path = os.path.join(settings.RECORDINGS_DIR, os.path.basename(rec.filename))
+    if os.path.isfile(path):
+        try:
+            rec.size_bytes = os.path.getsize(path)
+        except OSError:
+            pass
+        d = _mp4_duration_ms(path)
+        if d:
+            rec.duration_ms = d
+
+
 def _apply_egress_info(rec: ConferenceRecording, info: dict) -> bool:
     """Обновить запись по данным egress. True — если статус изменился (завершилась)."""
     st = info.get("status")
@@ -110,6 +167,7 @@ def _apply_egress_info(rec: ConferenceRecording, info: dict) -> bool:
             rec.size_bytes = int(f.get("size") or 0)
         except (TypeError, ValueError):
             pass
+        _probe_file(rec)  # уточнить длительность/размер из самого файла (egress не всегда корректен)
         return True
     if st in fail_states:
         rec.status = "failed"
@@ -146,13 +204,13 @@ def _mint_token(identity: str, name: str, room: str, can_publish: bool, sources:
     return jwt.encode(claims, settings.LIVEKIT_API_SECRET, algorithm="HS256")
 
 
-def _out(c: Conference, user: User, is_host_cap: bool, parts: list | None = None) -> ConferenceOut:
+def _out(c: Conference, user: User, elevated: bool, parts: list | None = None) -> ConferenceOut:
     return ConferenceOut(
         id=c.id, title=c.title, description=c.description, mode=c.mode, status=c.status, room=c.room,
         mic_allowed=c.mic_allowed, cam_allowed=c.cam_allowed, screen_allowed=c.screen_allowed, guests_allowed=c.guests_allowed,
         auto_record=c.auto_record,
         host_id=c.host_id, host_name=c.host.full_name if c.host else None,
-        can_host=(c.host_id == user.id or is_host_cap),
+        can_host=(c.host_id == user.id or elevated),
         scheduled_at=c.scheduled_at, started_at=c.started_at, ended_at=c.ended_at, created_at=c.created_at,
         participant_count=len(parts) if parts is not None else 0,
         participants=(parts or [])[:6],
@@ -182,14 +240,14 @@ def _live_participants(db: Session, c: Conference) -> list[ConferenceParticipant
 
 @router.get("", response_model=list[ConferenceOut])
 def list_conferences(db: Session = Depends(get_db), user: User = Depends(require_cap("conference.view"))):
-    is_host_cap = has_cap(db, user, "conference.host")
+    elevated = user_is_superadmin(db, user)
     order = case((Conference.status == "live", 0), (Conference.status == "scheduled", 1), else_=2)
     rows = (
         db.query(Conference).options(joinedload(Conference.host))
         .order_by(order, Conference.scheduled_at.is_(None), Conference.scheduled_at.asc(), Conference.created_at.desc())
         .all()
     )
-    return [_out(c, user, is_host_cap, _live_participants(db, c) if c.status == "live" else None) for c in rows]
+    return [_out(c, user, elevated, _live_participants(db, c) if c.status == "live" else None) for c in rows]
 
 
 @router.post("", response_model=ConferenceOut, status_code=status.HTTP_201_CREATED)
@@ -198,9 +256,10 @@ def create_conference(payload: ConferenceCreate, db: Session = Depends(get_db), 
     if not title:
         raise HTTPException(status_code=400, detail="Нужно название конференции")
     mode = payload.mode if payload.mode in ("interactive", "broadcast") else "interactive"
+    host_id = _valid_host(db, payload.host_id) or user.id  # модератор — по умолчанию создатель
     c = Conference(
         title=title[:255], description=(payload.description or "").strip() or None,
-        mode=mode, room=f"conf_{uuid.uuid4().hex[:20]}", host_id=user.id,
+        mode=mode, room=f"conf_{uuid.uuid4().hex[:20]}", host_id=host_id,
         scheduled_at=payload.scheduled_at, status="scheduled",
         mic_allowed=bool(payload.mic_allowed), cam_allowed=bool(payload.cam_allowed),
         screen_allowed=bool(payload.screen_allowed), guests_allowed=bool(payload.guests_allowed),
@@ -213,8 +272,25 @@ def create_conference(payload: ConferenceCreate, db: Session = Depends(get_db), 
 
 
 def _editable(db: Session, user: User, c: Conference):
-    if c.host_id != user.id and not has_cap(db, user, "conference.host"):
-        raise HTTPException(status_code=403, detail="Управлять может ведущий или организатор")
+    if c.host_id != user.id and not user_is_superadmin(db, user):
+        raise HTTPException(status_code=403, detail="Управлять может только модератор конференции")
+
+
+def _valid_host(db: Session, host_id: int | None) -> int | None:
+    """Вернуть host_id, если это активный пользователь с правом вести конференции."""
+    if not host_id:
+        return None
+    u = db.get(User, host_id)
+    if u and u.is_active and has_cap(db, u, "conference.host"):
+        return u.id
+    return None
+
+
+@router.get("/moderators")
+def list_moderators(db: Session = Depends(get_db), user: User = Depends(require_cap("conference.host"))):
+    """Пользователи, которых можно назначить модератором конференции (право conference.host)."""
+    users = db.query(User).filter(User.is_active.is_(True)).order_by(User.full_name).all()
+    return {"moderators": [{"id": u.id, "name": u.full_name} for u in users if has_cap(db, u, "conference.host")]}
 
 
 @router.patch("/{conf_id}", response_model=ConferenceOut)
@@ -243,6 +319,10 @@ def update_conference(conf_id: int, payload: ConferenceUpdate, db: Session = Dep
         c.guests_allowed = bool(payload.guests_allowed)
     if payload.auto_record is not None:
         c.auto_record = bool(payload.auto_record)
+    if payload.host_id is not None:
+        vh = _valid_host(db, payload.host_id)
+        if vh:
+            c.host_id = vh
     if payload.status in ("scheduled", "live", "ended"):
         c.status = payload.status
         from sqlalchemy import func as _f
@@ -254,7 +334,7 @@ def update_conference(conf_id: int, payload: ConferenceUpdate, db: Session = Dep
     db.refresh(c)
     if payload.status == "ended":
         _close_room(c.room)  # отключить всех оставшихся участников
-    return _out(c, user, has_cap(db, user, "conference.host"))
+    return _out(c, user, user_is_superadmin(db, user))
 
 
 @router.delete("/{conf_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -276,7 +356,7 @@ def join_conference(conf_id: int, db: Session = Depends(get_db), user: User = De
     c = db.get(Conference, conf_id)
     if not c:
         raise HTTPException(status_code=404, detail="Конференция не найдена")
-    is_host = c.host_id == user.id or has_cap(db, user, "conference.host")
+    is_host = c.host_id == user.id or user_is_superadmin(db, user)
     identity = f"u{user.id}"
     if not is_host and db.query(ConferenceBan).filter(ConferenceBan.conference_id == c.id, ConferenceBan.identity == identity).first():
         raise HTTPException(status_code=403, detail="Вы удалены из этой встречи ведущим")
@@ -558,9 +638,16 @@ def list_recordings(db: Session = Depends(get_db), user: User = Depends(require_
         .filter(ConferenceRecording.status == "done", ConferenceRecording.filename.isnot(None))
         .order_by(ConferenceRecording.started_at.desc()).all()
     )
-    is_host_cap = has_cap(db, user, "conference.host")
+    # уточнить длительность/размер у записей, где они пустые (egress вернул 0)
+    dirty = False
+    for r in rows:
+        if not r.duration_ms or not r.size_bytes:
+            _probe_file(r); dirty = True
+    if dirty:
+        db.commit()
+    elevated = user_is_superadmin(db, user)
     def _ce(r):
-        return bool(r.conference and (r.conference.host_id == user.id or is_host_cap))
+        return bool(r.conference and (r.conference.host_id == user.id or elevated))
     return {"recordings": [_rec_out(r, r.conference.title if r.conference else None, _ce(r)) for r in rows]}
 
 
@@ -571,7 +658,7 @@ def update_recording(rec_id: int, payload: dict = Body(...), db: Session = Depen
     if not r:
         raise HTTPException(status_code=404, detail="Запись не найдена")
     c = db.get(Conference, r.conference_id)
-    if not c or (c.host_id != user.id and not has_cap(db, user, "conference.host")):
+    if not c or (c.host_id != user.id and not user_is_superadmin(db, user)):
         raise HTTPException(status_code=403, detail="Менять запись может ведущий или модератор")
     if "title" in payload:
         t = (payload.get("title") or "").strip()
@@ -591,7 +678,7 @@ def delete_recording(rec_id: int, db: Session = Depends(get_db), user: User = De
     if not r:
         raise HTTPException(status_code=404, detail="Запись не найдена")
     c = db.get(Conference, r.conference_id)
-    if not c or (c.host_id != user.id and not has_cap(db, user, "conference.host")):
+    if not c or (c.host_id != user.id and not user_is_superadmin(db, user)):
         raise HTTPException(status_code=403, detail="Удалить запись может ведущий или модератор")
     if r.status == "active" and r.egress_id:
         _stop_egress(r.egress_id)

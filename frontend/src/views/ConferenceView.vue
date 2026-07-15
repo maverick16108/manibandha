@@ -20,7 +20,7 @@ const loading = ref(true)
 
 const showForm = ref(false)
 const editingId = ref(null) // id редактируемой конференции (иначе создаём новую)
-const form = ref({ title: '', description: '', mode: 'interactive', mic_allowed: true, cam_allowed: true, screen_allowed: true, guests_allowed: false, auto_record: false })
+const form = ref({ title: '', description: '', mode: 'interactive', mic_allowed: true, cam_allowed: true, screen_allowed: true, guests_allowed: false, auto_record: false, host_id: null })
 const schedDate = ref('')   // YYYY-MM-DD
 const schedHour = ref(19)
 const schedMin = ref(0)
@@ -36,9 +36,12 @@ let poll = null
 const nowTs = ref(Date.now())
 let tick = null
 const recEnabled = ref(false)
+const moderators = ref([])
+const moderatorOptions = computed(() => moderators.value.map((m) => ({ value: m.id, label: m.name })))
 onMounted(async () => {
   load(); poll = setInterval(() => load(true), 4000); tick = setInterval(() => { nowTs.value = Date.now() }, 1000)
   try { const { data } = await client.get('/settings'); recEnabled.value = !!data.recording_enabled } catch { /* ignore */ }
+  try { const { data } = await client.get('/conferences/moderators'); moderators.value = data.moderators || [] } catch { /* ignore */ }
 })
 onBeforeUnmount(() => { clearInterval(poll); clearInterval(tick) })
 
@@ -72,7 +75,7 @@ function modeLabel(m) { return m === 'broadcast' ? 'Трансляция' : 'В�
 function resetForm() {
   showForm.value = false
   editingId.value = null
-  form.value = { title: '', description: '', mode: 'interactive', mic_allowed: true, cam_allowed: true, screen_allowed: true, guests_allowed: false, auto_record: false }
+  form.value = { title: '', description: '', mode: 'interactive', mic_allowed: true, cam_allowed: true, screen_allowed: true, guests_allowed: false, auto_record: false, host_id: auth.user?.id ?? null }
   schedDate.value = ''; schedHour.value = 19; schedMin.value = 0
 }
 function startEdit(c) {
@@ -81,7 +84,7 @@ function startEdit(c) {
   form.value = {
     title: c.title || '', description: c.description || '', mode: c.mode || 'interactive',
     mic_allowed: c.mic_allowed !== false, cam_allowed: c.cam_allowed !== false,
-    screen_allowed: c.screen_allowed !== false, guests_allowed: !!c.guests_allowed, auto_record: !!c.auto_record,
+    screen_allowed: c.screen_allowed !== false, guests_allowed: !!c.guests_allowed, auto_record: !!c.auto_record, host_id: c.host_id ?? null,
   }
   if (c.scheduled_at) {
     const d = new Date(c.scheduled_at)
@@ -97,7 +100,7 @@ async function saveEdit() {
     const payload = {
       title: form.value.title.trim(), description: form.value.description.trim() || null, mode: form.value.mode,
       mic_allowed: form.value.mic_allowed, cam_allowed: form.value.cam_allowed,
-      screen_allowed: form.value.screen_allowed, guests_allowed: form.value.guests_allowed, auto_record: form.value.auto_record,
+      screen_allowed: form.value.screen_allowed, guests_allowed: form.value.guests_allowed, auto_record: form.value.auto_record, host_id: form.value.host_id || null,
     }
     if (schedDate.value) {
       const hh = String(schedHour.value).padStart(2, '0'); const mm = String(schedMin.value).padStart(2, '0')
@@ -117,7 +120,7 @@ async function submit(enter) {
   if (!form.value.title.trim()) return
   saving.value = true
   try {
-    const payload = { title: form.value.title.trim(), description: form.value.description.trim() || null, mode: form.value.mode, mic_allowed: form.value.mic_allowed, cam_allowed: form.value.cam_allowed, screen_allowed: form.value.screen_allowed, guests_allowed: form.value.guests_allowed, auto_record: form.value.auto_record }
+    const payload = { title: form.value.title.trim(), description: form.value.description.trim() || null, mode: form.value.mode, mic_allowed: form.value.mic_allowed, cam_allowed: form.value.cam_allowed, screen_allowed: form.value.screen_allowed, guests_allowed: form.value.guests_allowed, auto_record: form.value.auto_record, host_id: form.value.host_id || null }
     if (!enter && schedDate.value) {
       const hh = String(schedHour.value).padStart(2, '0')
       const mm = String(schedMin.value).padStart(2, '0')
@@ -154,6 +157,10 @@ async function remove(c) {
       <div v-if="editingId" class="text-sm font-semibold text-saffron-700">Изменение конференции</div>
       <input v-model="form.title" class="input" placeholder="Название конференции" />
       <textarea v-model="form.description" rows="2" class="input resize-y" placeholder="Описание (необязательно)"></textarea>
+      <div v-if="moderatorOptions.length > 1">
+        <label class="label">Модератор конференции</label>
+        <div class="sm:w-72"><AppSelect v-model="form.host_id" :options="moderatorOptions" /></div>
+      </div>
       <div class="flex flex-wrap items-center gap-4">
         <label class="flex items-center gap-2 text-sm"><input type="radio" value="interactive" v-model="form.mode" /> Встреча (все с камерой)</label>
         <label class="flex items-center gap-2 text-sm"><input type="radio" value="broadcast" v-model="form.mode" /> Трансляция (вещает ведущий)</label>

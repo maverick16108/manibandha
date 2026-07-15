@@ -13,6 +13,7 @@ class ConferenceCreate(BaseModel):
     screen_allowed: bool = True
     guests_allowed: bool = False
     auto_record: bool = False
+    host_id: int | None = None
 
 
 class ConferenceUpdate(BaseModel):
@@ -26,6 +27,7 @@ class ConferenceUpdate(BaseModel):
     screen_allowed: bool | None = None
     guests_allowed: bool | None = None
     auto_record: bool | None = None
+    host_id: int | None = None
 
 
 class ConferenceParticipant(BaseModel):

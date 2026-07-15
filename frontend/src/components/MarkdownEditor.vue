@@ -20,6 +20,7 @@ const props = defineProps({
   voice: { type: Boolean, default: false },
   // где хват растягивания: 'bottom' (обычные формы) | 'top' (чат — поле растёт вверх)
   grip: { type: String, default: 'bottom' },
+  scrollPage: { type: Boolean, default: false },
 })
 const emit = defineEmits(['update:modelValue', 'submit'])
 
@@ -86,7 +87,11 @@ function onResizeMove(e) {
   const el = textarea.value
   if (!el) return
   const delta = props.grip === 'bottom' ? (y - startY) : (startY - y)
-  el.style.height = Math.max(64, Math.min(window.innerHeight * 0.85, startH + delta)) + 'px'
+  const curH = el.offsetHeight
+  const newH = Math.max(64, Math.min(window.innerHeight * 0.85, startH + delta))
+  el.style.height = newH + 'px'
+  // растём вверх, оставляя низ на месте: прокручиваем страницу на разницу высоты
+  if (props.scrollPage) window.scrollBy(0, newH - curH)
   if (e.cancelable) e.preventDefault()
 }
 function stopResize() {

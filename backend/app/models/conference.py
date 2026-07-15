@@ -21,6 +21,8 @@ class Conference(Base):
     screen_allowed: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true", nullable=False)
     # можно ли входить гостям по ссылке (без авторизации)
     guests_allowed: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
+    # запускать запись автоматически при старте встречи
+    auto_record: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
     room: Mapped[str] = mapped_column(String(80), nullable=False, unique=True, index=True)
     status: Mapped[str] = mapped_column(String(20), default="scheduled", server_default="scheduled", nullable=False, index=True)  # scheduled | live | ended
     host_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)

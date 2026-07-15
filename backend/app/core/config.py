@@ -35,6 +35,8 @@ class Settings(BaseSettings):
     LIVEKIT_API_SECRET: str = ""
     LIVEKIT_URL: str = ""  # wss://... для клиента
     LIVEKIT_API_URL: str = "http://127.0.0.1:7880"  # HTTP API (RoomService) — внутренний
+    # каталог записей (тот же, что смонтирован в egress как /out)
+    RECORDINGS_DIR: str = "/opt/livekit/recordings"
 
     @property
     def cors_origins(self) -> list[str]:

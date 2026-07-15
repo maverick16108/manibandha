@@ -12,6 +12,7 @@ class ConferenceCreate(BaseModel):
     cam_allowed: bool = True
     screen_allowed: bool = True
     guests_allowed: bool = False
+    auto_record: bool = False
 
 
 class ConferenceUpdate(BaseModel):
@@ -24,6 +25,7 @@ class ConferenceUpdate(BaseModel):
     cam_allowed: bool | None = None
     screen_allowed: bool | None = None
     guests_allowed: bool | None = None
+    auto_record: bool | None = None
 
 
 class ConferenceParticipant(BaseModel):
@@ -42,6 +44,7 @@ class ConferenceOut(BaseModel):
     cam_allowed: bool = True
     screen_allowed: bool = True
     guests_allowed: bool = False
+    auto_record: bool = False
     host_id: int | None = None
     host_name: str | None = None
     can_host: bool = False

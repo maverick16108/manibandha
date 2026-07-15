@@ -12,7 +12,7 @@ from app.api.deps import require_cap
 from app.core.capabilities import has_cap
 from app.core.config import settings
 from app.core.database import SessionLocal, get_db
-from app.models import Conference, ConferenceBan, User
+from app.models import Conference, ConferenceBan, ConferenceRecording, User
 from app.schemas.conference import ConferenceCreate, ConferenceOut, ConferenceParticipant, ConferenceUpdate, JoinOut
 
 router = APIRouter(prefix="/conferences", tags=["conferences"])
@@ -48,6 +48,45 @@ def _close_room(room: str):
         pass
 
 
+# ── запись (LiveKit Egress) ──
+def _egress_token() -> str:
+    now = int(time.time())
+    return jwt.encode(
+        {"iss": settings.LIVEKIT_API_KEY, "nbf": now - 5, "exp": now + 300, "video": {"roomRecord": True}},
+        settings.LIVEKIT_API_SECRET, algorithm="HS256",
+    )
+
+
+def _egress_service(method: str, body: dict) -> dict:
+    url = f"{settings.LIVEKIT_API_URL}/twirp/livekit.Egress/{method}"
+    req = urllib.request.Request(
+        url, data=json.dumps(body).encode(),
+        headers={"Content-Type": "application/json", "Authorization": f"Bearer {_egress_token()}"},
+    )
+    with urllib.request.urlopen(req, timeout=10) as r:
+        return json.loads(r.read().decode() or "{}")
+
+
+def _start_egress(room: str, filename: str) -> str:
+    """Запустить запись комнаты в MP4. Возвращает egress_id."""
+    body = {
+        "roomName": room,
+        "layout": "grid",
+        "fileOutputs": [{"fileType": "MP4", "filepath": f"/out/{filename}"}],
+        # лёгкое кодирование — сервер слабый (1 ядро)
+        "advanced": {"width": 1280, "height": 720, "framerate": 20, "videoBitrate": 2000, "audioBitrate": 128},
+    }
+    info = _egress_service("StartRoomCompositeEgress", body)
+    return info.get("egressId") or info.get("egress_id") or ""
+
+
+def _stop_egress(egress_id: str):
+    try:
+        _egress_service("StopEgress", {"egressId": egress_id})
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def _mint_token(identity: str, name: str, room: str, can_publish: bool, sources: list | None = None, ttl: int = 6 * 3600) -> str:
     """LiveKit access token (JWT, HS256). sources ограничивает, что можно публиковать."""
     now = int(time.time())
@@ -65,6 +104,7 @@ def _out(c: Conference, user: User, is_host_cap: bool, parts: list | None = None
     return ConferenceOut(
         id=c.id, title=c.title, description=c.description, mode=c.mode, status=c.status, room=c.room,
         mic_allowed=c.mic_allowed, cam_allowed=c.cam_allowed, screen_allowed=c.screen_allowed, guests_allowed=c.guests_allowed,
+        auto_record=c.auto_record,
         host_id=c.host_id, host_name=c.host.full_name if c.host else None,
         can_host=(c.host_id == user.id or is_host_cap),
         scheduled_at=c.scheduled_at, started_at=c.started_at, ended_at=c.ended_at, created_at=c.created_at,
@@ -118,6 +158,7 @@ def create_conference(payload: ConferenceCreate, db: Session = Depends(get_db), 
         scheduled_at=payload.scheduled_at, status="scheduled",
         mic_allowed=bool(payload.mic_allowed), cam_allowed=bool(payload.cam_allowed),
         screen_allowed=bool(payload.screen_allowed), guests_allowed=bool(payload.guests_allowed),
+        auto_record=bool(payload.auto_record),
     )
     db.add(c)
     db.commit()
@@ -154,6 +195,8 @@ def update_conference(conf_id: int, payload: ConferenceUpdate, db: Session = Dep
         c.screen_allowed = bool(payload.screen_allowed)
     if payload.guests_allowed is not None:
         c.guests_allowed = bool(payload.guests_allowed)
+    if payload.auto_record is not None:
+        c.auto_record = bool(payload.auto_record)
     if payload.status in ("scheduled", "live", "ended"):
         c.status = payload.status
         from sqlalchemy import func as _f
@@ -204,6 +247,18 @@ def join_conference(conf_id: int, db: Session = Depends(get_db), user: User = De
         c.status = "live"
         c.started_at = func.now()
         db.commit()
+    # авто-запись при старте встречи ведущим
+    if is_host and c.auto_record and _egress_configured():
+        active = db.query(ConferenceRecording).filter(ConferenceRecording.conference_id == c.id, ConferenceRecording.status == "active").first()
+        if not active:
+            try:
+                fn = f"conf{c.id}-{uuid.uuid4().hex[:12]}.mp4"
+                eid = _start_egress(c.room, fn)
+                if eid:
+                    db.add(ConferenceRecording(conference_id=c.id, egress_id=eid, filename=fn, status="active"))
+                    db.commit()
+            except Exception:  # noqa: BLE001
+                pass
     # источники публикации: ведущий — всё; участник — по флагам конференции (трансляция — только ведущий)
     if is_host:
         sources = None
@@ -375,6 +430,85 @@ def unban_participant(conf_id: int, identity: str, db: Session = Depends(get_db)
     return {"ok": True, "bans": _bans_out(db, c.id)}
 
 
+def _rec_out(r: ConferenceRecording, title: str | None = None) -> dict:
+    return {
+        "id": r.id, "conference_id": r.conference_id, "conference_title": title,
+        "status": r.status, "duration_ms": r.duration_ms or 0, "size_bytes": r.size_bytes or 0,
+        "started_at": r.started_at.isoformat() if r.started_at else None,
+        "ended_at": r.ended_at.isoformat() if r.ended_at else None,
+        "url": f"{settings.API_PREFIX}/conferences/recordings/{r.id}/file" if (r.status == "done" and r.filename) else None,
+    }
+
+
+def _egress_configured() -> bool:
+    return bool(settings.LIVEKIT_API_KEY and settings.LIVEKIT_API_SECRET)
+
+
+@router.get("/{conf_id}/record")
+def record_status(conf_id: int, db: Session = Depends(get_db), user: User = Depends(require_cap("conference.view"))):
+    active = db.query(ConferenceRecording).filter(ConferenceRecording.conference_id == conf_id, ConferenceRecording.status == "active").first()
+    return {"recording": bool(active)}
+
+
+@router.post("/{conf_id}/record/start")
+def record_start(conf_id: int, db: Session = Depends(get_db), user: User = Depends(require_cap("conference.view"))):
+    c = db.get(Conference, conf_id)
+    if not c:
+        raise HTTPException(status_code=404, detail="Конференция не найдена")
+    _editable(db, user, c)
+    if not _egress_configured():
+        raise HTTPException(status_code=503, detail="Запись не настроена")
+    active = db.query(ConferenceRecording).filter(ConferenceRecording.conference_id == c.id, ConferenceRecording.status == "active").first()
+    if active:
+        return {"recording": True}
+    filename = f"conf{c.id}-{uuid.uuid4().hex[:12]}.mp4"
+    try:
+        egress_id = _start_egress(c.room, filename)
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"Не удалось начать запись: {e}")
+    if not egress_id:
+        raise HTTPException(status_code=502, detail="Egress не вернул id")
+    db.add(ConferenceRecording(conference_id=c.id, egress_id=egress_id, filename=filename, status="active"))
+    db.commit()
+    return {"recording": True}
+
+
+@router.post("/{conf_id}/record/stop")
+def record_stop(conf_id: int, db: Session = Depends(get_db), user: User = Depends(require_cap("conference.view"))):
+    c = db.get(Conference, conf_id)
+    if not c:
+        raise HTTPException(status_code=404, detail="Конференция не найдена")
+    _editable(db, user, c)
+    for rec in db.query(ConferenceRecording).filter(ConferenceRecording.conference_id == c.id, ConferenceRecording.status == "active").all():
+        if rec.egress_id:
+            _stop_egress(rec.egress_id)  # финализируется вебхуком egress_ended
+    return {"recording": False}
+
+
+@router.get("/recordings")
+def list_recordings(db: Session = Depends(get_db), user: User = Depends(require_cap("conference.view"))):
+    """Архив записей — готовые записи всех конференций, свежие сверху."""
+    rows = (
+        db.query(ConferenceRecording).options(joinedload(ConferenceRecording.conference))
+        .filter(ConferenceRecording.status == "done", ConferenceRecording.filename.isnot(None))
+        .order_by(ConferenceRecording.started_at.desc()).all()
+    )
+    return {"recordings": [_rec_out(r, r.conference.title if r.conference else None) for r in rows]}
+
+
+@router.get("/recordings/{rec_id}/file")
+def recording_file(rec_id: int, db: Session = Depends(get_db), user: User = Depends(require_cap("conference.view"))):
+    import os
+    from fastapi.responses import FileResponse
+    r = db.get(ConferenceRecording, rec_id)
+    if not r or not r.filename or r.status != "done":
+        raise HTTPException(status_code=404, detail="Запись не найдена")
+    path = os.path.join(settings.RECORDINGS_DIR, os.path.basename(r.filename))
+    if not os.path.isfile(path):
+        raise HTTPException(status_code=404, detail="Файл записи не найден")
+    return FileResponse(path, media_type="video/mp4", filename=os.path.basename(path))
+
+
 @router.post("/livekit-webhook", include_in_schema=False)
 async def livekit_webhook(request: Request):
     """LiveKit присылает события комнаты. При закрытии комнаты — помечаем встречу завершённой."""
@@ -397,4 +531,35 @@ async def livekit_webhook(request: Request):
                 c.status = "ended"
                 c.ended_at = func.now()
                 db.commit()
+                # остановить активную запись (room composite сам завершится, но подстрахуемся)
+                for rec in db.query(ConferenceRecording).filter(ConferenceRecording.conference_id == c.id, ConferenceRecording.status == "active").all():
+                    if rec.egress_id:
+                        _stop_egress(rec.egress_id)
+    elif event in ("egress_ended", "egress_updated") and data.get("egressInfo"):
+        info = data["egressInfo"]
+        eid = info.get("egressId") or info.get("egress_id")
+        st = info.get("status")  # EGRESS_COMPLETE / EGRESS_FAILED / EGRESS_ABORTED / ...
+        with SessionLocal() as db:
+            rec = db.query(ConferenceRecording).filter(ConferenceRecording.egress_id == eid).first()
+            if rec and rec.status == "active":
+                files = info.get("fileResults") or info.get("file_results") or []
+                if not files and info.get("file"):
+                    files = [info["file"]]
+                if event == "egress_ended":
+                    if st in ("EGRESS_COMPLETE", 3) and files:
+                        f = files[0]
+                        rec.status = "done"
+                        rec.filename = (f.get("filename") or rec.filename or "").split("/")[-1]
+                        try:
+                            rec.duration_ms = int(int(f.get("duration") or 0) / 1_000_000)  # ns → ms
+                        except (TypeError, ValueError):
+                            pass
+                        try:
+                            rec.size_bytes = int(f.get("size") or 0)
+                        except (TypeError, ValueError):
+                            pass
+                    else:
+                        rec.status = "failed"
+                    rec.ended_at = func.now()
+                    db.commit()
     return {"ok": True}

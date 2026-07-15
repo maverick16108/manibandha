@@ -144,6 +144,16 @@ def update_conference(conf_id: int, payload: ConferenceUpdate, db: Session = Dep
         c.description = payload.description.strip() or None
     if payload.scheduled_at is not None:
         c.scheduled_at = payload.scheduled_at
+    if payload.mode in ("interactive", "broadcast"):
+        c.mode = payload.mode
+    if payload.mic_allowed is not None:
+        c.mic_allowed = bool(payload.mic_allowed)
+    if payload.cam_allowed is not None:
+        c.cam_allowed = bool(payload.cam_allowed)
+    if payload.screen_allowed is not None:
+        c.screen_allowed = bool(payload.screen_allowed)
+    if payload.guests_allowed is not None:
+        c.guests_allowed = bool(payload.guests_allowed)
     if payload.status in ("scheduled", "live", "ended"):
         c.status = payload.status
         from sqlalchemy import func as _f

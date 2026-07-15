@@ -19,6 +19,11 @@ class ConferenceUpdate(BaseModel):
     description: str | None = None
     scheduled_at: datetime | None = None
     status: str | None = None  # scheduled | live | ended
+    mode: str | None = None
+    mic_allowed: bool | None = None
+    cam_allowed: bool | None = None
+    screen_allowed: bool | None = None
+    guests_allowed: bool | None = None
 
 
 class ConferenceParticipant(BaseModel):

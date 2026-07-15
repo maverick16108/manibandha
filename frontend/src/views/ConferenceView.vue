@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import client from '../api/client'
 import { useAuthStore } from '../stores/auth'
@@ -19,6 +19,7 @@ const items = ref([])
 const loading = ref(true)
 
 const showForm = ref(false)
+const editingId = ref(null) // id редактируемой конференции (иначе создаём новую)
 const form = ref({ title: '', description: '', mode: 'interactive', mic_allowed: true, cam_allowed: true, screen_allowed: true, guests_allowed: false })
 const schedDate = ref('')   // YYYY-MM-DD
 const schedHour = ref(19)
@@ -66,8 +67,42 @@ function modeLabel(m) { return m === 'broadcast' ? 'Трансляция' : 'В�
 
 function resetForm() {
   showForm.value = false
+  editingId.value = null
   form.value = { title: '', description: '', mode: 'interactive', mic_allowed: true, cam_allowed: true, screen_allowed: true, guests_allowed: false }
   schedDate.value = ''; schedHour.value = 19; schedMin.value = 0
+}
+function startEdit(c) {
+  editingId.value = c.id
+  showForm.value = true
+  form.value = {
+    title: c.title || '', description: c.description || '', mode: c.mode || 'interactive',
+    mic_allowed: c.mic_allowed !== false, cam_allowed: c.cam_allowed !== false,
+    screen_allowed: c.screen_allowed !== false, guests_allowed: !!c.guests_allowed,
+  }
+  if (c.scheduled_at) {
+    const d = new Date(c.scheduled_at)
+    schedDate.value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    schedHour.value = d.getHours(); schedMin.value = d.getMinutes() - (d.getMinutes() % 5)
+  } else { schedDate.value = '' }
+  nextTick(() => document.querySelector('.conf-form')?.scrollIntoView({ behavior: 'smooth', block: 'center' }))
+}
+async function saveEdit() {
+  if (!form.value.title.trim()) return
+  saving.value = true
+  try {
+    const payload = {
+      title: form.value.title.trim(), description: form.value.description.trim() || null, mode: form.value.mode,
+      mic_allowed: form.value.mic_allowed, cam_allowed: form.value.cam_allowed,
+      screen_allowed: form.value.screen_allowed, guests_allowed: form.value.guests_allowed,
+    }
+    if (schedDate.value) {
+      const hh = String(schedHour.value).padStart(2, '0'); const mm = String(schedMin.value).padStart(2, '0')
+      payload.scheduled_at = new Date(`${schedDate.value}T${hh}:${mm}:00`).toISOString()
+    }
+    await client.patch(`/conferences/${editingId.value}`, payload)
+    resetForm()
+    await load(true)
+  } finally { saving.value = false }
 }
 function copyLink(c) {
   const url = `${location.origin}/join/${c.room}`
@@ -105,10 +140,11 @@ async function remove(c) {
   <div class="mx-auto max-w-6xl">
     <div class="mb-6 flex items-center justify-between gap-3">
       <p class="text-ink-700/60">Онлайн-встречи и трансляции гуру с учениками</p>
-      <button v-if="canHost" class="btn-primary shrink-0" @click="showForm = !showForm"><AppIcon name="video" :size="16" /> Создать</button>
+      <button v-if="canHost" class="btn-primary shrink-0" @click="editingId ? resetForm() : (showForm = !showForm)"><AppIcon name="video" :size="16" /> Создать</button>
     </div>
 
-    <div v-if="showForm" class="card mb-6 space-y-3 p-5">
+    <div v-if="showForm" class="conf-form card mb-6 space-y-3 p-5">
+      <div v-if="editingId" class="text-sm font-semibold text-saffron-700">Изменение конференции</div>
       <input v-model="form.title" class="input" placeholder="Название конференции" />
       <textarea v-model="form.description" rows="2" class="input resize-y" placeholder="Описание (необязательно)"></textarea>
       <div class="flex flex-wrap items-center gap-4">
@@ -135,11 +171,16 @@ async function remove(c) {
         </div>
       </div>
       <div class="flex flex-wrap gap-2">
-        <button class="btn-primary" :disabled="saving || !form.title.trim()" @click="submit(true)">
-          <AppIcon name="video" :size="16" /> {{ saving ? '…' : 'Начать сейчас' }}
-        </button>
-        <button v-if="schedDate" class="btn-outline" :disabled="saving || !form.title.trim()" @click="submit(false)">Запланировать</button>
-        <button class="btn-ghost" @click="showForm = false">Отмена</button>
+        <template v-if="editingId">
+          <button class="btn-primary" :disabled="saving || !form.title.trim()" @click="saveEdit">{{ saving ? '…' : 'Сохранить' }}</button>
+        </template>
+        <template v-else>
+          <button class="btn-primary" :disabled="saving || !form.title.trim()" @click="submit(true)">
+            <AppIcon name="video" :size="16" /> {{ saving ? '…' : 'Начать сейчас' }}
+          </button>
+          <button v-if="schedDate" class="btn-outline" :disabled="saving || !form.title.trim()" @click="submit(false)">Запланировать</button>
+        </template>
+        <button class="btn-ghost" @click="resetForm">Отмена</button>
       </div>
     </div>
 
@@ -177,6 +218,7 @@ async function remove(c) {
               </div>
             </div>
             <div class="flex shrink-0 items-center gap-2">
+              <button v-if="c.can_host" class="btn-ghost p-2" title="Настройки конференции" @click.stop="startEdit(c)"><AppIcon name="settings" :size="17" /></button>
               <button v-if="c.can_host && c.guests_allowed" class="btn-ghost text-sm" title="Скопировать ссылку для гостей" @click.stop="copyLink(c)"><AppIcon name="link" :size="15" /> Ссылка</button>
               <button class="btn-primary" @click.stop="enter(c)">Войти</button>
               <button v-if="c.can_host" class="btn-ghost" @click.stop="endConf(c)">Завершить</button>
@@ -201,6 +243,7 @@ async function remove(c) {
               <p v-if="c.description" class="mt-1 text-sm text-ink-700/70">{{ c.description }}</p>
             </div>
             <div class="flex shrink-0 items-center gap-2">
+              <button v-if="c.can_host" class="btn-ghost p-2" title="Настройки конференции" @click.stop="startEdit(c)"><AppIcon name="settings" :size="17" /></button>
               <button v-if="c.can_host && c.guests_allowed" class="btn-ghost text-sm" title="Скопировать ссылку для гостей" @click.stop="copyLink(c)"><AppIcon name="link" :size="15" /> Ссылка</button>
               <button class="btn-outline" @click.stop="enter(c)">{{ c.can_host ? 'Начать' : 'Войти' }}</button>
               <button v-if="c.can_host" class="text-ink-700/40 hover:text-red-600" @click.stop="remove(c)"><AppIcon name="trash" :size="16" /></button>

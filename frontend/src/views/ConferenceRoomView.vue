@@ -6,6 +6,7 @@ import client from '../api/client'
 import AppIcon from '../components/AppIcon.vue'
 import ConfTile from '../components/ConfTile.vue'
 import { usePageTitle } from '../composables/pageTitle'
+import { confirmDialog } from '../composables/confirm'
 
 usePageTitle('Конференция')
 const route = useRoute()
@@ -234,7 +235,11 @@ async function loadBans() {
   try { const { data } = await client.get(`/conferences/${id}/bans`); bans.value = data.bans || [] } catch { /* ignore */ }
 }
 async function kick(identity, name) {
-  if (!confirm(`Удалить «${name || 'участника'}» из встречи? Он не сможет вернуться, пока вы не уберёте его из списка удалённых.`)) return
+  const ok = await confirmDialog({
+    message: `Удалить «${name || 'участника'}» из встречи? Он не сможет вернуться, пока вы не уберёте его из списка удалённых.`,
+    confirmText: 'Удалить', danger: true,
+  })
+  if (!ok) return
   try {
     const { data } = await client.post(`/conferences/${id}/kick`, { identity, name })
     bans.value = data.bans || bans.value

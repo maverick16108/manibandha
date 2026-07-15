@@ -480,11 +480,11 @@ onBeforeUnmount(() => { if (ws) ws.close(); clearTimeout(typingTimer); clearInte
 .chat-scroll::-webkit-scrollbar-thumb { background: rgba(75, 60, 50, 0.28); border-radius: 9999px; }
 
 /* подсветка при переходе к процитированному сообщению — заметная и надолго */
-.msg-flash > div { animation: msgflash 3.2s ease; border-radius: 1rem; }
+.msg-flash > div { animation: msgflash 3.4s ease; border-radius: 1rem; position: relative; z-index: 1; }
 @keyframes msgflash {
-  0%   { box-shadow: 0 0 0 0 rgba(234, 140, 42, 0); }
-  8%   { box-shadow: 0 0 0 4px rgba(234, 140, 42, 0.95); }
-  70%  { box-shadow: 0 0 0 4px rgba(234, 140, 42, 0.85); }
-  100% { box-shadow: 0 0 0 0 rgba(234, 140, 42, 0); }
+  0%   { transform: scale(1);     box-shadow: 0 0 0 0 rgba(255,255,255,0), 0 0 0 0 rgba(224,138,46,0); }
+  12%  { transform: scale(1.045); box-shadow: 0 0 0 3px #ffffff, 0 0 0 7px #e08a2e, 0 10px 26px rgba(0,0,0,0.3); }
+  75%  { transform: scale(1.01);  box-shadow: 0 0 0 3px #ffffff, 0 0 0 7px #e08a2e, 0 6px 18px rgba(0,0,0,0.18); }
+  100% { transform: scale(1);     box-shadow: 0 0 0 0 rgba(255,255,255,0), 0 0 0 0 rgba(224,138,46,0); }
 }
 </style>

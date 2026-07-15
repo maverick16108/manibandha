@@ -66,9 +66,9 @@
   color: #2b2320;
 }
 .voice-msg:hover { background: rgba(200, 116, 42, 0.2); }
-/* на своём (оранжевом) пузыре — светлая заливка */
-.bg-saffron-500 .voice-msg { background: rgba(255, 255, 255, 0.22); color: #fff; }
-.bg-saffron-500 .voice-msg:hover { background: rgba(255, 255, 255, 0.32); }
+/* на своём (оранжевом) пузыре — тёмная дорожка, чтобы белая волна была контрастной */
+.bg-saffron-500 .voice-msg { background: rgba(0, 0, 0, 0.17); color: #fff; }
+.bg-saffron-500 .voice-msg:hover { background: rgba(0, 0, 0, 0.25); }
 
 .voice-msg__ico {
   display: inline-flex;
@@ -110,10 +110,10 @@
   border-radius: 9999px;
   display: block;
 }
-.vw-base i { background: rgba(200, 116, 42, 0.45); }
+.vw-base i { background: rgba(200, 116, 42, 0.5); }
 .vw-played i { background: #c8742a; }
 .vw-played { clip-path: inset(0 100% 0 0); } /* по умолчанию ничего не заполнено */
-.bg-saffron-500 .vw-base i { background: rgba(255, 255, 255, 0.5); }
+.bg-saffron-500 .vw-base i { background: rgba(255, 255, 255, 0.55); }
 .bg-saffron-500 .vw-played i { background: #fff; }
 .voice-msg__wave:hover { opacity: 0.9; } /* лёгкий отклик — по клику можно перемотать */
 .voice-msg__time { flex: none; font-variant-numeric: tabular-nums; opacity: 0.75; min-width: 2.6rem; text-align: right; }

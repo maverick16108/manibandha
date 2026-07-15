@@ -66,15 +66,25 @@ function pInitials(name) { return (name || '?').trim()[0]?.toUpperCase() || '?' 
 
 const search = ref('')
 const searchInput = ref(null)
-function matchSearch(c) {
+const dateFrom = ref('')
+const dateTo = ref('')
+function confDate(c) { return (c.started_at || c.scheduled_at || c.created_at || '').slice(0, 10) }
+function matchFilters(c) {
   const q = search.value.trim().toLowerCase()
-  if (!q) return true
-  return [c.title, c.host_name].some((s) => (s || '').toLowerCase().includes(q))
+  if (q && ![c.title, c.host_name].some((s) => (s || '').toLowerCase().includes(q))) return false
+  if (dateFrom.value || dateTo.value) {
+    const d = confDate(c)
+    if (dateFrom.value && d < dateFrom.value) return false
+    if (dateTo.value && d > dateTo.value) return false
+  }
+  return true
 }
-const live = computed(() => items.value.filter((c) => c.status === 'live' && matchSearch(c)))
-const scheduled = computed(() => items.value.filter((c) => c.status === 'scheduled' && matchSearch(c)))
-const ended = computed(() => items.value.filter((c) => c.status === 'ended' && matchSearch(c)))
+const live = computed(() => items.value.filter((c) => c.status === 'live' && matchFilters(c)))
+const scheduled = computed(() => items.value.filter((c) => c.status === 'scheduled' && matchFilters(c)))
+const ended = computed(() => items.value.filter((c) => c.status === 'ended' && matchFilters(c)))
 const hasAny = computed(() => items.value.length > 0)
+const anyFilter = computed(() => !!(search.value || dateFrom.value || dateTo.value))
+function resetFilters() { search.value = ''; dateFrom.value = ''; dateTo.value = '' }
 // поиск при наборе в любом месте страницы
 function onDocType(e) {
   if (showForm.value || e.ctrlKey || e.metaKey || e.altKey) return
@@ -174,9 +184,18 @@ async function remove(c) {
       </div>
     </div>
 
-    <div v-if="hasAny && !showForm" class="mb-4 flex items-center gap-2 rounded-md border border-parchment-300 bg-white px-3 py-2 sm:max-w-xs">
-      <AppIcon name="search" :size="16" class="shrink-0 text-ink-700/40" />
-      <input ref="searchInput" v-model="search" class="w-full bg-transparent text-sm text-ink-800 outline-none placeholder:text-ink-700/40" placeholder="Поиск по конференциям" />
+    <div v-if="hasAny && !showForm" class="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+      <div class="flex items-center gap-2 rounded-md border border-parchment-300 bg-white px-3 py-2 sm:w-64">
+        <AppIcon name="search" :size="16" class="shrink-0 text-ink-700/40" />
+        <input ref="searchInput" v-model="search" class="w-full bg-transparent text-sm text-ink-800 outline-none placeholder:text-ink-700/40" placeholder="Поиск по названию, ведущему" />
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="text-sm text-ink-700/60">с</span>
+        <div class="w-40"><AppDatePicker v-model="dateFrom" /></div>
+        <span class="text-sm text-ink-700/60">по</span>
+        <div class="w-40"><AppDatePicker v-model="dateTo" /></div>
+      </div>
+      <button v-if="anyFilter" class="btn-ghost text-sm" @click="resetFilters">Сбросить</button>
     </div>
 
     <div v-if="showForm" class="conf-form card mb-6 space-y-3 p-5">
@@ -312,7 +331,7 @@ async function remove(c) {
       </div>
 
       <div v-if="!live.length && !scheduled.length && !ended.length" class="card p-10 text-center text-ink-700/50">
-        <template v-if="search && hasAny">Ничего не найдено</template>
+        <template v-if="anyFilter && hasAny">Ничего не найдено</template>
         <template v-else>Конференций пока нет.<span v-if="canHost"> Создайте первую.</span></template>
       </div>
     </template>

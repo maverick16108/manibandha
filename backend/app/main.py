@@ -6,7 +6,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.api.routes import (
     auth, cities, conferences, countries, disciples, drafts, events, forum, mentors, pipeline, regions, reports,
-    roles, temples, threads, uploads, users,
+    roles, settings as settings_route, temples, threads, uploads, users,
 )
 from app.core.config import settings
 
@@ -23,7 +23,7 @@ app.add_middleware(
 
 for r in (auth.router, users.router, temples.router, cities.router, countries.router, regions.router,
           disciples.router, pipeline.router, reports.router, uploads.router, mentors.router, threads.router,
-          events.router, roles.router, drafts.router, forum.router, conferences.router):
+          events.router, roles.router, drafts.router, forum.router, conferences.router, settings_route.router):
     app.include_router(r, prefix=settings.API_PREFIX)
 
 # WebSocket for interactive chat (typing + instant delivery)

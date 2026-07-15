@@ -34,6 +34,7 @@ const nav = [
   { name: 'dictionaries', label: 'Справочники', icon: 'pin', caps: ['dictionaries.manage'] },
   { name: 'users', label: 'Пользователи', icon: 'users', caps: ['users.manage'] },
   { name: 'roles', label: 'Роли', icon: 'shield', caps: ['roles.manage'] },
+  { name: 'settings', label: 'Настройки', icon: 'settings', caps: ['settings.manage'] },
 ]
 
 // top-level sections (nav) — everything else is a sub-page, so show a back button

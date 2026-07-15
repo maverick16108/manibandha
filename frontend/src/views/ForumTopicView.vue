@@ -254,8 +254,8 @@ onBeforeUnmount(() => {
               <div class="text-xs text-ink-700/50">{{ fmt(p.created_at) }}<span v-if="p.edit_count"> · изменено{{ p.edit_count > 1 ? ` ×${p.edit_count}` : '' }}</span></div>
             </div>
             <div v-if="canEdit(p) || canDelete(p)" class="flex shrink-0 items-center gap-1">
-              <button v-if="canEdit(p)" class="rounded-md px-2 py-1 text-xs text-ink-700/50 hover:bg-parchment-100 hover:text-ink-700" @click="startEdit(p)">Изменить</button>
-              <button v-if="canDelete(p)" class="rounded-md px-2 py-1 text-xs text-red-500/70 hover:bg-red-50 hover:text-red-600" @click="removePost(p)">Удалить</button>
+              <button v-if="canEdit(p)" class="rounded-lg p-1.5 text-ink-700/50 transition hover:bg-parchment-100 hover:text-ink-800" title="Изменить" @click="startEdit(p)"><AppIcon name="edit" :size="17" /></button>
+              <button v-if="canDelete(p)" class="rounded-lg p-1.5 text-red-500/70 transition hover:bg-red-50 hover:text-red-600" title="Удалить" @click="removePost(p)"><AppIcon name="trash" :size="17" /></button>
             </div>
           </div>
           <div class="markdown-body break-words text-ink-800" v-html="renderMarkdown(p.body)"></div>
@@ -318,7 +318,7 @@ onBeforeUnmount(() => {
           <div class="min-w-0 flex-1 text-sm font-semibold text-saffron-700">Редактирование</div>
           <button class="shrink-0 rounded-full p-1 text-ink-700/50 hover:bg-parchment-200" @click="cancelEdit"><AppIcon name="close" :size="16" /></button>
         </div>
-        <MarkdownEditor v-model="body" :rows="4" type-anywhere hide-hint :draft-scope="editingPost ? '' : `forum-topic:${id}`" placeholder="Написать сообщение…" @submit="send" />
+        <MarkdownEditor v-model="body" :rows="4" grip="top" type-anywhere hide-hint :draft-scope="editingPost ? '' : `forum-topic:${id}`" placeholder="Написать сообщение…" @submit="send" />
         <div class="mt-1 flex justify-end gap-2">
           <button v-if="editingPost" class="btn-ghost" @click="cancelEdit">Отмена</button>
           <button class="btn-primary" :disabled="sending || !body.trim()" @click="send">{{ editingPost ? (sending ? '…' : 'Сохранить') : (sending ? '…' : 'Отправить') }}</button>

@@ -35,6 +35,7 @@ const routes = [
       { path: 'reports', name: 'reports', component: () => import('../views/ReportsView.vue') },
       { path: 'users', name: 'users', component: () => import('../views/UsersView.vue'), meta: { staffOnly: true } },
       { path: 'roles', name: 'roles', component: () => import('../views/RolesView.vue'), meta: { guruOnly: true } },
+      { path: 'settings', name: 'settings', component: () => import('../views/SettingsView.vue') },
       { path: 'profile', name: 'profile', component: () => import('../views/ProfileView.vue') },
       { path: 'approvals', name: 'approvals', component: () => import('../views/ApprovalsView.vue') },
       { path: 'waiting', name: 'waiting', component: () => import('../views/WaitingView.vue') },
@@ -58,6 +59,7 @@ const ROUTE_CAPS = {
   dictionaries: ['dictionaries.manage'],
   users: ['users.manage'],
   roles: ['roles.manage'],
+  settings: ['settings.manage'],
   approvals: ['disciples.approve'],
 }
 const LANDING_ORDER = ['dashboard', 'calendar', 'disciples', 'questions', 'service-reports', 'dictionaries', 'users']

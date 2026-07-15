@@ -13,8 +13,6 @@ from app.schemas.forum import (
 
 router = APIRouter(prefix="/forum", tags=["forum"])
 
-EDIT_WINDOW = timedelta(hours=1)
-
 
 @router.get("/users/{user_id}")
 def user_card(user_id: int, db: Session = Depends(get_db), _: User = Depends(require_cap("forum.view"))):
@@ -32,13 +30,15 @@ def user_card(user_id: int, db: Session = Depends(get_db), _: User = Depends(req
     }
 
 
-def _within_edit_window(p: ForumPost) -> bool:
+def _within_edit_window(db: Session, p: ForumPost) -> bool:
+    from app.api.routes.settings import get_int_setting
     created = p.created_at
     if created is None:
         return False
     if created.tzinfo is None:
         created = created.replace(tzinfo=timezone.utc)
-    return (datetime.now(timezone.utc) - created) <= EDIT_WINDOW
+    mins = get_int_setting(db, "forum_edit_window_minutes", 60)
+    return (datetime.now(timezone.utc) - created) <= timedelta(minutes=mins)
 
 
 def _reactions_of(likes: list, user_id: int | None) -> list[Reaction]:
@@ -281,8 +281,8 @@ def _own_or_moderator(db: Session, user: User, post: ForumPost, need_window: boo
     is_mod = has_cap(db, user, "forum.moderate")
     if post.author_id != user.id and not is_mod:
         raise HTTPException(status_code=403, detail="Можно менять только свои сообщения")
-    if not is_mod and need_window and not _within_edit_window(post):
-        raise HTTPException(status_code=403, detail="Прошёл час — сообщение больше нельзя изменить")
+    if not is_mod and need_window and not _within_edit_window(db, post):
+        raise HTTPException(status_code=403, detail="Время на изменение сообщения истекло")
 
 
 @router.patch("/posts/{post_id}", response_model=PostOut)

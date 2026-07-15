@@ -18,8 +18,10 @@ from app.schemas.user import SelfUpdate, UserOut
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-def _token_for(user: User) -> Token:
-    return Token(access_token=create_access_token(subject=user.email, role=user.role.value))
+def _token_for(user: User, db: Session) -> Token:
+    from app.api.routes.settings import get_int_setting
+    days = get_int_setting(db, "auth_expire_days", 30)
+    return Token(access_token=create_access_token(subject=user.email, role=user.role.value, expire_minutes=days * 1440))
 
 
 @router.post("/phone/request")
@@ -65,7 +67,7 @@ def phone_verify(phone: str = Body(...), code: str = Body(...), db: Session = De
     user = db.query(User).filter(User.phone == ph).first()
     if user:
         db.commit()
-        return _token_for(user)
+        return _token_for(user, db)
 
     # регистрация: создаём связанную пару пользователь + анкета (ждёт апрува).
     # Имя пустое — кандидат заполнит сам; телефон сохраняем для идентификации.
@@ -82,7 +84,7 @@ def phone_verify(phone: str = Body(...), code: str = Body(...), db: Session = De
     db.add(user)
     db.add(Thread(kind=ThreadKind.approval, disciple_id=disciple.id))
     db.commit()
-    return _token_for(user)
+    return _token_for(user, db)
 
 
 @router.post("/login", response_model=Token)
@@ -93,8 +95,13 @@ def login(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Неверный email или пароль")
     if not user.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Учётная запись отключена")
-    token = create_access_token(subject=user.email, role=user.role.value)
-    return Token(access_token=token)
+    return _token_for(user, db)
+
+
+@router.post("/refresh", response_model=Token)
+def refresh(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """Продлить сессию (скользящее окно): вернуть свежий токен на полный срок."""
+    return _token_for(user, db)
 
 
 @router.get("/me", response_model=UserOut)

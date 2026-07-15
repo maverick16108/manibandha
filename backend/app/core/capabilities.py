@@ -32,6 +32,7 @@ CAPABILITIES = [
     ("dictionaries.manage", "Управлять справочниками", "Справочники"),
     ("users.manage", "Управлять пользователями", "Пользователи"),
     ("roles.manage", "Управлять ролями", "Роли"),
+    ("settings.manage", "Управлять настройками", "Настройки"),
 ]
 ALL_CAPS = [k for k, _, _ in CAPABILITIES]
 CAP_KEYS = set(ALL_CAPS)

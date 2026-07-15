@@ -279,7 +279,7 @@ function scrollToMessage(mid) {
   if (!el) return
   el.scrollIntoView({ behavior: 'smooth', block: 'center' })
   el.classList.add('msg-flash')
-  setTimeout(() => el.classList.remove('msg-flash'), 1300)
+  setTimeout(() => el.classList.remove('msg-flash'), 3200)
 }
 
 function onContext(e, m) {
@@ -422,8 +422,8 @@ onBeforeUnmount(() => { if (ws) ws.close(); clearTimeout(typingTimer); clearInte
       <template v-if="ctx.open && ctx.m">
         <div class="fixed inset-0 z-40" @click="closeCtx" @contextmenu.prevent="closeCtx"></div>
         <div class="fixed z-50 w-52 overflow-hidden rounded-xl border border-parchment-200 bg-white py-1 shadow-xl" :style="ctxStyle">
-          <!-- реакции (для чужих сообщений) -->
-          <div v-if="ctx.m.author_id !== auth.user?.id" class="mb-1 flex justify-between gap-0.5 border-b border-parchment-100 px-2 pb-1.5 pt-1">
+          <!-- реакции (доступны на любом сообщении) -->
+          <div class="mb-1 flex justify-between gap-0.5 border-b border-parchment-100 px-2 pb-1.5 pt-1">
             <button v-for="e in REACTIONS" :key="e"
                     class="rounded-full px-0.5 text-2xl leading-none transition-transform hover:scale-125"
                     @click="react(ctx.m, e); closeCtx()">{{ e }}</button>
@@ -479,10 +479,12 @@ onBeforeUnmount(() => { if (ws) ws.close(); clearTimeout(typingTimer); clearInte
 .chat-scroll::-webkit-scrollbar-track { background: transparent; }
 .chat-scroll::-webkit-scrollbar-thumb { background: rgba(75, 60, 50, 0.28); border-radius: 9999px; }
 
-/* мигание при переходе к процитированному сообщению */
-.msg-flash > div { animation: msgflash 1.3s ease; border-radius: 1rem; }
+/* подсветка при переходе к процитированному сообщению — заметная и надолго */
+.msg-flash > div { animation: msgflash 3.2s ease; border-radius: 1rem; }
 @keyframes msgflash {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(234, 140, 42, 0); }
-  30% { box-shadow: 0 0 0 3px rgba(234, 140, 42, 0.6); }
+  0%   { box-shadow: 0 0 0 0 rgba(234, 140, 42, 0); }
+  8%   { box-shadow: 0 0 0 4px rgba(234, 140, 42, 0.95); }
+  70%  { box-shadow: 0 0 0 4px rgba(234, 140, 42, 0.85); }
+  100% { box-shadow: 0 0 0 0 rgba(234, 140, 42, 0); }
 }
 </style>

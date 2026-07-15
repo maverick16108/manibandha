@@ -32,6 +32,7 @@ export const useAuthStore = defineStore('auth', {
       if (!this.token) return null
       const { data } = await client.get('/auth/me')
       this.user = data
+      this.refreshToken() // скользящее продление сессии: каждый заход обновляет срок токена
       try {
         const { data: perm } = await client.get('/me/capabilities')
         this.caps = perm.capabilities || []
@@ -53,6 +54,16 @@ export const useAuthStore = defineStore('auth', {
       this.token = data.access_token
       localStorage.setItem('token', this.token)
       await this.fetchMe()
+    },
+    async refreshToken() {
+      // получить свежий токен на полный срок; молча игнорируем ошибки
+      try {
+        const { data } = await client.post('/auth/refresh')
+        if (data?.access_token) {
+          this.token = data.access_token
+          localStorage.setItem('token', this.token)
+        }
+      } catch { /* не критично */ }
     },
     async updateProfile(payload) {
       const { data } = await client.patch('/auth/me', payload)

@@ -268,7 +268,6 @@ function syncVoiceButtons() {
     b.classList.toggle('is-playing', cur && player.playing)
     const pct = cur && player.duration ? (player.currentTime / player.duration) * 100 : 0
     const played = b.querySelector('.vw-played'); if (played) played.style.clipPath = `inset(0 ${100 - pct}% 0 0)`
-    const thumb = b.querySelector('.vw-thumb'); if (thumb) thumb.style.left = pct + '%'
     const time = b.querySelector('.voice-msg__time')
     if (time) time.textContent = (cur && player.duration) ? '-' + fmtSec(player.duration - player.currentTime) : '0:00'
   })

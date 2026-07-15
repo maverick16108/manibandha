@@ -15,7 +15,7 @@ import { formatDate } from '../lib/format'
 import { usePageTitle } from '../composables/pageTitle'
 import { onEscape } from '../composables/useEscape'
 
-usePageTitle('Календарь событий')
+usePageTitle('События')
 onEscape(() => { if (selected.value) selected.value = null })
 
 const auth = useAuthStore()

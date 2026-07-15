@@ -421,7 +421,7 @@ onBeforeUnmount(() => {
 
     <template v-else>
       <!-- индикатор записи (видят все) -->
-      <div v-if="recording" class="pointer-events-none absolute left-3 top-3 z-20 flex items-center gap-1.5 rounded-full bg-red-500/90 px-2.5 py-1 text-xs font-semibold text-white shadow">
+      <div v-if="recording" class="pointer-events-none absolute bottom-16 left-3 z-20 flex items-center gap-1.5 rounded-full bg-red-500/90 px-2.5 py-1 text-xs font-semibold text-white shadow">
         <span class="h-2 w-2 animate-pulse rounded-full bg-white"></span> Идёт запись
       </div>
       <!-- панель ведущего -->

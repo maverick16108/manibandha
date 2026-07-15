@@ -13,11 +13,12 @@ from app.models.sms_code import SmsCode
 from app.models.forum import ForumSection, ForumTopic, ForumPost, ForumPostLike, ForumTopicRead
 from app.models.disciple_extra import DiscipleNote, DiscipleFile
 from app.models.conference import Conference
+from app.models.conference_ban import ConferenceBan
 from app.models.app_setting import AppSetting
 
 __all__ = [
     "User", "Temple", "Disciple", "ChecklistItem", "City", "Country", "Region",
     "Thread", "ThreadMessage", "MessageLike", "ThreadRead", "Event", "Draft", "Role", "UserRole", "SmsCode",
     "ForumSection", "ForumTopic", "ForumPost", "ForumPostLike", "ForumTopicRead", "DiscipleNote", "DiscipleFile",
-    "Conference", "AppSetting",
+    "Conference", "ConferenceBan", "AppSetting",
 ]

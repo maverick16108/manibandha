@@ -12,7 +12,7 @@ from app.api.deps import require_cap
 from app.core.capabilities import has_cap
 from app.core.config import settings
 from app.core.database import SessionLocal, get_db
-from app.models import Conference, User
+from app.models import Conference, ConferenceBan, User
 from app.schemas.conference import ConferenceCreate, ConferenceOut, ConferenceParticipant, ConferenceUpdate, JoinOut
 
 router = APIRouter(prefix="/conferences", tags=["conferences"])
@@ -178,6 +178,9 @@ def join_conference(conf_id: int, db: Session = Depends(get_db), user: User = De
     if not c:
         raise HTTPException(status_code=404, detail="Конференция не найдена")
     is_host = c.host_id == user.id or has_cap(db, user, "conference.host")
+    identity = f"u{user.id}"
+    if not is_host and db.query(ConferenceBan).filter(ConferenceBan.conference_id == c.id, ConferenceBan.identity == identity).first():
+        raise HTTPException(status_code=403, detail="Вы удалены из этой встречи ведущим")
     # интерактив — публикуют все; трансляция — только ведущий
     can_publish = is_host or c.mode == "interactive"
     # переоткрытие завершённой встречи / старт запланированной ведущим
@@ -191,7 +194,6 @@ def join_conference(conf_id: int, db: Session = Depends(get_db), user: User = De
         c.status = "live"
         c.started_at = func.now()
         db.commit()
-    identity = f"u{user.id}"
     # источники публикации: ведущий — всё; участник — по флагам конференции (трансляция — только ведущий)
     if is_host:
         sources = None
@@ -308,6 +310,59 @@ def moderate_permit(conf_id: int, payload: dict = Body(...), db: Session = Depen
     except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=502, detail=f"Ошибка модерации: {e}")
     return {"ok": True}
+
+
+def _bans_out(db: Session, conf_id: int) -> list[dict]:
+    rows = db.query(ConferenceBan).filter(ConferenceBan.conference_id == conf_id).order_by(ConferenceBan.created_at.desc()).all()
+    return [{"identity": b.identity, "name": b.name or "Участник"} for b in rows]
+
+
+@router.get("/{conf_id}/bans")
+def list_bans(conf_id: int, db: Session = Depends(get_db), user: User = Depends(require_cap("conference.view"))):
+    c = db.get(Conference, conf_id)
+    if not c:
+        raise HTTPException(status_code=404, detail="Конференция не найдена")
+    _editable(db, user, c)
+    return {"bans": _bans_out(db, conf_id)}
+
+
+@router.post("/{conf_id}/kick")
+def kick_participant(conf_id: int, payload: dict = Body(...), db: Session = Depends(get_db), user: User = Depends(require_cap("conference.view"))):
+    """Удалить участника из конференции и добавить в список заблокированных."""
+    c = db.get(Conference, conf_id)
+    if not c:
+        raise HTTPException(status_code=404, detail="Конференция не найдена")
+    _editable(db, user, c)
+    identity = (payload.get("identity") or "").strip()
+    name = (payload.get("name") or "").strip()[:120] or "Участник"
+    if not identity:
+        raise HTTPException(status_code=400, detail="Не указан участник")
+    if identity == (f"u{c.host_id}" if c.host_id else None):
+        raise HTTPException(status_code=400, detail="Нельзя удалить ведущего")
+    # добавить в бан (для авторизованных identity=u{id} — не сможет вернуться; гость получит новый id)
+    if not db.query(ConferenceBan).filter(ConferenceBan.conference_id == c.id, ConferenceBan.identity == identity).first():
+        db.add(ConferenceBan(conference_id=c.id, identity=identity, name=name))
+        db.commit()
+    # отключить прямо сейчас
+    try:
+        _room_service("RemoveParticipant", {"room": c.room, "identity": identity}, c.room)
+    except Exception:  # noqa: BLE001
+        pass
+    return {"ok": True, "bans": _bans_out(db, c.id)}
+
+
+@router.delete("/{conf_id}/bans/{identity}")
+def unban_participant(conf_id: int, identity: str, db: Session = Depends(get_db), user: User = Depends(require_cap("conference.view"))):
+    """Убрать участника из списка заблокированных — снова сможет зайти."""
+    c = db.get(Conference, conf_id)
+    if not c:
+        raise HTTPException(status_code=404, detail="Конференция не найдена")
+    _editable(db, user, c)
+    row = db.query(ConferenceBan).filter(ConferenceBan.conference_id == c.id, ConferenceBan.identity == identity).first()
+    if row:
+        db.delete(row)
+        db.commit()
+    return {"ok": True, "bans": _bans_out(db, c.id)}
 
 
 @router.post("/livekit-webhook", include_in_schema=False)

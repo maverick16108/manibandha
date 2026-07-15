@@ -94,6 +94,13 @@ defineProps({
       <line x1="9" y1="4.5" x2="9" y2="19.5" />
     </template>
 
+    <!-- user-x / удалить участника -->
+    <template v-else-if="name === 'user-x'">
+      <circle cx="9" cy="7.5" r="3.5" />
+      <path d="M3 20a6.5 6.5 0 0 1 12 0" />
+      <path d="M16.5 9.5l5 5M21.5 9.5l-5 5" />
+    </template>
+
     <!-- user / активный спикер (один крупно) -->
     <template v-else-if="name === 'user'">
       <circle cx="12" cy="8" r="4" />

@@ -173,6 +173,7 @@ async function connect() {
       try { navigator.mediaDevices.addEventListener('devicechange', loadDevices) } catch { /* ignore */ }
     }
     refresh()
+    loadBans()
   } catch (e) {
     state.value = 'error'
     errorMsg.value = e.response?.data?.detail || 'Не удалось подключиться к конференции'
@@ -224,6 +225,27 @@ async function setAll(kind, allow) {
   refresh()
 }
 function pinTile(identity) { pinnedId.value = pinnedId.value === identity ? null : identity }
+
+// ── удаление участников (бан) ──
+const bans = ref([])
+const bansOpen = ref(false)
+async function loadBans() {
+  if (isGuest || !isHost.value) return
+  try { const { data } = await client.get(`/conferences/${id}/bans`); bans.value = data.bans || [] } catch { /* ignore */ }
+}
+async function kick(identity, name) {
+  if (!confirm(`Удалить «${name || 'участника'}» из встречи? Он не сможет вернуться, пока вы не уберёте его из списка удалённых.`)) return
+  try {
+    const { data } = await client.post(`/conferences/${id}/kick`, { identity, name })
+    bans.value = data.bans || bans.value
+  } catch (e) { alert(e.response?.data?.detail || 'Не удалось') }
+}
+async function unban(identity) {
+  try {
+    const { data } = await client.delete(`/conferences/${id}/bans/${encodeURIComponent(identity)}`)
+    bans.value = data.bans || bans.value
+  } catch (e) { alert(e.response?.data?.detail || 'Не удалось') }
+}
 
 // ── ширина ленты участников справа (тянется мышью; при большой ширине — в 2 столбца) ──
 const stripW = ref(180)
@@ -387,6 +409,10 @@ onBeforeUnmount(() => {
           <span class="text-ink-700/60">Экран всем</span>
           <button class="switch" :class="allowAll.screen && 'is-on'" role="switch" :aria-checked="allowAll.screen" title="Экран всем" @click="setAll('screen', !allowAll.screen)"><span class="switch-knob"></span></button>
         </span>
+        <button v-if="bans.length" class="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-parchment-300 px-2.5 py-1 text-ink-700 transition hover:bg-parchment-100" @click="bansOpen = true">
+          <AppIcon name="user-x" :size="15" /> Удалённые
+          <span class="inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-red-500 px-1 text-xs font-semibold text-white">{{ bans.length }}</span>
+        </button>
       </div>
 
       <!-- крупный слот (экран/спикер) + лента участников справа с вертикальной прокруткой -->
@@ -412,14 +438,14 @@ onBeforeUnmount(() => {
         <div v-if="stripTiles.length" class="shrink-0 gap-2 overflow-y-auto pr-0.5" :style="{ width: stripW + 'px' }"
              :class="stripTwoCols ? 'grid grid-cols-2 content-start' : 'flex flex-col'">
           <ConfTile v-for="t in stripTiles" :key="t.identity" :t="t" :raised="raised" :pinned-id="pinnedId" :is-host="isHost"
-                    class="aspect-video shrink-0" @pin="pinTile" @permit="permit" />
+                    class="aspect-video shrink-0" @pin="pinTile" @permit="permit" @kick="kick" />
         </div>
       </div>
 
       <!-- обычная сетка (нет крупного слота) -->
       <div v-else class="grid flex-1 gap-2 overflow-y-auto pt-2" :class="gridCols">
         <ConfTile v-for="t in tiles" :key="t.identity" :t="t" :raised="raised" :pinned-id="pinnedId" :is-host="isHost"
-                  @pin="pinTile" @permit="permit" />
+                  @pin="pinTile" @permit="permit" @kick="kick" />
       </div>
 
       <audio v-for="t in tiles.filter((x) => !x.isLocal)" :key="'a' + t.identity" :data-audio="t.identity" autoplay></audio>
@@ -461,6 +487,26 @@ onBeforeUnmount(() => {
         </button>
         <button class="hidden h-11 w-11 items-center justify-center rounded-full bg-parchment-200 text-ink-800 transition hover:bg-parchment-300 sm:flex" title="Во весь экран" @click="toggleFullscreen"><AppIcon name="expand" :size="20" /></button>
         <button class="flex h-11 items-center gap-2 rounded-full bg-red-500 px-5 text-white transition hover:bg-red-600" title="Выйти" @click="leave"><AppIcon name="logout" :size="18" /> Выйти</button>
+      </div>
+
+      <!-- список удалённых участников -->
+      <div v-if="bansOpen" class="absolute inset-0 z-40 flex items-center justify-center bg-ink-900/40 p-4" @click.self="bansOpen = false">
+        <div class="w-full max-w-sm overflow-hidden rounded-2xl bg-white shadow-xl">
+          <div class="flex items-center justify-between border-b border-parchment-200 px-4 py-3">
+            <span class="font-medium text-ink-900">Удалённые из встречи</span>
+            <button class="rounded-full p-1 text-ink-700/50 hover:bg-parchment-100" @click="bansOpen = false"><AppIcon name="close" :size="18" /></button>
+          </div>
+          <div class="max-h-80 overflow-y-auto p-2">
+            <div v-if="!bans.length" class="p-6 text-center text-sm text-ink-700/50">Список пуст</div>
+            <div v-for="b in bans" :key="b.identity" class="flex items-center justify-between gap-2 rounded-lg px-2 py-2 hover:bg-parchment-100">
+              <div class="flex min-w-0 items-center gap-2">
+                <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-saffron-400 to-saffron-600 text-sm font-semibold text-white">{{ initials(b.name) }}</span>
+                <span class="truncate text-sm text-ink-800">{{ b.name }}</span>
+              </div>
+              <button class="shrink-0 rounded-lg border border-parchment-300 px-2.5 py-1 text-xs text-ink-700 transition hover:border-saffron-400 hover:text-saffron-700" @click="unban(b.identity)">Вернуть</button>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- чат -->

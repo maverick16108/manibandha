@@ -176,25 +176,25 @@ async function remove(c) {
 
 <template>
   <div class="mx-auto max-w-6xl">
-    <div class="mb-6 flex items-center justify-end gap-3">
+    <div class="mb-6 flex flex-wrap items-center justify-between gap-3">
+      <div v-if="hasAny && !showForm" class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+        <div class="flex items-center gap-2 rounded-md border border-parchment-300 bg-white px-3 py-2 sm:w-64">
+          <AppIcon name="search" :size="16" class="shrink-0 text-ink-700/40" />
+          <input ref="searchInput" v-model="search" class="w-full bg-transparent text-sm text-ink-800 outline-none placeholder:text-ink-700/40" placeholder="Поиск по названию, ведущему" />
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="text-sm text-ink-700/60">с</span>
+          <div class="w-40"><AppDatePicker v-model="dateFrom" /></div>
+          <span class="text-sm text-ink-700/60">по</span>
+          <div class="w-40"><AppDatePicker v-model="dateTo" /></div>
+        </div>
+        <button v-if="anyFilter" class="btn-ghost text-sm" @click="resetFilters">Сбросить</button>
+      </div>
+      <div v-else></div>
       <div class="flex shrink-0 items-center gap-2">
         <button v-if="recEnabled" class="btn-outline" title="Архив записей" @click="router.push({ name: 'conference-recordings' })"><AppIcon name="play" :size="15" /> Записи</button>
         <button v-if="canHost" class="btn-primary" @click="editingId ? resetForm() : (showForm = !showForm)"><AppIcon name="video" :size="16" /> Создать</button>
       </div>
-    </div>
-
-    <div v-if="hasAny && !showForm" class="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-      <div class="flex items-center gap-2 rounded-md border border-parchment-300 bg-white px-3 py-2 sm:w-64">
-        <AppIcon name="search" :size="16" class="shrink-0 text-ink-700/40" />
-        <input ref="searchInput" v-model="search" class="w-full bg-transparent text-sm text-ink-800 outline-none placeholder:text-ink-700/40" placeholder="Поиск по названию, ведущему" />
-      </div>
-      <div class="flex items-center gap-2">
-        <span class="text-sm text-ink-700/60">с</span>
-        <div class="w-40"><AppDatePicker v-model="dateFrom" /></div>
-        <span class="text-sm text-ink-700/60">по</span>
-        <div class="w-40"><AppDatePicker v-model="dateTo" /></div>
-      </div>
-      <button v-if="anyFilter" class="btn-ghost text-sm" @click="resetFilters">Сбросить</button>
     </div>
 
     <div v-if="showForm" class="conf-form card mb-6 space-y-3 p-5">

@@ -1,9 +1,10 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import client from '../api/client'
 import { useAuthStore } from '../stores/auth'
 import AppIcon from '../components/AppIcon.vue'
 import AppSkeleton from '../components/AppSkeleton.vue'
+import AppDatePicker from '../components/AppDatePicker.vue'
 import { backTarget } from '../composables/backTarget'
 import { confirmDialog } from '../composables/confirm'
 import { usePageTitle } from '../composables/pageTitle'
@@ -14,6 +15,21 @@ const auth = useAuthStore()
 const loading = ref(true)
 const recordings = ref([])
 const playing = ref(null)
+const search = ref('')
+const dateFrom = ref('')
+const dateTo = ref('')
+
+const filtered = computed(() => {
+  const q = search.value.trim().toLowerCase()
+  return recordings.value.filter((r) => {
+    if (q && ![r.title, r.description, r.conference_title].some((s) => (s || '').toLowerCase().includes(q))) return false
+    const d = (r.started_at || '').slice(0, 10)
+    if (dateFrom.value && d < dateFrom.value) return false
+    if (dateTo.value && d > dateTo.value) return false
+    return true
+  })
+})
+function resetFilters() { search.value = ''; dateFrom.value = ''; dateTo.value = '' }
 const editing = ref(null)
 const editForm = ref({ title: '', description: '' })
 const saving = ref(false)
@@ -56,16 +72,32 @@ async function remove(r) {
 
 <template>
   <div class="mx-auto max-w-4xl">
-    <p class="mb-6 text-ink-700/60">Записи прошедших конференций — можно смотреть, скачивать и подписывать</p>
+    <p class="mb-4 text-ink-700/60">Записи прошедших конференций — можно смотреть, скачивать и подписывать</p>
+
+    <!-- поиск + фильтр по дате -->
+    <div v-if="!loading && recordings.length" class="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+      <div class="flex items-center gap-2 rounded-md border border-parchment-300 bg-white px-3 py-2 sm:w-72">
+        <AppIcon name="search" :size="16" class="shrink-0 text-ink-700/40" />
+        <input v-model="search" class="w-full bg-transparent text-sm text-ink-800 outline-none placeholder:text-ink-700/40" placeholder="Поиск по названию, описанию" />
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="text-sm text-ink-700/60">с</span>
+        <div class="w-40"><AppDatePicker v-model="dateFrom" /></div>
+        <span class="text-sm text-ink-700/60">по</span>
+        <div class="w-40"><AppDatePicker v-model="dateTo" /></div>
+      </div>
+      <button v-if="search || dateFrom || dateTo" class="btn-ghost text-sm" @click="resetFilters">Сбросить</button>
+    </div>
 
     <div v-if="loading" class="space-y-3">
       <div v-for="i in 3" :key="i" class="card space-y-2 p-4"><AppSkeleton w="w-56" /><AppSkeleton w="w-40" h="h-3" /></div>
     </div>
 
     <div v-else-if="!recordings.length" class="card p-10 text-center text-ink-700/50">Записей пока нет</div>
+    <div v-else-if="!filtered.length" class="card p-10 text-center text-ink-700/50">Ничего не найдено</div>
 
     <div v-else class="space-y-3">
-      <div v-for="r in recordings" :key="r.id" class="card p-4 sm:p-5">
+      <div v-for="r in filtered" :key="r.id" class="card p-4 sm:p-5">
         <!-- режим просмотра -->
         <template v-if="editing !== r.id">
           <div class="flex items-start justify-between gap-3">

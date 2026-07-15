@@ -1,4 +1,5 @@
 import json
+import secrets
 import time
 import urllib.request
 import uuid
@@ -16,6 +17,16 @@ from app.models import Conference, ConferenceBan, ConferenceRecording, User
 from app.schemas.conference import ConferenceCreate, ConferenceOut, ConferenceParticipant, ConferenceUpdate, JoinOut
 
 router = APIRouter(prefix="/conferences", tags=["conferences"])
+
+_CODE_ALPHABET = "abcdefghijkmnpqrstuvwxyzACDEFGHJKLMNPQRSTUVWXYZ23456789"  # без похожих 0O1lI
+
+
+def _gen_code(db: Session) -> str:
+    for _ in range(20):
+        code = "".join(secrets.choice(_CODE_ALPHABET) for _ in range(7))
+        if not db.query(Conference).filter(Conference.code == code).first():
+            return code
+    return uuid.uuid4().hex[:10]
 
 
 def _admin_token(room: str) -> str:
@@ -206,7 +217,7 @@ def _mint_token(identity: str, name: str, room: str, can_publish: bool, sources:
 
 def _out(c: Conference, user: User, elevated: bool, parts: list | None = None) -> ConferenceOut:
     return ConferenceOut(
-        id=c.id, title=c.title, description=c.description, mode=c.mode, status=c.status, room=c.room,
+        id=c.id, title=c.title, description=c.description, mode=c.mode, status=c.status, room=c.room, code=c.code,
         mic_allowed=c.mic_allowed, cam_allowed=c.cam_allowed, screen_allowed=c.screen_allowed, guests_allowed=c.guests_allowed,
         auto_record=c.auto_record,
         host_id=c.host_id, host_name=c.host.full_name if c.host else None,
@@ -259,7 +270,7 @@ def create_conference(payload: ConferenceCreate, db: Session = Depends(get_db), 
     host_id = _valid_host(db, payload.host_id) or user.id  # модератор — по умолчанию создатель
     c = Conference(
         title=title[:255], description=(payload.description or "").strip() or None,
-        mode=mode, room=f"conf_{uuid.uuid4().hex[:20]}", host_id=host_id,
+        mode=mode, room=f"conf_{uuid.uuid4().hex[:20]}", code=_gen_code(db), host_id=host_id,
         scheduled_at=payload.scheduled_at, status="scheduled",
         mic_allowed=bool(payload.mic_allowed), cam_allowed=bool(payload.cam_allowed),
         screen_allowed=bool(payload.screen_allowed), guests_allowed=bool(payload.guests_allowed),
@@ -284,6 +295,15 @@ def _valid_host(db: Session, host_id: int | None) -> int | None:
     if u and u.is_active and has_cap(db, u, "conference.host"):
         return u.id
     return None
+
+
+@router.get("/by-code/{code}")
+def resolve_code(code: str, db: Session = Depends(get_db)):
+    """Публично: короткий код → куда вести (id конференции, комната, разрешён ли гость)."""
+    c = db.query(Conference).filter(Conference.code == code).first()
+    if not c:
+        raise HTTPException(status_code=404, detail="Конференция не найдена")
+    return {"id": c.id, "room": c.room, "guests_allowed": bool(c.guests_allowed), "title": c.title}
 
 
 @router.get("/moderators")
@@ -399,7 +419,7 @@ def join_conference(conf_id: int, db: Session = Depends(get_db), user: User = De
                 sources.append("SCREEN_SHARE")
         can_publish = len(sources) > 0
     token = _mint_token(identity, user.full_name or "Гость", c.room, can_publish, sources)
-    return JoinOut(url=settings.LIVEKIT_URL, token=token, room=c.room, mode=c.mode, title=c.title,
+    return JoinOut(url=settings.LIVEKIT_URL, token=token, room=c.room, code=c.code, mode=c.mode, title=c.title,
                    can_publish=can_publish, is_host=is_host, identity=identity,
                    mic_allowed=c.mic_allowed, cam_allowed=c.cam_allowed, screen_allowed=c.screen_allowed)
 
@@ -432,7 +452,7 @@ def guest_join(room: str, payload: dict = Body(...), db: Session = Depends(get_d
         can_publish = len(sources) > 0
     identity = f"g_{uuid.uuid4().hex[:12]}"
     token = _mint_token(identity, name, c.room, can_publish, sources)
-    return JoinOut(url=settings.LIVEKIT_URL, token=token, room=c.room, mode=c.mode, title=c.title,
+    return JoinOut(url=settings.LIVEKIT_URL, token=token, room=c.room, code=c.code, mode=c.mode, title=c.title,
                    can_publish=can_publish, is_host=False, identity=identity,
                    mic_allowed=c.mic_allowed, cam_allowed=c.cam_allowed, screen_allowed=c.screen_allowed)
 

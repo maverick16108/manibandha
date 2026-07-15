@@ -42,6 +42,7 @@ class ConferenceOut(BaseModel):
     mode: str
     status: str
     room: str | None = None
+    code: str | None = None
     mic_allowed: bool = True
     cam_allowed: bool = True
     screen_allowed: bool = True
@@ -63,6 +64,7 @@ class JoinOut(BaseModel):
     url: str
     token: str
     room: str
+    code: str | None = None
     mode: str
     title: str | None = None
     can_publish: bool

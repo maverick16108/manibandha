@@ -112,8 +112,9 @@ async function saveEdit() {
   } finally { saving.value = false }
 }
 function copyLink(c) {
-  const url = `${location.origin}/join/${c.room}`
-  navigator.clipboard?.writeText(url).then(() => alert('Ссылка для гостей скопирована:\n' + url)).catch(() => prompt('Ссылка для гостей:', url))
+  if (!c.code) return
+  const url = `${location.origin}/c/${c.code}`
+  navigator.clipboard?.writeText(url).then(() => alert('Ссылка на конференцию скопирована:\n' + url)).catch(() => prompt('Ссылка на конференцию:', url))
 }
 // enter=true — начать сейчас и войти; enter=false — запланировать на дату
 async function submit(enter) {
@@ -234,7 +235,7 @@ async function remove(c) {
             </div>
             <div class="flex shrink-0 items-center gap-2">
               <button v-if="c.can_host" class="btn-ghost p-2" title="Настройки конференции" @click.stop="startEdit(c)"><AppIcon name="settings" :size="17" /></button>
-              <button v-if="c.can_host && c.guests_allowed" class="btn-ghost text-sm" title="Скопировать ссылку для гостей" @click.stop="copyLink(c)"><AppIcon name="link" :size="15" /> Ссылка</button>
+              <button class="btn-ghost text-sm" title="Скопировать ссылку на конференцию" @click.stop="copyLink(c)"><AppIcon name="link" :size="15" /> Ссылка</button>
               <button class="btn-primary" @click.stop="enter(c)">Войти</button>
               <button v-if="c.can_host" class="btn-ghost" @click.stop="endConf(c)">Завершить</button>
             </div>
@@ -259,7 +260,7 @@ async function remove(c) {
             </div>
             <div class="flex shrink-0 items-center gap-2">
               <button v-if="c.can_host" class="btn-ghost p-2" title="Настройки конференции" @click.stop="startEdit(c)"><AppIcon name="settings" :size="17" /></button>
-              <button v-if="c.can_host && c.guests_allowed" class="btn-ghost text-sm" title="Скопировать ссылку для гостей" @click.stop="copyLink(c)"><AppIcon name="link" :size="15" /> Ссылка</button>
+              <button class="btn-ghost text-sm" title="Скопировать ссылку на конференцию" @click.stop="copyLink(c)"><AppIcon name="link" :size="15" /> Ссылка</button>
               <button class="btn-outline" @click.stop="enter(c)">{{ c.can_host ? 'Начать' : 'Войти' }}</button>
               <button v-if="c.can_host" class="text-ink-700/40 hover:text-red-600" @click.stop="remove(c)"><AppIcon name="trash" :size="16" /></button>
             </div>

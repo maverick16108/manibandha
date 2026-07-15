@@ -33,6 +33,14 @@ const myAllowMic = ref(true)
 const myAllowCam = ref(true)
 const myAllowScreen = ref(true)
 const handUp = ref(false)
+const confCode = ref('')
+const linkCopied = ref(false)
+function copyConfLink() {
+  if (!confCode.value) return
+  const url = `${location.origin}/c/${confCode.value}`
+  const ok = () => { linkCopied.value = true; setTimeout(() => { linkCopied.value = false }, 1800) }
+  navigator.clipboard?.writeText(url).then(ok).catch(() => prompt('Ссылка на конференцию:', url))
+}
 
 const tiles = ref([])          // [{identity, name, isLocal, camOn, micOn, speaking}]
 const screenSharer = ref(null)
@@ -148,6 +156,7 @@ async function connect() {
     canPublish.value = data.can_publish
     isHost.value = data.is_host
     myIdentity.value = data.identity
+    confCode.value = data.code || ''
     allowAll.audio = data.mic_allowed !== false
     allowAll.video = data.cam_allowed !== false
     allowAll.screen = data.screen_allowed !== false
@@ -535,6 +544,7 @@ onBeforeUnmount(() => {
           <AppIcon name="chat" :size="20" />
           <span v-if="unread" class="absolute -right-1 -top-1 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-red-500 px-1 text-xs font-semibold text-white">{{ unread }}</span>
         </button>
+        <button v-if="confCode" class="flex h-11 w-11 items-center justify-center rounded-full transition" :class="linkCopied ? 'bg-green-500 text-white' : 'bg-parchment-200 text-ink-800 hover:bg-parchment-300'" :title="linkCopied ? 'Скопировано!' : 'Скопировать ссылку на конференцию'" @click="copyConfLink"><AppIcon :name="linkCopied ? 'check' : 'link'" :size="20" /></button>
         <button class="hidden h-11 w-11 items-center justify-center rounded-full bg-parchment-200 text-ink-800 transition hover:bg-parchment-300 sm:flex" title="Во весь экран" @click="toggleFullscreen"><AppIcon name="expand" :size="20" /></button>
         <button class="flex h-11 items-center gap-2 rounded-full bg-red-500 px-5 text-white transition hover:bg-red-600" title="Выйти" @click="leave"><AppIcon name="logout" :size="18" /> Выйти</button>
       </div>

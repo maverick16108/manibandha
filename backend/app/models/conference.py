@@ -24,6 +24,7 @@ class Conference(Base):
     # запускать запись автоматически при старте встречи
     auto_record: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
     room: Mapped[str] = mapped_column(String(80), nullable=False, unique=True, index=True)
+    code: Mapped[str | None] = mapped_column(String(16), nullable=True, unique=True, index=True)  # короткая ссылка /c/<code>
     status: Mapped[str] = mapped_column(String(20), default="scheduled", server_default="scheduled", nullable=False, index=True)  # scheduled | live | ended
     host_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     scheduled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

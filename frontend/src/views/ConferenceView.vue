@@ -43,8 +43,9 @@ onMounted(async () => {
   load(); poll = setInterval(() => load(true), 4000); tick = setInterval(() => { nowTs.value = Date.now() }, 1000)
   try { const { data } = await client.get('/settings'); recEnabled.value = !!data.recording_enabled } catch { /* ignore */ }
   try { const { data } = await client.get('/conferences/moderators'); moderators.value = data.moderators || [] } catch { /* ignore */ }
+  document.addEventListener('keydown', onDocType)
 })
-onBeforeUnmount(() => { clearInterval(poll); clearInterval(tick) })
+onBeforeUnmount(() => { clearInterval(poll); clearInterval(tick); document.removeEventListener('keydown', onDocType) })
 
 function elapsed(iso) {
   if (!iso) return ''
@@ -63,9 +64,27 @@ function pluralParts(n) {
 }
 function pInitials(name) { return (name || '?').trim()[0]?.toUpperCase() || '?' }
 
-const live = computed(() => items.value.filter((c) => c.status === 'live'))
-const scheduled = computed(() => items.value.filter((c) => c.status === 'scheduled'))
-const ended = computed(() => items.value.filter((c) => c.status === 'ended'))
+const search = ref('')
+const searchInput = ref(null)
+function matchSearch(c) {
+  const q = search.value.trim().toLowerCase()
+  if (!q) return true
+  return [c.title, c.host_name].some((s) => (s || '').toLowerCase().includes(q))
+}
+const live = computed(() => items.value.filter((c) => c.status === 'live' && matchSearch(c)))
+const scheduled = computed(() => items.value.filter((c) => c.status === 'scheduled' && matchSearch(c)))
+const ended = computed(() => items.value.filter((c) => c.status === 'ended' && matchSearch(c)))
+const hasAny = computed(() => items.value.length > 0)
+// поиск при наборе в любом месте страницы
+function onDocType(e) {
+  if (showForm.value || e.ctrlKey || e.metaKey || e.altKey) return
+  const t = e.target
+  if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
+  if (!hasAny.value) return
+  if (e.key === 'Escape') { search.value = ''; return }
+  if (e.key === 'Backspace') { if (search.value) { search.value = search.value.slice(0, -1); e.preventDefault() }; return }
+  if (e.key.length === 1) { search.value += e.key; e.preventDefault(); nextTick(() => searchInput.value?.focus()) }
+}
 
 function fmt(iso) {
   if (!iso) return ''
@@ -153,6 +172,11 @@ async function remove(c) {
         <button v-if="recEnabled" class="btn-outline" title="Архив записей" @click="router.push({ name: 'conference-recordings' })"><AppIcon name="play" :size="15" /> Записи</button>
         <button v-if="canHost" class="btn-primary" @click="editingId ? resetForm() : (showForm = !showForm)"><AppIcon name="video" :size="16" /> Создать</button>
       </div>
+    </div>
+
+    <div v-if="hasAny && !showForm" class="mb-4 flex items-center gap-2 rounded-md border border-parchment-300 bg-white px-3 py-2 sm:max-w-xs">
+      <AppIcon name="search" :size="16" class="shrink-0 text-ink-700/40" />
+      <input ref="searchInput" v-model="search" class="w-full bg-transparent text-sm text-ink-800 outline-none placeholder:text-ink-700/40" placeholder="Поиск по конференциям" />
     </div>
 
     <div v-if="showForm" class="conf-form card mb-6 space-y-3 p-5">
@@ -288,7 +312,8 @@ async function remove(c) {
       </div>
 
       <div v-if="!live.length && !scheduled.length && !ended.length" class="card p-10 text-center text-ink-700/50">
-        Конференций пока нет.<span v-if="canHost"> Создайте первую.</span>
+        <template v-if="search && hasAny">Ничего не найдено</template>
+        <template v-else>Конференций пока нет.<span v-if="canHost"> Создайте первую.</span></template>
       </div>
     </template>
   </div>

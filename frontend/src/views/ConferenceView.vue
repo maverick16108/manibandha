@@ -151,7 +151,7 @@ async function remove(c) {
       <!-- идёт сейчас -->
       <div v-if="live.length" class="mb-6 space-y-3">
         <div class="text-sm font-semibold uppercase tracking-wide text-red-600">Сейчас в эфире</div>
-        <div v-for="c in live" :key="c.id" class="card border-red-400/40 bg-red-500/5 p-4">
+        <div v-for="c in live" :key="c.id" class="card cursor-pointer border-red-400/40 bg-red-500/5 p-4 transition hover:border-red-400/70 hover:bg-red-500/10" @click="enter(c)">
           <div class="flex items-center justify-between gap-3">
             <div class="min-w-0">
               <div class="flex items-center gap-2">
@@ -177,9 +177,9 @@ async function remove(c) {
               </div>
             </div>
             <div class="flex shrink-0 items-center gap-2">
-              <button v-if="c.can_host && c.guests_allowed" class="btn-ghost text-sm" title="Скопировать ссылку для гостей" @click="copyLink(c)"><AppIcon name="link" :size="15" /> Ссылка</button>
-              <button class="btn-primary" @click="enter(c)">Войти</button>
-              <button v-if="c.can_host" class="btn-ghost" @click="endConf(c)">Завершить</button>
+              <button v-if="c.can_host && c.guests_allowed" class="btn-ghost text-sm" title="Скопировать ссылку для гостей" @click.stop="copyLink(c)"><AppIcon name="link" :size="15" /> Ссылка</button>
+              <button class="btn-primary" @click.stop="enter(c)">Войти</button>
+              <button v-if="c.can_host" class="btn-ghost" @click.stop="endConf(c)">Завершить</button>
             </div>
           </div>
         </div>
@@ -188,7 +188,7 @@ async function remove(c) {
       <!-- запланированные -->
       <div v-if="scheduled.length" class="mb-6 space-y-3">
         <div class="text-sm font-semibold uppercase tracking-wide text-ink-700/50">Запланированные</div>
-        <div v-for="c in scheduled" :key="c.id" class="card p-4">
+        <div v-for="c in scheduled" :key="c.id" class="card cursor-pointer p-4 transition hover:border-saffron-400/50 hover:bg-parchment-100" @click="enter(c)">
           <div class="flex items-center justify-between gap-3">
             <div class="min-w-0">
               <div class="flex items-center gap-2">
@@ -201,9 +201,9 @@ async function remove(c) {
               <p v-if="c.description" class="mt-1 text-sm text-ink-700/70">{{ c.description }}</p>
             </div>
             <div class="flex shrink-0 items-center gap-2">
-              <button v-if="c.can_host && c.guests_allowed" class="btn-ghost text-sm" title="Скопировать ссылку для гостей" @click="copyLink(c)"><AppIcon name="link" :size="15" /> Ссылка</button>
-              <button class="btn-outline" @click="enter(c)">{{ c.can_host ? 'Начать' : 'Войти' }}</button>
-              <button v-if="c.can_host" class="text-ink-700/40 hover:text-red-600" @click="remove(c)"><AppIcon name="trash" :size="16" /></button>
+              <button v-if="c.can_host && c.guests_allowed" class="btn-ghost text-sm" title="Скопировать ссылку для гостей" @click.stop="copyLink(c)"><AppIcon name="link" :size="15" /> Ссылка</button>
+              <button class="btn-outline" @click.stop="enter(c)">{{ c.can_host ? 'Начать' : 'Войти' }}</button>
+              <button v-if="c.can_host" class="text-ink-700/40 hover:text-red-600" @click.stop="remove(c)"><AppIcon name="trash" :size="16" /></button>
             </div>
           </div>
         </div>

@@ -479,12 +479,12 @@ onBeforeUnmount(() => { if (ws) ws.close(); clearTimeout(typingTimer); clearInte
 .chat-scroll::-webkit-scrollbar-track { background: transparent; }
 .chat-scroll::-webkit-scrollbar-thumb { background: rgba(75, 60, 50, 0.28); border-radius: 9999px; }
 
-/* подсветка при переходе к процитированному — яркая пульсирующая обводка ВНУТРИ пузыря (не вылазит за область/скролл) */
-.msg-flash > div { animation: msgflash 3s ease; border-radius: 1rem; }
+/* подсветка при переходе к процитированному — одна спокойная яркая обводка ВНУТРИ пузыря, без морганий */
+.msg-flash > div { animation: msgflash 2.8s ease; border-radius: 1rem; }
 @keyframes msgflash {
-  0%, 22%, 46%  { box-shadow: inset 0 0 0 0 rgba(255,255,255,0), inset 0 0 0 0 rgba(255,217,138,0), inset 0 0 0 0 rgba(255,255,255,0); }
-  10%, 34%, 58% { box-shadow: inset 0 0 0 4px #ffffff, inset 0 0 0 9px #ffd98a, inset 0 0 0 400px rgba(255,255,255,0.16); }
-  80%           { box-shadow: inset 0 0 0 4px #ffffff, inset 0 0 0 9px #ffd98a, inset 0 0 0 0 rgba(255,255,255,0); }
-  100%          { box-shadow: inset 0 0 0 0 rgba(255,255,255,0), inset 0 0 0 0 rgba(255,217,138,0), inset 0 0 0 0 rgba(255,255,255,0); }
+  0%   { box-shadow: inset 0 0 0 0 rgba(255,255,255,0), inset 0 0 0 0 rgba(255,217,138,0); }
+  8%   { box-shadow: inset 0 0 0 3px #ffffff, inset 0 0 0 7px #ffd98a; }
+  70%  { box-shadow: inset 0 0 0 3px #ffffff, inset 0 0 0 7px #ffd98a; }
+  100% { box-shadow: inset 0 0 0 0 rgba(255,255,255,0), inset 0 0 0 0 rgba(255,217,138,0); }
 }
 </style>

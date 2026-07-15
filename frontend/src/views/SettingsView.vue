@@ -10,7 +10,7 @@ usePageTitle('Настройки')
 const loading = ref(true)
 const saving = ref(false)
 const saved = ref(false)
-const form = ref({ forum_edit_window_minutes: 60, auth_expire_days: 30 })
+const form = ref({ forum_edit_window_minutes: 60, auth_expire_days: 30, recording_enabled: true, recording_height: 720 })
 
 async function load() {
   loading.value = true
@@ -19,6 +19,8 @@ async function load() {
     form.value = {
       forum_edit_window_minutes: data.forum_edit_window_minutes ?? 60,
       auth_expire_days: data.auth_expire_days ?? 30,
+      recording_enabled: data.recording_enabled !== false,
+      recording_height: data.recording_height ?? 720,
     }
   } finally {
     loading.value = false
@@ -38,6 +40,8 @@ async function save() {
     await client.put('/settings', {
       forum_edit_window_minutes: Number(form.value.forum_edit_window_minutes),
       auth_expire_days: Number(form.value.auth_expire_days),
+      recording_enabled: !!form.value.recording_enabled,
+      recording_height: Number(form.value.recording_height),
     })
     saved.value = true
     setTimeout(() => { saved.value = false }, 2500)
@@ -91,6 +95,26 @@ async function save() {
           <span class="text-sm text-ink-700/60">дней</span>
         </div>
         <p class="mt-1.5 text-xs text-ink-700/50">Скользящее окно: при каждом заходе на сайт срок продлевается заново. Если пользователь не заходил столько дней — потребуется войти снова.</p>
+      </div>
+
+      <!-- Запись конференций -->
+      <div class="card mb-4 p-6">
+        <div class="mb-4 flex items-center gap-2">
+          <AppIcon name="video" :size="18" class="text-saffron-600" />
+          <h2 class="font-display text-lg font-semibold text-ink-900">Запись конференций</h2>
+        </div>
+        <label class="flex items-center gap-2 text-sm"><input type="checkbox" v-model="form.recording_enabled" /> Разрешить запись конференций</label>
+        <p class="mb-4 mt-1.5 text-xs text-ink-700/50">Записи ведёт сервер (LiveKit Egress) и складывает в архив. На слабом сервере запись нагружает процессор — при частом использовании стоит добавить мощности.</p>
+        <div :class="!form.recording_enabled && 'pointer-events-none opacity-50'">
+          <label class="label">Качество записи</label>
+          <div class="flex gap-2">
+            <button v-for="q in [480, 720, 1080]" :key="q" type="button"
+                    class="rounded-lg border px-3 py-1.5 text-sm transition"
+                    :class="form.recording_height === q ? 'border-saffron-500 bg-saffron-50 font-semibold text-saffron-700' : 'border-parchment-300 text-ink-700 hover:bg-parchment-100'"
+                    @click="form.recording_height = q">{{ q }}p</button>
+          </div>
+          <p class="mt-1.5 text-xs text-ink-700/50">Чем выше качество — тем больше нагрузка и размер файла. На этом сервере рекомендуется 480p или 720p.</p>
+        </div>
       </div>
 
       <div class="flex items-center gap-3">

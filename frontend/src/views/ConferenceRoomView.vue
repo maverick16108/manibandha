@@ -19,6 +19,7 @@ const guestName = ref('')
 const state = ref('connecting')
 const errorMsg = ref('')
 let room = null
+let recPoll = null
 const canPublish = ref(false)
 const isHost = ref(false)
 const myIdentity = ref('')
@@ -177,6 +178,7 @@ async function connect() {
     }
     refresh()
     loadBans()
+    loadRecStatus(); recPoll = setInterval(loadRecStatus, 5000)
   } catch (e) {
     state.value = 'error'
     errorMsg.value = e.response?.data?.detail || 'Не удалось подключиться к конференции'
@@ -228,6 +230,23 @@ async function setAll(kind, allow) {
   refresh()
 }
 function pinTile(identity) { pinnedId.value = pinnedId.value === identity ? null : identity }
+
+// ── запись конференции ──
+const recording = ref(false)
+const recEnabled = ref(false)
+const recBusy = ref(false)
+async function loadRecStatus() {
+  if (isGuest) return
+  try { const { data } = await client.get(`/conferences/${id}/record`); recording.value = !!data.recording; recEnabled.value = !!data.enabled } catch { /* ignore */ }
+}
+async function toggleRecord() {
+  if (recBusy.value || !isHost.value) return
+  recBusy.value = true
+  try {
+    const { data } = await client.post(`/conferences/${id}/record/${recording.value ? 'stop' : 'start'}`)
+    recording.value = !!data.recording
+  } catch (e) { alert(e.response?.data?.detail || 'Не удалось') } finally { recBusy.value = false }
+}
 
 // ── удаление участников (бан) ──
 const bans = ref([])
@@ -341,6 +360,7 @@ watch([viewMode, pinnedId, screenSharer, () => tiles.value.length], () => nextTi
 function leave() {
   try { room?.disconnect() } catch { /* ignore */ }
   room = null
+  clearInterval(recPoll)
   router.push(isGuest ? '/' : { name: 'conference' })
 }
 
@@ -373,6 +393,7 @@ onMounted(() => {
 })
 onBeforeUnmount(() => {
   document.removeEventListener('keydown', onKey)
+  clearInterval(recPoll)
   try { navigator.mediaDevices.removeEventListener('devicechange', loadDevices) } catch { /* ignore */ }
   try { room?.disconnect() } catch { /* ignore */ }
 })
@@ -399,6 +420,10 @@ onBeforeUnmount(() => {
     </div>
 
     <template v-else>
+      <!-- индикатор записи (видят все) -->
+      <div v-if="recording" class="pointer-events-none absolute left-3 top-3 z-20 flex items-center gap-1.5 rounded-full bg-red-500/90 px-2.5 py-1 text-xs font-semibold text-white shadow">
+        <span class="h-2 w-2 animate-pulse rounded-full bg-white"></span> Идёт запись
+      </div>
       <!-- панель ведущего -->
       <div v-if="isHost" class="mb-2 flex flex-wrap items-center gap-x-4 gap-y-2 pt-3 text-sm">
         <span class="inline-flex items-center gap-2">
@@ -498,6 +523,11 @@ onBeforeUnmount(() => {
                   :class="!myAllowScreen ? 'cursor-not-allowed bg-parchment-200 text-ink-700/40 opacity-50' : (screenOn ? 'bg-saffron-500 text-white' : 'bg-parchment-200 text-ink-800 hover:bg-parchment-300')"
                   @click="toggleScreen"><AppIcon name="screen" :size="20" /></button>
         </template>
+        <!-- запись (только ведущий) -->
+        <button v-if="isHost && recEnabled" class="flex h-11 w-11 items-center justify-center rounded-full transition" :class="recording ? 'bg-red-500 text-white' : 'bg-parchment-200 text-ink-800 hover:bg-parchment-300'" :title="recording ? 'Остановить запись' : 'Начать запись'" :disabled="recBusy" @click="toggleRecord">
+          <span v-if="recording" class="h-3.5 w-3.5 rounded-sm bg-white"></span>
+          <span v-else class="h-3.5 w-3.5 rounded-full bg-red-500"></span>
+        </button>
         <!-- переключение раскладки: сетка / активный спикер (для всех) -->
         <button class="flex h-11 w-11 items-center justify-center rounded-full transition" :class="viewMode==='speaker' ? 'bg-saffron-500 text-white' : 'bg-parchment-200 text-ink-800 hover:bg-parchment-300'" :title="viewMode==='grid' ? 'Активный спикер' : 'Сетка'" @click="viewMode = viewMode==='grid' ? 'speaker' : 'grid'; pinnedId=null"><AppIcon :name="viewMode==='grid' ? 'user' : 'grid'" :size="20" /></button>
         <button class="flex h-11 w-11 items-center justify-center rounded-full text-xl transition" :class="handUp ? 'bg-saffron-500 text-white' : 'bg-parchment-200 hover:bg-parchment-300'" title="Поднять руку" @click="toggleHand">✋</button>

@@ -4,7 +4,7 @@ import urllib.request
 import uuid
 
 import jwt
-from fastapi import APIRouter, Body, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, Request, status
 from sqlalchemy import case, func
 from sqlalchemy.orm import Session, joinedload
 
@@ -67,14 +67,17 @@ def _egress_service(method: str, body: dict) -> dict:
         return json.loads(r.read().decode() or "{}")
 
 
-def _start_egress(room: str, filename: str) -> str:
+_REC_RES = {480: (854, 1200), 720: (1280, 2000), 1080: (1920, 3500)}
+
+
+def _start_egress(room: str, filename: str, height: int = 720) -> str:
     """Запустить запись комнаты в MP4. Возвращает egress_id."""
+    w, br = _REC_RES.get(height, _REC_RES[720])
     body = {
         "roomName": room,
         "layout": "grid",
         "fileOutputs": [{"fileType": "MP4", "filepath": f"/out/{filename}"}],
-        # лёгкое кодирование — сервер слабый (1 ядро)
-        "advanced": {"width": 1280, "height": 720, "framerate": 20, "videoBitrate": 2000, "audioBitrate": 128},
+        "advanced": {"width": w, "height": height, "framerate": 20, "videoBitrate": br, "audioBitrate": 128},
     }
     info = _egress_service("StartRoomCompositeEgress", body)
     return info.get("egressId") or info.get("egress_id") or ""
@@ -85,6 +88,49 @@ def _stop_egress(egress_id: str):
         _egress_service("StopEgress", {"egressId": egress_id})
     except Exception:  # noqa: BLE001
         pass
+
+
+def _apply_egress_info(rec: ConferenceRecording, info: dict) -> bool:
+    """Обновить запись по данным egress. True — если статус изменился (завершилась)."""
+    st = info.get("status")
+    done_states = ("EGRESS_COMPLETE", "EGRESS_ENDING", 3)
+    fail_states = ("EGRESS_FAILED", "EGRESS_ABORTED", "EGRESS_LIMIT_REACHED", 4, 5)
+    files = info.get("fileResults") or info.get("file_results") or []
+    if not files and info.get("file"):
+        files = [info["file"]]
+    if st in done_states and files and (files[0].get("filename") or files[0].get("location")):
+        f = files[0]
+        rec.status = "done"
+        rec.filename = (f.get("filename") or "").split("/")[-1] or rec.filename
+        try:
+            rec.duration_ms = int(int(f.get("duration") or 0) / 1_000_000)  # ns → ms
+        except (TypeError, ValueError):
+            pass
+        try:
+            rec.size_bytes = int(f.get("size") or 0)
+        except (TypeError, ValueError):
+            pass
+        return True
+    if st in fail_states:
+        rec.status = "failed"
+        return True
+    return False
+
+
+def _reconcile_recording(db: Session, rec: ConferenceRecording):
+    """Подтянуть финальный статус записи из egress (если вебхук не пришёл)."""
+    if rec.status != "active" or not rec.egress_id:
+        return
+    try:
+        r = _egress_service("ListEgress", {"egressId": rec.egress_id})
+        items = r.get("items") or []
+    except Exception:  # noqa: BLE001
+        return
+    if items:
+        from sqlalchemy import func as _f
+        if _apply_egress_info(rec, items[0]):
+            rec.ended_at = _f.now()
+            db.commit()
 
 
 def _mint_token(identity: str, name: str, room: str, can_publish: bool, sources: list | None = None, ttl: int = 6 * 3600) -> str:
@@ -248,12 +294,12 @@ def join_conference(conf_id: int, db: Session = Depends(get_db), user: User = De
         c.started_at = func.now()
         db.commit()
     # авто-запись при старте встречи ведущим
-    if is_host and c.auto_record and _egress_configured():
+    if is_host and c.auto_record and _recording_on(db):
         active = db.query(ConferenceRecording).filter(ConferenceRecording.conference_id == c.id, ConferenceRecording.status == "active").first()
         if not active:
             try:
                 fn = f"conf{c.id}-{uuid.uuid4().hex[:12]}.mp4"
-                eid = _start_egress(c.room, fn)
+                eid = _start_egress(c.room, fn, _rec_height(db))
                 if eid:
                     db.add(ConferenceRecording(conference_id=c.id, egress_id=eid, filename=fn, status="active"))
                     db.commit()
@@ -444,10 +490,24 @@ def _egress_configured() -> bool:
     return bool(settings.LIVEKIT_API_KEY and settings.LIVEKIT_API_SECRET)
 
 
+def _recording_on(db: Session) -> bool:
+    from app.api.routes.settings import get_int_setting
+    return _egress_configured() and bool(get_int_setting(db, "recording_enabled", 1))
+
+
+def _rec_height(db: Session) -> int:
+    from app.api.routes.settings import get_int_setting
+    h = get_int_setting(db, "recording_height", 720)
+    return h if h in (480, 720, 1080) else 720
+
+
 @router.get("/{conf_id}/record")
 def record_status(conf_id: int, db: Session = Depends(get_db), user: User = Depends(require_cap("conference.view"))):
     active = db.query(ConferenceRecording).filter(ConferenceRecording.conference_id == conf_id, ConferenceRecording.status == "active").first()
-    return {"recording": bool(active)}
+    if active:
+        _reconcile_recording(db, active)  # вдруг уже завершилась
+        active = db.query(ConferenceRecording).filter(ConferenceRecording.conference_id == conf_id, ConferenceRecording.status == "active").first()
+    return {"recording": bool(active), "enabled": _recording_on(db)}
 
 
 @router.post("/{conf_id}/record/start")
@@ -456,14 +516,14 @@ def record_start(conf_id: int, db: Session = Depends(get_db), user: User = Depen
     if not c:
         raise HTTPException(status_code=404, detail="Конференция не найдена")
     _editable(db, user, c)
-    if not _egress_configured():
-        raise HTTPException(status_code=503, detail="Запись не настроена")
+    if not _recording_on(db):
+        raise HTTPException(status_code=503, detail="Запись отключена в настройках")
     active = db.query(ConferenceRecording).filter(ConferenceRecording.conference_id == c.id, ConferenceRecording.status == "active").first()
     if active:
         return {"recording": True}
     filename = f"conf{c.id}-{uuid.uuid4().hex[:12]}.mp4"
     try:
-        egress_id = _start_egress(c.room, filename)
+        egress_id = _start_egress(c.room, filename, _rec_height(db))
     except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=502, detail=f"Не удалось начать запись: {e}")
     if not egress_id:
@@ -488,6 +548,9 @@ def record_stop(conf_id: int, db: Session = Depends(get_db), user: User = Depend
 @router.get("/recordings")
 def list_recordings(db: Session = Depends(get_db), user: User = Depends(require_cap("conference.view"))):
     """Архив записей — готовые записи всех конференций, свежие сверху."""
+    # подтянуть зависшие «active» (если вебхук egress не пришёл)
+    for act in db.query(ConferenceRecording).filter(ConferenceRecording.status == "active").all():
+        _reconcile_recording(db, act)
     rows = (
         db.query(ConferenceRecording).options(joinedload(ConferenceRecording.conference))
         .filter(ConferenceRecording.status == "done", ConferenceRecording.filename.isnot(None))
@@ -497,9 +560,22 @@ def list_recordings(db: Session = Depends(get_db), user: User = Depends(require_
 
 
 @router.get("/recordings/{rec_id}/file")
-def recording_file(rec_id: int, db: Session = Depends(get_db), user: User = Depends(require_cap("conference.view"))):
+def recording_file(rec_id: int, token: str | None = Query(None), authorization: str | None = Header(None), db: Session = Depends(get_db)):
+    """Отдать файл записи (с поддержкой Range для <video>). Авторизация — заголовком или ?token=."""
     import os
+    import jwt
     from fastapi.responses import FileResponse
+    from app.core.security import decode_access_token
+    raw = token or (authorization or "").removeprefix("Bearer ").strip()
+    try:
+        email = decode_access_token(raw).get("sub")
+        u = db.query(User).filter(User.email == email).first() if email else None
+    except jwt.PyJWTError:
+        u = None
+    if not u or not u.is_active:
+        raise HTTPException(status_code=401, detail="Не авторизован")
+    if not has_cap(db, u, "conference.view"):
+        raise HTTPException(status_code=403, detail="Недостаточно прав")
     r = db.get(ConferenceRecording, rec_id)
     if not r or not r.filename or r.status != "done":
         raise HTTPException(status_code=404, detail="Запись не найдена")

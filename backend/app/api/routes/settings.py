@@ -11,6 +11,8 @@ router = APIRouter(prefix="/settings", tags=["settings"])
 DEFAULTS = {
     "forum_edit_window_minutes": 60,  # сколько минут можно править/удалять своё сообщение
     "auth_expire_days": 30,           # через сколько дней без входа теряется авторизация (скользящее окно)
+    "recording_enabled": 1,           # разрешена ли запись конференций
+    "recording_height": 720,          # качество записи: высота (480/720/1080) — влияет на нагрузку
 }
 
 
@@ -38,6 +40,8 @@ def read_settings(db: Session = Depends(get_db), _: User = Depends(get_current_u
     return {
         "forum_edit_window_minutes": get_int_setting(db, "forum_edit_window_minutes", DEFAULTS["forum_edit_window_minutes"]),
         "auth_expire_days": get_int_setting(db, "auth_expire_days", DEFAULTS["auth_expire_days"]),
+        "recording_enabled": bool(get_int_setting(db, "recording_enabled", DEFAULTS["recording_enabled"])),
+        "recording_height": get_int_setting(db, "recording_height", DEFAULTS["recording_height"]),
     }
 
 
@@ -58,5 +62,9 @@ def _apply_int(db: Session, payload: dict, key: str, lo: int, hi: int):
 def update_settings(payload: dict = Body(...), db: Session = Depends(get_db), _: User = Depends(require_cap("settings.manage"))):
     _apply_int(db, payload, "forum_edit_window_minutes", 0, 100000)
     _apply_int(db, payload, "auth_expire_days", 1, 3650)
+    if "recording_enabled" in payload:
+        _set(db, "recording_enabled", "1" if payload.get("recording_enabled") else "0")
+    if payload.get("recording_height") in (480, 720, 1080):
+        _set(db, "recording_height", str(int(payload["recording_height"])))
     db.commit()
     return read_settings(db, _)

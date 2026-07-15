@@ -20,7 +20,7 @@ const loading = ref(true)
 
 const showForm = ref(false)
 const editingId = ref(null) // id редактируемой конференции (иначе создаём новую)
-const form = ref({ title: '', description: '', mode: 'interactive', mic_allowed: true, cam_allowed: true, screen_allowed: true, guests_allowed: false })
+const form = ref({ title: '', description: '', mode: 'interactive', mic_allowed: true, cam_allowed: true, screen_allowed: true, guests_allowed: false, auto_record: false })
 const schedDate = ref('')   // YYYY-MM-DD
 const schedHour = ref(19)
 const schedMin = ref(0)
@@ -35,8 +35,29 @@ async function load(silent = false) {
 let poll = null
 const nowTs = ref(Date.now())
 let tick = null
-onMounted(() => { load(); poll = setInterval(() => load(true), 4000); tick = setInterval(() => { nowTs.value = Date.now() }, 1000) })
+const recEnabled = ref(false)
+onMounted(async () => {
+  load(); poll = setInterval(() => load(true), 4000); tick = setInterval(() => { nowTs.value = Date.now() }, 1000)
+  try { const { data } = await client.get('/settings'); recEnabled.value = !!data.recording_enabled } catch { /* ignore */ }
+})
 onBeforeUnmount(() => { clearInterval(poll); clearInterval(tick) })
+
+// архив записей
+const archiveOpen = ref(false)
+const recordings = ref([])
+const recLoading = ref(false)
+const playingRec = ref(null)
+async function openArchive() {
+  archiveOpen.value = true; recLoading.value = true
+  try { const { data } = await client.get('/conferences/recordings'); recordings.value = data.recordings || [] } finally { recLoading.value = false }
+}
+function recUrl(r) { return `${r.url}?token=${encodeURIComponent(auth.token)}` }
+function fmtDur(ms) {
+  let s = Math.floor((ms || 0) / 1000); const h = Math.floor(s / 3600); s -= h * 3600
+  const m = Math.floor(s / 60); s -= m * 60; const pad = (n) => String(n).padStart(2, '0')
+  return h ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`
+}
+function fmtSize(b) { const mb = (b || 0) / 1048576; return mb >= 1024 ? `${(mb / 1024).toFixed(1)} ГБ` : `${Math.max(1, Math.round(mb))} МБ` }
 
 function elapsed(iso) {
   if (!iso) return ''
@@ -68,7 +89,7 @@ function modeLabel(m) { return m === 'broadcast' ? 'Трансляция' : 'В�
 function resetForm() {
   showForm.value = false
   editingId.value = null
-  form.value = { title: '', description: '', mode: 'interactive', mic_allowed: true, cam_allowed: true, screen_allowed: true, guests_allowed: false }
+  form.value = { title: '', description: '', mode: 'interactive', mic_allowed: true, cam_allowed: true, screen_allowed: true, guests_allowed: false, auto_record: false }
   schedDate.value = ''; schedHour.value = 19; schedMin.value = 0
 }
 function startEdit(c) {
@@ -77,7 +98,7 @@ function startEdit(c) {
   form.value = {
     title: c.title || '', description: c.description || '', mode: c.mode || 'interactive',
     mic_allowed: c.mic_allowed !== false, cam_allowed: c.cam_allowed !== false,
-    screen_allowed: c.screen_allowed !== false, guests_allowed: !!c.guests_allowed,
+    screen_allowed: c.screen_allowed !== false, guests_allowed: !!c.guests_allowed, auto_record: !!c.auto_record,
   }
   if (c.scheduled_at) {
     const d = new Date(c.scheduled_at)
@@ -93,7 +114,7 @@ async function saveEdit() {
     const payload = {
       title: form.value.title.trim(), description: form.value.description.trim() || null, mode: form.value.mode,
       mic_allowed: form.value.mic_allowed, cam_allowed: form.value.cam_allowed,
-      screen_allowed: form.value.screen_allowed, guests_allowed: form.value.guests_allowed,
+      screen_allowed: form.value.screen_allowed, guests_allowed: form.value.guests_allowed, auto_record: form.value.auto_record,
     }
     if (schedDate.value) {
       const hh = String(schedHour.value).padStart(2, '0'); const mm = String(schedMin.value).padStart(2, '0')
@@ -113,7 +134,7 @@ async function submit(enter) {
   if (!form.value.title.trim()) return
   saving.value = true
   try {
-    const payload = { title: form.value.title.trim(), description: form.value.description.trim() || null, mode: form.value.mode, mic_allowed: form.value.mic_allowed, cam_allowed: form.value.cam_allowed, screen_allowed: form.value.screen_allowed, guests_allowed: form.value.guests_allowed }
+    const payload = { title: form.value.title.trim(), description: form.value.description.trim() || null, mode: form.value.mode, mic_allowed: form.value.mic_allowed, cam_allowed: form.value.cam_allowed, screen_allowed: form.value.screen_allowed, guests_allowed: form.value.guests_allowed, auto_record: form.value.auto_record }
     if (!enter && schedDate.value) {
       const hh = String(schedHour.value).padStart(2, '0')
       const mm = String(schedMin.value).padStart(2, '0')
@@ -140,7 +161,10 @@ async function remove(c) {
   <div class="mx-auto max-w-6xl">
     <div class="mb-6 flex items-center justify-between gap-3">
       <p class="text-ink-700/60">Онлайн-встречи и трансляции гуру с учениками</p>
-      <button v-if="canHost" class="btn-primary shrink-0" @click="editingId ? resetForm() : (showForm = !showForm)"><AppIcon name="video" :size="16" /> Создать</button>
+      <div class="flex shrink-0 items-center gap-2">
+        <button v-if="recEnabled" class="btn-outline" title="Архив записей" @click="openArchive"><AppIcon name="play" :size="15" /> Записи</button>
+        <button v-if="canHost" class="btn-primary" @click="editingId ? resetForm() : (showForm = !showForm)"><AppIcon name="video" :size="16" /> Создать</button>
+      </div>
     </div>
 
     <div v-if="showForm" class="conf-form card mb-6 space-y-3 p-5">
@@ -158,6 +182,7 @@ async function remove(c) {
         <label class="flex items-center gap-2 text-sm"><input type="checkbox" v-model="form.screen_allowed" /> показ экрана</label>
       </div>
       <label class="flex items-center gap-2 text-sm"><input type="checkbox" v-model="form.guests_allowed" /> Разрешить вход гостям по ссылке (без авторизации)</label>
+      <label v-if="recEnabled" class="flex items-center gap-2 text-sm"><input type="checkbox" v-model="form.auto_record" /> Записывать встречу с самого начала</label>
       <div>
         <label class="label">Запланировать (необязательно)</label>
         <div class="flex flex-wrap items-center gap-2">
@@ -274,5 +299,32 @@ async function remove(c) {
         Конференций пока нет.<span v-if="canHost"> Создайте первую.</span>
       </div>
     </template>
+
+    <!-- архив записей -->
+    <div v-if="archiveOpen" class="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-ink-900/50 p-4 sm:p-8" @click.self="archiveOpen = false; playingRec = null">
+      <div class="card w-full max-w-3xl p-5">
+        <div class="mb-4 flex items-center justify-between">
+          <h3 class="font-display text-xl font-semibold text-ink-900">Архив записей</h3>
+          <button class="rounded-full p-1.5 text-ink-700/50 hover:bg-parchment-100" @click="archiveOpen = false; playingRec = null"><AppIcon name="close" :size="20" /></button>
+        </div>
+        <div v-if="recLoading" class="space-y-2"><AppSkeleton v-for="i in 3" :key="i" h="h-12" /></div>
+        <div v-else-if="!recordings.length" class="p-8 text-center text-ink-700/50">Записей пока нет</div>
+        <div v-else class="space-y-2">
+          <div v-for="r in recordings" :key="r.id" class="rounded-xl border border-parchment-200 p-3">
+            <div class="flex items-center justify-between gap-3">
+              <div class="min-w-0">
+                <div class="truncate font-medium text-ink-900">{{ r.conference_title || 'Конференция' }}</div>
+                <div class="text-xs text-ink-700/50">{{ fmt(r.started_at) }} · {{ fmtDur(r.duration_ms) }} · {{ fmtSize(r.size_bytes) }}</div>
+              </div>
+              <div class="flex shrink-0 items-center gap-2">
+                <button class="btn-outline text-sm" @click="playingRec = playingRec === r.id ? null : r.id"><AppIcon name="play" :size="14" /> {{ playingRec === r.id ? 'Скрыть' : 'Смотреть' }}</button>
+                <a :href="recUrl(r)" download class="btn-ghost text-sm" title="Скачать"><AppIcon name="download" :size="16" /></a>
+              </div>
+            </div>
+            <video v-if="playingRec === r.id" :src="recUrl(r)" controls autoplay class="mt-3 w-full rounded-lg bg-ink-900"></video>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>

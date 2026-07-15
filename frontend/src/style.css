@@ -92,7 +92,7 @@
 .voice-msg__wave {
   position: relative;
   flex: 1 1 auto;
-  height: 1.6rem;
+  height: 26px;
   min-width: 4rem;
   cursor: pointer;
 }
@@ -105,11 +105,12 @@
 }
 .voice-msg__wave .vw-row i {
   flex: 1 1 0;
-  min-width: 1.5px;
+  min-width: 2px;
+  height: 8px; /* запасная высота, если inline-стиль не применился */
   border-radius: 9999px;
   display: block;
 }
-.vw-base i { background: rgba(200, 116, 42, 0.35); }
+.vw-base i { background: rgba(200, 116, 42, 0.45); }
 .vw-played i { background: #c8742a; }
 .vw-played { clip-path: inset(0 100% 0 0); } /* по умолчанию ничего не заполнено */
 .bg-saffron-500 .vw-base i { background: rgba(255, 255, 255, 0.5); }

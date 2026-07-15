@@ -53,7 +53,8 @@ async function openCard(userId) {
 function closeCard() { card.value = null }
 function onEsc(e) {
   if (e.key !== 'Escape') return
-  if (picker.open) closePicker()
+  if (whoMenu.open) closeWho()
+  else if (picker.open) closePicker()
   else if (card.value) closeCard()
 }
 function placeLine(c) { return [c.city, c.region, c.country].filter(Boolean).join(', ') }
@@ -106,6 +107,20 @@ function reactPicked(emoji) {
   const p = posts.value.find((x) => x.id === picker.postId)
   if (p) react(p, emoji)
 }
+
+// ПКМ по реакции — список тех, кто её поставил (с аватарками, со скроллом)
+const whoMenu = reactive({ open: false, x: 0, y: 0, list: [] })
+const whoStyle = computed(() => {
+  const w = 240, h = 280
+  const x = Math.min(whoMenu.x, window.innerWidth - w - 8)
+  const y = Math.min(whoMenu.y, window.innerHeight - h - 8)
+  return { left: Math.max(8, x) + 'px', top: Math.max(8, y) + 'px' }
+})
+function openWho(e, r) {
+  whoMenu.open = true; whoMenu.list = r.who || []
+  whoMenu.x = e.clientX; whoMenu.y = e.clientY
+}
+function closeWho() { whoMenu.open = false; whoMenu.list = [] }
 
 // ── цитирование ──
 function quoteInto(author, text) {
@@ -250,8 +265,8 @@ onBeforeUnmount(() => {
             <button v-for="r in p.reactions" :key="r.emoji"
                     class="flex items-center gap-1 rounded-full border px-2 py-0.5 transition"
                     :class="r.mine ? 'border-saffron-400 bg-saffron-50' : 'border-parchment-200 hover:bg-parchment-100'"
-                    :title="r.who.map((w) => w.name).filter(Boolean).join(', ')"
-                    @click="react(p, r.emoji)">
+                    @click="react(p, r.emoji)"
+                    @contextmenu.prevent.stop="openWho($event, r)">
               <span class="text-xl leading-none">{{ r.emoji }}</span>
               <span v-if="r.count > 1" class="text-sm font-semibold text-ink-700">{{ r.count }}</span>
             </button>
@@ -272,6 +287,18 @@ onBeforeUnmount(() => {
           </div>
           <div class="grid max-h-44 grid-cols-8 gap-0.5 overflow-y-auto">
             <button v-for="e in EMOJI_PALETTE" :key="e" class="rounded p-1 text-xl leading-none transition hover:bg-parchment-100" @click="reactPicked(e)">{{ e }}</button>
+          </div>
+        </div>
+      </template>
+
+      <!-- список поставивших реакцию (ПКМ по чипу) -->
+      <template v-if="whoMenu.open">
+        <div class="fixed inset-0 z-40" @click="closeWho" @contextmenu.prevent="closeWho"></div>
+        <div class="fixed z-50 max-h-64 w-60 overflow-y-auto rounded-xl border border-parchment-200 bg-white p-1.5 shadow-xl" :style="whoStyle">
+          <div v-for="(w, wi) in whoMenu.list" :key="wi" class="flex items-center gap-2 rounded-lg px-2 py-1.5">
+            <img v-if="w.avatar" :src="w.avatar" class="photo-bw h-7 w-7 shrink-0 rounded-full object-cover" />
+            <span v-else class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-saffron-400 to-saffron-600 text-xs font-semibold text-white">{{ initials(w.name) }}</span>
+            <span class="truncate text-sm text-ink-800">{{ w.name || 'Участник' }}</span>
           </div>
         </div>
       </template>

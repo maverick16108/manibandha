@@ -15,7 +15,8 @@ CREATE TABLE IF NOT EXISTS chats (
   updated_at       TEXT,
   last_seq         INTEGER DEFAULT 0,      -- seq последнего сообщения
   my_last_read_seq INTEGER DEFAULT 0,      -- до какого seq прочитал я
-  unread           INTEGER DEFAULT 0
+  unread           INTEGER DEFAULT 0,
+  pinned           INTEGER DEFAULT 0       -- закреплён у меня
 );
 
 CREATE TABLE IF NOT EXISTS members (

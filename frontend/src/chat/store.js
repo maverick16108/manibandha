@@ -21,6 +21,7 @@ export const chatState = reactive({
   chats: [],               // список для сайдбара (с вычисленным заголовком/аватаром/превью)
   totalUnread: 0,
   activeChatId: null,
+  unreadBeforeSeq: 0,      // граница непрочитанного на момент открытия чата
   messages: [],            // сообщения активного чата
   members: [],             // участники активного чата
   typing: {},              // chatId -> { name, ts }
@@ -90,7 +91,7 @@ async function onDbChange(tables) {
 
 async function refreshChats() {
   if (!db) return;
-  const chats = await db.all('SELECT * FROM chats ORDER BY (updated_at IS NULL), updated_at DESC');
+  const chats = await db.all('SELECT * FROM chats ORDER BY pinned DESC, (updated_at IS NULL), updated_at DESC');
   const mem = await db.all('SELECT * FROM members');
   const out = [];
   let total = 0;
@@ -98,7 +99,7 @@ async function refreshChats() {
     const members = mem.filter((m) => m.chat_id === c.id);
     const peer = c.type === 'direct' ? members.find((m) => m.user_id !== chatState.meId) : null;
     const last = await db.get(
-      'SELECT body,author_id,created_at,seq,deleted,status FROM messages WHERE chat_id=? ORDER BY (seq IS NULL), seq DESC, local_ts DESC LIMIT 1',
+      'SELECT body,author_id,author_name,created_at,seq,deleted,status FROM messages WHERE chat_id=? ORDER BY (seq IS NULL), seq DESC, local_ts DESC LIMIT 1',
       [c.id],
     );
     total += c.unread || 0;
@@ -109,6 +110,7 @@ async function refreshChats() {
       avatar_url: c.type === 'group' ? c.photo_url : (peer?.avatar_url || null),
       members,
       unread: c.unread || 0,
+      pinned: !!c.pinned,
       updated_at: c.updated_at,
       last,
     });
@@ -128,9 +130,24 @@ async function refreshMessages() {
 
 export async function openChat(chatId) {
   chatState.activeChatId = Number(chatId);
+  // граница непрочитанного ДО отметки о прочтении (для разделителя «Непрочитанные»)
+  try {
+    const row = await db.get('SELECT my_last_read_seq FROM chats WHERE id=?', [chatState.activeChatId]);
+    chatState.unreadBeforeSeq = row ? (row.my_last_read_seq || 0) : 0;
+  } catch { chatState.unreadBeforeSeq = 0; }
   await refreshMessages();
   await engine?.ensureChatMessages(chatState.activeChatId);
   await markReadNow();
+}
+
+export async function pinChat(chatId, pinned) {
+  await engine?.pinChat(chatId, pinned);
+}
+
+export async function leaveChat(chatId) {
+  await engine?.leaveChat(chatId);
+  if (chatState.activeChatId === Number(chatId)) closeChat();
+  await refreshChats();
 }
 
 export function closeChat() {

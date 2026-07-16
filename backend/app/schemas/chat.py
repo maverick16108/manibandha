@@ -43,6 +43,7 @@ class ChatOut(BaseModel):
     members: list[ChatMemberOut] = []
     last_message: ChatMessageOut | None = None
     unread: int = 0  # число непрочитанных для текущего пользователя
+    pinned: bool = False  # закреплён ли чат у текущего пользователя
 
 
 class ChatCreateIn(BaseModel):

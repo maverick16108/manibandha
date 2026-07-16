@@ -8,11 +8,12 @@ import AudioBar from '../components/AudioBar.vue'
 import { renderMarkdown } from '../lib/markdown'
 import { player, playAudio, seek } from '../composables/audioPlayer'
 import { showToast } from '../composables/toast'
+import { confirmDialog } from '../composables/confirm'
 import { usePageTitle } from '../composables/pageTitle'
 import {
   chatState, initChat, openChat, closeChat, sendMessage, sendTyping,
   editMessage, deleteMessage, retryFailed, loadOlder, loadContacts, startDirect, startGroup,
-  reactMessage, REACTION_EMOJIS, updateChat,
+  reactMessage, REACTION_EMOJIS, updateChat, pinChat, leaveChat,
 } from '../chat/store'
 
 usePageTitle('Чат')
@@ -51,14 +52,13 @@ watch(activeId, async (id, oldId) => {
   nextTick(autoGrow)
 }, { immediate: false })
 
-// автооткрытие первого чата при входе в раздел (на десктопе)
-const autoOpened = ref(false)
-watch(() => [chatState.ready, chatState.chats.length], () => {
-  if (!autoOpened.value && chatState.ready && !activeId.value && chatState.chats.length && window.innerWidth >= 640) {
-    autoOpened.value = true
+// автооткрытие самого верхнего чата, когда стоим на пустом экране (десктоп)
+function maybeAutoOpen() {
+  if (chatState.ready && !activeId.value && chatState.chats.length && window.innerWidth >= 640) {
     router.replace({ name: 'chat', params: { id: chatState.chats[0].id } })
   }
-})
+}
+watch(() => [chatState.ready, chatState.chats.length, activeId.value], maybeAutoOpen)
 
 // ── черновики: запоминаем ввод по чату (переживает уход со страницы) ──────
 function draftKey(id) { return `chatDraft:${id}` }
@@ -78,6 +78,65 @@ const filteredChats = computed(() => {
 })
 function selectChat(c) { router.push({ name: 'chat', params: { id: c.id } }) }
 function backToList() { router.push({ name: 'chat-home' }) }
+
+// ── список: умное время / превью с автором / галки статуса ──────────────
+function fmtListTime(ts) {
+  if (!ts) return ''
+  const d = new Date(ts); const now = new Date()
+  if (d.toDateString() === now.toDateString()) return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+  const a = new Date(d.getFullYear(), d.getMonth(), d.getDate())
+  const b = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const diff = Math.round((b - a) / 86400000)
+  if (diff >= 1 && diff < 7) return ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'][d.getDay()]
+  return `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()}`
+}
+function lastPreview(c) {
+  const last = c.last
+  if (!last) return 'Нет сообщений'
+  if (last.deleted) return 'сообщение удалено'
+  const text = snippet(last.body)
+  if (last.author_id === chatState.meId) return `Вы: ${text}`
+  if (c.type === 'group') {
+    const who = (last.author_name || c.members.find((m) => m.user_id === last.author_id)?.full_name || '').split(' ')[0]
+    return who ? `${who}: ${text}` : text
+  }
+  return text
+}
+function lastStatus(c) {
+  const last = c.last
+  if (!last || last.author_id !== chatState.meId) return null
+  if (last.status === 'pending' || last.seq == null) return 'pending'
+  if (last.status === 'failed') return 'failed'
+  const others = (c.members || []).filter((m) => m.user_id !== chatState.meId)
+  const read = others.length && others.every((m) => (m.last_read_seq || 0) >= last.seq)
+  return read ? 'read' : 'sent'
+}
+// разделитель «Непрочитанные» перед первым непрочитанным (чужим) сообщением
+const firstUnreadKey = computed(() => {
+  const base = chatState.unreadBeforeSeq || 0
+  const m = chatState.messages.find((x) => x.seq != null && x.seq > base && x.author_id !== chatState.meId)
+  return m ? m.client_uuid : null
+})
+
+// ── контекстное меню списка чатов (закрепить / покинуть / удалить) ──────
+const listCtx = reactive({ open: false, x: 0, y: 0, c: null })
+function closeListCtx() { listCtx.open = false; listCtx.c = null }
+function onListContext(e, c) { e.preventDefault(); listCtx.x = e.clientX; listCtx.y = e.clientY; listCtx.c = c; listCtx.open = true }
+const listCtxStyle = computed(() => ({
+  left: Math.min(listCtx.x, (typeof window !== 'undefined' ? window.innerWidth : 9999) - 230) + 'px',
+  top: Math.min(listCtx.y, (typeof window !== 'undefined' ? window.innerHeight : 9999) - 150) + 'px',
+}))
+async function listPin() { const c = listCtx.c; closeListCtx(); if (c) await pinChat(c.id, !c.pinned) }
+async function listLeave() {
+  const c = listCtx.c; closeListCtx()
+  if (!c) return
+  const isG = c.type === 'group'
+  const okYes = await confirmDialog({ message: isG ? 'Покинуть группу?' : 'Удалить чат?', confirmText: isG ? 'Покинуть' : 'Удалить', cancelText: 'Отмена', danger: true })
+  if (!okYes) return
+  const wasActive = activeId.value === c.id
+  await leaveChat(c.id)
+  if (wasActive) router.replace({ name: 'chat-home' })
+}
 
 // ── реакции ──────────────────────────────────────────────────────────────
 function parseReactions(m) { try { return JSON.parse(m.reactions || '[]') } catch { return [] } }
@@ -265,6 +324,24 @@ function showAuthor(m, i) {
 const convEl = ref(null)
 const wide = ref(false)
 let resizeObs = null
+
+// ширина панели списка чатов — с возможностью раздвигать (перетаскиванием)
+const listWidth = ref(Number(localStorage.getItem('chatListWidth')) || 320)
+const isDesktop = ref(typeof window !== 'undefined' && window.innerWidth >= 640)
+function onWinResize() { isDesktop.value = window.innerWidth >= 640 }
+function startResize(e) {
+  const startX = e.clientX
+  const startW = listWidth.value
+  const move = (ev) => { listWidth.value = Math.max(240, Math.min(600, startW + (ev.clientX - startX))) }
+  const up = () => {
+    document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up)
+    document.body.style.userSelect = ''
+    try { localStorage.setItem('chatListWidth', String(listWidth.value)) } catch { /* ignore */ }
+  }
+  document.addEventListener('mousemove', move); document.addEventListener('mouseup', up)
+  document.body.style.userSelect = 'none'
+  e.preventDefault()
+}
 const isGroup = computed(() => activeChat.value?.type === 'group')
 const memberById = computed(() => { const map = {}; for (const x of chatState.members || []) map[x.user_id] = x; return map })
 function avatarOf(m) { return memberById.value[m.author_id]?.avatar_url || null }
@@ -322,11 +399,16 @@ const newTab = ref('direct')
 const groupTitle = ref('')
 const groupMembers = ref([])
 const contactSearch = ref('')
+const newSearchInput = ref(null)
 const filteredContacts = computed(() => {
   const q = contactSearch.value.trim().toLowerCase()
   return q ? chatState.contacts.filter((u) => (u.full_name || '').toLowerCase().includes(q)) : chatState.contacts
 })
-async function openNew() { showNew.value = true; newTab.value = 'direct'; groupTitle.value = ''; groupMembers.value = []; contactSearch.value = ''; await loadContacts() }
+async function openNew() {
+  showNew.value = true; newTab.value = 'direct'; groupTitle.value = ''; groupMembers.value = []; contactSearch.value = ''
+  nextTick(() => newSearchInput.value?.focus())
+  await loadContacts()
+}
 function closeNew() { showNew.value = false }
 async function pickDirect(u) { const id = await startDirect(u.id); closeNew(); router.push({ name: 'chat', params: { id } }) }
 function toggleMember(u) { const i = groupMembers.value.indexOf(u.id); if (i >= 0) groupMembers.value.splice(i, 1); else groupMembers.value.push(u.id) }
@@ -372,6 +454,7 @@ function onGlobalKey(e) {
   else if (showGroupEdit.value) showGroupEdit.value = false
   else if (showNew.value) closeNew()
   else if (showEmoji.value) showEmoji.value = false
+  else if (listCtx.open) closeListCtx()
   else if (ctx.open) closeCtx()
   else if (editingMsg.value) cancelEdit()
   else if (replyTo.value) replyTo.value = null
@@ -419,32 +502,41 @@ onBeforeUnmount(() => {
 <template>
   <div class="-m-4 flex h-[calc(100vh-4rem)] overflow-hidden bg-white sm:-m-6 lg:-m-8">
     <!-- Список чатов -->
-    <aside class="flex w-full shrink-0 flex-col border-r border-parchment-200 sm:w-80" :class="activeId ? 'hidden sm:flex' : 'flex'">
+    <aside class="flex w-full shrink-0 flex-col border-r border-parchment-200" :class="activeId ? 'hidden sm:flex' : 'flex'"
+           :style="isDesktop ? { width: listWidth + 'px' } : null">
       <div class="flex items-center gap-2 border-b border-parchment-200 p-3">
         <div class="relative flex-1">
           <AppIcon name="search" :size="16" class="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-700/40" />
           <input v-model="search" class="input h-9 w-full pl-8 text-sm" placeholder="Поиск" />
         </div>
-        <button class="btn-primary h-9 shrink-0 px-3" title="Новый чат" @click="openNew"><AppIcon name="edit" :size="16" /></button>
+        <button class="btn-primary h-9 shrink-0 px-3" title="Новый чат" @click="openNew"><AppIcon name="plus" :size="18" /></button>
       </div>
       <div class="flex-1 overflow-y-auto">
         <p v-if="!chatState.ready" class="p-4 text-sm text-ink-700/50">Загрузка…</p>
-        <p v-else-if="!filteredChats.length" class="p-4 text-sm text-ink-700/50">Чатов пока нет. Нажмите «карандаш», чтобы начать.</p>
+        <p v-else-if="!filteredChats.length" class="p-4 text-sm text-ink-700/50">Чатов пока нет. Нажмите «плюс», чтобы начать.</p>
         <button v-for="c in filteredChats" :key="c.id"
                 class="flex w-full items-center gap-3 border-b border-parchment-100 px-3 py-2.5 text-left hover:bg-parchment-50"
-                :class="c.id === activeId && 'bg-saffron-500/10'" @click="selectChat(c)">
+                :class="c.id === activeId && 'bg-saffron-500/10'" @click="selectChat(c)" @contextmenu="onListContext($event, c)">
           <img v-if="c.avatar_url" :src="c.avatar_url" class="photo-bw h-11 w-11 shrink-0 rounded-full object-cover" />
           <span v-else class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-base font-semibold text-white"
-                :class="c.type === 'group' ? 'bg-gradient-to-br from-sage-400 to-sage-600' : 'bg-gradient-to-br from-saffron-400 to-saffron-600'">
-            <AppIcon v-if="c.type === 'group'" name="users" :size="20" /><template v-else>{{ initials(c.title) }}</template>
-          </span>
+                :class="c.type === 'group' ? 'bg-gradient-to-br from-sage-400 to-sage-600' : 'bg-gradient-to-br from-saffron-400 to-saffron-600'">{{ initials(c.title) }}</span>
           <span class="min-w-0 flex-1">
             <span class="flex items-center justify-between gap-2">
-              <span class="truncate font-medium text-ink-900">{{ c.title }}</span>
-              <span class="shrink-0 text-[11px] text-ink-700/40">{{ fmtTime(c.last?.created_at) }}</span>
+              <span class="flex min-w-0 items-center gap-1">
+                <AppIcon v-if="c.pinned" name="pin-chat" :size="13" class="shrink-0 text-ink-700/40" />
+                <span class="truncate font-medium text-ink-900">{{ c.title }}</span>
+              </span>
+              <span class="flex shrink-0 items-center gap-1 text-[11px] text-ink-700/40">
+                <template v-if="lastStatus(c)">
+                  <AppIcon v-if="lastStatus(c) === 'pending'" name="clock" :size="12" />
+                  <AppIcon v-else-if="lastStatus(c) === 'failed'" name="close" :size="12" class="text-red-500" />
+                  <span v-else class="text-sky-500"><AppIcon v-if="lastStatus(c) === 'read'" name="check" :size="12" class="-mr-1.5 inline" /><AppIcon name="check" :size="12" class="inline" /></span>
+                </template>
+                {{ fmtListTime(c.last?.created_at) }}
+              </span>
             </span>
             <span class="flex items-center justify-between gap-2">
-              <span class="truncate text-sm text-ink-700/60">{{ c.last ? (c.last.deleted ? 'сообщение удалено' : snippet(c.last.body)) : 'Нет сообщений' }}</span>
+              <span class="truncate text-sm text-ink-700/60">{{ lastPreview(c) }}</span>
               <span v-if="c.unread" class="ml-1 inline-flex h-5 min-w-[1.25rem] shrink-0 items-center justify-center rounded-full bg-saffron-500 px-1.5 text-xs font-semibold text-white">{{ c.unread }}</span>
             </span>
           </span>
@@ -452,17 +544,18 @@ onBeforeUnmount(() => {
       </div>
     </aside>
 
+    <!-- разделитель для изменения ширины списка -->
+    <div class="hidden w-1.5 shrink-0 cursor-col-resize transition-colors hover:bg-saffron-300/50 sm:block" @mousedown="startResize"></div>
+
     <!-- Разговор -->
-    <section class="flex min-w-0 flex-1 flex-col" :class="activeId ? 'flex' : 'hidden sm:flex'">
+    <section ref="convEl" class="flex min-w-0 flex-1 flex-col" :class="activeId ? 'flex' : 'hidden sm:flex'">
       <template v-if="activeChat">
         <header class="flex items-center gap-3 border-b border-parchment-200 px-4 py-2.5">
           <button class="rounded-lg p-1.5 text-ink-700/60 hover:bg-parchment-100 sm:hidden" @click="backToList"><AppIcon name="chevron" :size="18" class="rotate-90" /></button>
           <div class="flex min-w-0 flex-1 items-center gap-3" :class="isGroup && 'cursor-pointer'" @click="isGroup && openGroupEdit()">
             <img v-if="activeChat.avatar_url" :src="activeChat.avatar_url" class="photo-bw h-9 w-9 shrink-0 rounded-full object-cover" />
             <span v-else class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-semibold text-white"
-                  :class="activeChat.type === 'group' ? 'bg-gradient-to-br from-sage-400 to-sage-600' : 'bg-gradient-to-br from-saffron-400 to-saffron-600'">
-              <AppIcon v-if="activeChat.type === 'group'" name="users" :size="16" /><template v-else>{{ initials(activeChat.title) }}</template>
-            </span>
+                  :class="activeChat.type === 'group' ? 'bg-gradient-to-br from-sage-400 to-sage-600' : 'bg-gradient-to-br from-saffron-400 to-saffron-600'">{{ initials(activeChat.title) }}</span>
             <div class="min-w-0 flex-1">
               <div class="truncate font-medium text-ink-900">{{ activeChat.title }}</div>
               <div class="truncate text-xs text-ink-700/50">
@@ -476,7 +569,11 @@ onBeforeUnmount(() => {
 
         <div ref="scroller" class="flex-1 space-y-1 overflow-y-auto bg-parchment-50/40 p-4"
              @scroll="onScroll" @click="onScrollerClick" @mousedown="onScrollerDown" @touchstart="onScrollerDown">
-          <div v-for="(m, i) in chatState.messages" :key="m.client_uuid" :id="`msg-${m.id}`"
+          <template v-for="(m, i) in chatState.messages" :key="m.client_uuid">
+          <div v-if="m.client_uuid === firstUnreadKey" class="my-2 flex items-center gap-2 px-2 text-xs text-ink-700/50">
+            <span class="h-px flex-1 bg-parchment-300"></span><span>Непрочитанные</span><span class="h-px flex-1 bg-parchment-300"></span>
+          </div>
+          <div :id="`msg-${m.id}`"
                class="group flex items-end gap-2" :class="rowJustify(m)">
             <!-- аватар (в группах, у чужих сообщений) -->
             <template v-if="isGroup && !isMine(m)">
@@ -514,6 +611,7 @@ onBeforeUnmount(() => {
               </div>
             </div>
           </div>
+          </template>
         </div>
 
         <AudioBar />
@@ -540,17 +638,17 @@ onBeforeUnmount(() => {
 
           <div v-else class="relative flex items-end gap-2">
             <button class="mb-0.5 shrink-0 rounded-full p-2 text-ink-700/60 hover:bg-parchment-100 hover:text-saffron-600" title="Прикрепить" :disabled="uploading" @click="fileInput.click()">
-              <AppIcon name="paperclip" :size="20" />
+              <AppIcon name="paperclip" :size="24" />
             </button>
             <input ref="fileInput" type="file" accept="image/*" multiple class="hidden" @change="onPickFile" />
 
             <textarea ref="inputEl" v-model="body" rows="1" :maxlength="MAX_LEN"
-                      class="min-h-[2.5rem] flex-1 resize-none rounded-2xl border border-parchment-300 bg-parchment-50 px-4 py-2.5 text-sm leading-5 focus:border-saffron-400 focus:outline-none focus:ring-1 focus:ring-saffron-400"
+                      class="chat-input min-h-[2.75rem] flex-1 resize-none rounded-2xl border border-parchment-300 bg-parchment-50 px-4 py-2.5 text-base leading-6 focus:border-saffron-400 focus:outline-none focus:ring-1 focus:ring-saffron-400"
                       placeholder="Сообщение…" @input="onInput" @keydown="onKeydown"></textarea>
 
             <div class="relative mb-0.5 shrink-0">
               <button class="rounded-full p-2 text-ink-700/60 hover:bg-parchment-100 hover:text-saffron-600" title="Эмодзи" @click="showEmoji = !showEmoji">
-                <AppIcon name="react" :size="20" />
+                <AppIcon name="react" :size="24" />
               </button>
               <template v-if="showEmoji">
                 <div class="fixed inset-0 z-10" @click="showEmoji = false"></div>
@@ -591,9 +689,22 @@ onBeforeUnmount(() => {
       </div>
     </template>
 
+    <!-- Контекстное меню списка чатов (ПКМ) -->
+    <template v-if="listCtx.open">
+      <div class="fixed inset-0 z-40" @click="closeListCtx" @contextmenu.prevent="closeListCtx"></div>
+      <div class="fixed z-50 w-52 overflow-hidden rounded-xl bg-white py-1 shadow-xl ring-1 ring-parchment-200" :style="listCtxStyle">
+        <button class="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-ink-700 hover:bg-parchment-100" @click="listPin">
+          <AppIcon name="pin-chat" :size="15" /> {{ listCtx.c?.pinned ? 'Открепить' : 'Закрепить' }}
+        </button>
+        <button class="flex w-full items-center gap-2.5 border-t border-parchment-100 px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50" @click="listLeave">
+          <AppIcon name="logout" :size="15" /> {{ listCtx.c?.type === 'group' ? 'Покинуть группу' : 'Удалить чат' }}
+        </button>
+      </div>
+    </template>
+
     <!-- Модалка нового чата -->
     <div v-if="showNew" class="fixed inset-0 z-40 flex items-center justify-center bg-ink-900/40 p-4" @click.self="closeNew">
-      <div class="flex max-h-[80vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl bg-white shadow-xl">
+      <div class="flex h-[80vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl bg-white shadow-xl">
         <div class="flex border-b border-parchment-200">
           <button class="flex-1 px-4 py-3 text-sm font-medium" :class="newTab === 'direct' ? 'border-b-2 border-saffron-500 text-saffron-700' : 'text-ink-700/60'" @click="newTab = 'direct'">Личный чат</button>
           <button class="flex-1 px-4 py-3 text-sm font-medium" :class="newTab === 'group' ? 'border-b-2 border-saffron-500 text-saffron-700' : 'text-ink-700/60'" @click="newTab = 'group'">Группа</button>
@@ -603,7 +714,7 @@ onBeforeUnmount(() => {
         <div class="border-b border-parchment-200 p-3">
           <div class="relative">
             <AppIcon name="search" :size="16" class="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-700/40" />
-            <input v-model="contactSearch" class="input h-9 w-full pl-8 text-sm" placeholder="Поиск участников" />
+            <input ref="newSearchInput" v-model="contactSearch" class="input h-9 w-full pl-8 text-sm" placeholder="Поиск участников" />
           </div>
         </div>
         <div class="flex-1 overflow-y-auto">
@@ -634,7 +745,7 @@ onBeforeUnmount(() => {
         <div class="space-y-4 p-4">
           <div class="flex items-center gap-4">
             <img v-if="gPhoto" :src="gPhoto" class="photo-bw h-16 w-16 shrink-0 rounded-full object-cover" />
-            <span v-else class="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-sage-400 to-sage-600 text-white"><AppIcon name="users" :size="28" /></span>
+            <span v-else class="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-sage-400 to-sage-600 text-2xl font-semibold text-white">{{ initials(gTitle || activeChat?.title) }}</span>
             <div class="flex gap-2">
               <button class="btn-outline text-sm" :disabled="gUploading" @click="groupPhotoInput.click()">{{ gUploading ? '…' : 'Загрузить фото' }}</button>
               <button v-if="gPhoto" class="btn-ghost text-sm text-red-600" @click="gPhoto = ''">Убрать</button>

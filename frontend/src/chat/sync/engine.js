@@ -35,13 +35,15 @@ export class ChatEngine {
   // ── запись чатов/сообщений в локальную БД ─────────────────────────────
   async upsertChatMeta(chat) {
     const items = [{
-      sql: `INSERT INTO chats(id,type,title,photo_url,created_by,updated_at,last_seq,my_last_read_seq,unread)
-            VALUES(?,?,?,?,?,?,?,?,?)
+      sql: `INSERT INTO chats(id,type,title,photo_url,created_by,updated_at,last_seq,my_last_read_seq,unread,pinned)
+            VALUES(?,?,?,?,?,?,?,?,?,?)
             ON CONFLICT(id) DO UPDATE SET type=excluded.type, title=excluded.title,
-              photo_url=excluded.photo_url, created_by=excluded.created_by, updated_at=excluded.updated_at`,
+              photo_url=excluded.photo_url, created_by=excluded.created_by, updated_at=excluded.updated_at,
+              pinned=excluded.pinned`,
       params: [
         chat.id, chat.type, chat.title || null, chat.photo_url || null, chat.created_by || null,
         chat.updated_at || null, chat.last_message?.seq || 0, myLastRead(chat, this.meId), chat.unread || 0,
+        chat.pinned ? 1 : 0,
       ],
     }];
     for (const m of chat.members || []) {
@@ -188,6 +190,21 @@ export class ChatEngine {
   async updateChat(chatId, payload) {
     const c = await this.api.updateChat(chatId, payload);
     await this.upsertChatMeta(c);
+  }
+
+  async pinChat(chatId, pinned) {
+    await this.api.pin(chatId, pinned);
+    await this.db.run('UPDATE chats SET pinned=? WHERE id=?', [pinned ? 1 : 0, chatId], ['chats']);
+  }
+
+  async leaveChat(chatId) {
+    await this.api.leaveChat(chatId);
+    await this.db.batch([
+      { sql: 'DELETE FROM messages WHERE chat_id=?', params: [chatId] },
+      { sql: 'DELETE FROM members WHERE chat_id=?', params: [chatId] },
+      { sql: 'DELETE FROM outbox WHERE chat_id=?', params: [chatId] },
+      { sql: 'DELETE FROM chats WHERE id=?', params: [chatId] },
+    ], ['chats', 'messages']);
   }
 
   async flushOutbox() {

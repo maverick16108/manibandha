@@ -233,6 +233,17 @@ defineProps({
       <path d="M10 10v6.5M14 10v6.5" />
     </template>
 
+    <!-- plus (добавить) -->
+    <template v-else-if="name === 'plus'">
+      <path d="M12 5v14M5 12h14" />
+    </template>
+
+    <!-- pin (закрепить) -->
+    <template v-else-if="name === 'pin-chat'">
+      <path d="M9 4h6l-1 5 3 3v2H7v-2l3-3-1-5Z" />
+      <path d="M12 17v3" />
+    </template>
+
     <!-- paperclip (прикрепить) -->
     <template v-else-if="name === 'paperclip'">
       <path d="M20 11.5 12 19.5a5 5 0 0 1-7-7l8-8a3.3 3.3 0 0 1 4.7 4.7l-8 8a1.7 1.7 0 0 1-2.4-2.4l7.3-7.3" />

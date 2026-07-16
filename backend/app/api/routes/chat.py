@@ -131,6 +131,7 @@ def _chat_out(db: Session, chat: Chat, user: User) -> ChatOut:
         id=chat.id, type=chat.type, title=chat.title, photo_url=chat.photo_url,
         created_by=chat.created_by, created_at=chat.created_at, updated_at=chat.updated_at,
         members=_members_out(chat), last_message=_msg_out(last, user.id) if last else None, unread=unread,
+        pinned=bool(me.pinned) if me else False,
     )
 
 
@@ -382,6 +383,27 @@ async def mark_read(chat_id: int, payload: ReadIn, db: Session = Depends(get_db)
         me.last_read_seq = payload.seq
         db.commit()
         await _broadcast(db, chat_id, {"type": "read", "chat_id": chat_id, "user_id": user.id, "last_read_seq": payload.seq})
+
+
+@router.post("/{chat_id}/pin", status_code=status.HTTP_204_NO_CONTENT)
+def pin_chat(chat_id: int, payload: dict = Body(...), db: Session = Depends(get_db), user: User = Depends(chat_user)):
+    """Закрепить/открепить чат у текущего пользователя."""
+    me = db.query(ChatMember).filter(ChatMember.chat_id == chat_id, ChatMember.user_id == user.id).first()
+    if not me:
+        raise HTTPException(status_code=404, detail="Чат не найден")
+    me.pinned = bool((payload or {}).get("pinned"))
+    db.commit()
+
+
+@router.delete("/{chat_id}/leave", status_code=status.HTTP_204_NO_CONTENT)
+async def leave_chat(chat_id: int, db: Session = Depends(get_db), user: User = Depends(chat_user)):
+    """Покинуть группу / удалить чат у себя (удаляет участие текущего пользователя)."""
+    me = db.query(ChatMember).filter(ChatMember.chat_id == chat_id, ChatMember.user_id == user.id).first()
+    if not me:
+        raise HTTPException(status_code=404, detail="Чат не найден")
+    db.delete(me)
+    db.commit()
+    await _broadcast(db, chat_id, {"type": "chat", "chat_id": chat_id})  # оставшимся обновить состав
 
 
 @router.post("/{chat_id}/messages/{message_id}/react")

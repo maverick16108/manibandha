@@ -12,6 +12,8 @@ export const chatApi = {
   deleteMessage: (chatId, messageId) => client.delete(`/chats/${chatId}/messages/${messageId}`),
   react: (chatId, messageId, emoji) => client.post(`/chats/${chatId}/messages/${messageId}/react`, { emoji }).then((r) => r.data),
   markRead: (chatId, seq) => client.post(`/chats/${chatId}/read`, { seq }),
+  pin: (chatId, pinned) => client.post(`/chats/${chatId}/pin`, { pinned }),
+  leaveChat: (chatId) => client.delete(`/chats/${chatId}/leave`),
   createChat: (payload) => client.post('/chats', payload).then((r) => r.data),
   updateChat: (id, payload) => client.patch(`/chats/${id}`, payload).then((r) => r.data),
   contacts: () => client.get('/chats/contacts').then((r) => r.data),

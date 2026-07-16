@@ -44,6 +44,7 @@ class ChatMember(Base):
     chat_id: Mapped[int] = mapped_column(ForeignKey("chats.id", ondelete="CASCADE"), nullable=False, index=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     role: Mapped[str] = mapped_column(String(16), default="member", server_default="member", nullable=False)  # owner | member
+    pinned: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)  # закреплён у этого пользователя
     # до какого seq пользователь прочитал чат (для галочек/непрочитанного)
     last_read_seq: Mapped[int] = mapped_column(BigInteger, default=0, server_default="0", nullable=False)
     joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

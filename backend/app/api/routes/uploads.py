@@ -14,6 +14,19 @@ ALLOWED = {
     # голосовые/аудио
     "audio/webm": ".webm", "audio/ogg": ".ogg", "audio/mpeg": ".mp3",
     "audio/mp4": ".m4a", "audio/x-m4a": ".m4a", "audio/wav": ".wav", "audio/x-wav": ".wav",
+    # документы/файлы (отправка вложением в чат)
+    "application/pdf": ".pdf",
+    "application/msword": ".doc",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
+    "application/vnd.ms-excel": ".xls",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ".xlsx",
+    "application/vnd.ms-powerpoint": ".ppt",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation": ".pptx",
+    "application/zip": ".zip", "application/x-zip-compressed": ".zip",
+    "application/x-rar-compressed": ".rar", "application/vnd.rar": ".rar",
+    "application/x-7z-compressed": ".7z",
+    "text/plain": ".txt", "text/csv": ".csv",
+    "video/mp4": ".mp4", "video/quicktime": ".mov",
 }
 MAX_BYTES = 16 * 1024 * 1024  # 16 MB per file
 

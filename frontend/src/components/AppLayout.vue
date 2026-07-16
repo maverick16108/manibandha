@@ -53,6 +53,11 @@ function canShow(item) {
   if (item.always) return !auth.isPending
   return (item.caps || []).some((c) => auth.can(c))
 }
+// подсветка «Чат» держится и при открытом чате (chat/:id) — это разные роуты
+function navActive(item) {
+  if (item.name === 'chat-home') return route.name === 'chat-home' || route.name === 'chat'
+  return false
+}
 
 // бейджи непросмотренного в меню
 function badgeFor(name) {
@@ -111,13 +116,13 @@ function logout() {
             v-if="canShow(item)"
             :to="{ name: item.name }"
             class="mb-1 flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-ink-700 hover:bg-parchment-100"
-            :class="collapsed && 'lg:justify-center lg:px-2'"
+            :class="[collapsed && 'lg:justify-center lg:px-2', navActive(item) && 'bg-saffron-500/10 text-saffron-700']"
             active-class="bg-saffron-500/10 text-saffron-700"
             :title="collapsed ? item.label : ''"
             @click="sidebarOpen = false"
           >
             <span class="relative shrink-0">
-              <AppIcon :name="item.icon" :size="18" />
+              <AppIcon :name="item.icon" :size="22" />
               <!-- цифра прямо на иконке, когда меню свёрнуто -->
               <span v-if="badgeFor(item.name) > 0"
                     class="absolute -right-2 -top-2 hidden h-4 min-w-[1rem] items-center justify-center rounded-full bg-saffron-500 px-1 text-[10px] font-semibold leading-none text-white"

@@ -588,7 +588,7 @@ onBeforeUnmount(() => {
               <span v-else class="h-8 w-8 shrink-0"></span>
             </template>
             <span v-else-if="isGroup && isMine(m) && wide" class="h-8 w-8 shrink-0"></span>
-            <div class="relative rounded-2xl px-3 py-2 text-sm shadow-sm"
+            <div class="relative rounded-2xl px-3.5 py-2 text-[15px] shadow-sm"
                  :class="[isMine(m) ? 'bg-saffron-500 text-white' : 'bg-white text-ink-900 ring-1 ring-parchment-200', wide ? 'max-w-[600px]' : 'max-w-[78%]']"
                  :data-audio-label="`${nameOf(m) || 'Голосовое'} · ${fmtTime(m.created_at)}`"
                  @contextmenu="onContext($event, m)">
@@ -605,7 +605,7 @@ onBeforeUnmount(() => {
                 </button>
               </div>
 
-              <div class="mt-0.5 flex items-center justify-end gap-1 text-[10px]" :class="isMine(m) ? 'text-white/70' : 'text-ink-700/40'">
+              <div class="mt-0.5 flex items-center justify-end gap-1 text-[11px]" :class="isMine(m) ? 'text-white/70' : 'text-ink-700/40'">
                 <span v-if="m.edit_count">изм. · </span>
                 <span>{{ fmtTime(m.created_at) }}</span>
                 <template v-if="statusOf(m)">

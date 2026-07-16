@@ -37,7 +37,21 @@ const EMOJI_PALETTE = ['😀','😁','😂','🤣','😊','😍','😘','😎','
 
 // эмодзи в сообщениях рисуем крупнее (как в мессенджерах)
 const EMOJI_RE = /(\p{Extended_Pictographic}(?:️|‍\p{Extended_Pictographic})*)/gu
-function renderChatBody(b) { return renderMarkdown(b).replace(EMOJI_RE, '<span class="chat-emoji">$1</span>') }
+function esc(s) { return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])) }
+function renderChatBody(b) {
+  // вложения-файлы @[file](url|имя) → карточка со скачиванием (до markdown)
+  const files = []
+  const marked = (b || '').replace(/@\[file\]\(([^|)]+)\|([^)]*)\)/g, (_m, url, name) => {
+    files.push({ url, name: decodeURIComponent(name || 'файл') })
+    return `%%FILE${files.length - 1}%%`
+  })
+  let html = renderMarkdown(marked)
+  html = html.replace(/%%FILE(\d+)%%/g, (_m, i) => {
+    const f = files[+i]
+    return `<a class="chat-file" href="${esc(f.url)}" download="${esc(f.name)}" target="_blank" rel="noopener"><span class="chat-file__ic">📎</span><span class="chat-file__name">${esc(f.name)}</span></a>`
+  })
+  return html.replace(EMOJI_RE, '<span class="chat-emoji">$1</span>')
+}
 
 // ── активный чат по маршруту ────────────────────────────────────────────
 const activeId = computed(() => (route.params.id ? Number(route.params.id) : null))
@@ -242,19 +256,52 @@ function insertEmoji(e) {
 }
 
 // ── вложения (скрепка) ───────────────────────────────────────────────────
-async function onPickFile(ev) {
-  const files = Array.from(ev.target.files || []).filter((f) => f.type.startsWith('image/'))
-  if (fileInput.value) fileInput.value.value = ''
-  if (!files.length || !activeId.value) return
+// mode: 'picture' — картинки вставкой, остальное файлом; 'file' — всё файлом
+async function uploadAndSend(files, mode = 'picture') {
+  const list = Array.from(files || [])
+  if (!list.length || !activeId.value) return
   uploading.value = true
   try {
-    const fd = new FormData()
-    files.forEach((f) => fd.append('files', f))
-    const { data } = await client.post('/uploads', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
-    for (const u of data.urls || []) { await sendMessage(`![](${u})`); }
+    for (const f of list) {
+      const fd = new FormData(); fd.append('files', f)
+      let data
+      try { ({ data } = await client.post('/uploads', fd, { headers: { 'Content-Type': 'multipart/form-data' } })) }
+      catch (e) { showToast(e.response?.data?.detail || 'Не удалось загрузить файл'); continue }
+      const url = data.urls?.[0]
+      if (!url) continue
+      if (mode === 'picture' && (f.type || '').startsWith('image/')) await sendMessage(`![](${url})`)
+      else {
+        const name = (f.name || 'файл').replace(/[|)(]/g, '_')
+        await sendMessage(`@[file](${url}|${encodeURIComponent(name)})`)
+      }
+    }
     scrollToBottom()
-  } catch { showToast('Не удалось загрузить файл') } finally { uploading.value = false }
+  } finally { uploading.value = false }
 }
+async function onPickFile(ev) {
+  const files = Array.from(ev.target.files || [])
+  if (fileInput.value) fileInput.value.value = ''
+  await uploadAndSend(files, 'picture')
+}
+// вставка из буфера обмена (Ctrl+V) — картинку сразу отправляем
+async function onPaste(e) {
+  const imgs = Array.from(e.clipboardData?.items || [])
+    .filter((i) => i.type.startsWith('image/')).map((i) => i.getAsFile()).filter(Boolean)
+  if (imgs.length) { e.preventDefault(); await uploadAndSend(imgs, 'picture') }
+}
+// drag&drop — если есть картинки, спросить: как картинку или как файл
+const dragOver = ref(false)
+const pendingDrop = ref(null)
+function onDragOver(e) { if (e.dataTransfer?.types?.includes('Files')) { e.preventDefault(); dragOver.value = true } }
+function onDragLeave(e) { if (!e.relatedTarget || !e.currentTarget.contains(e.relatedTarget)) dragOver.value = false }
+function onDrop(e) {
+  e.preventDefault(); dragOver.value = false
+  const files = Array.from(e.dataTransfer?.files || [])
+  if (!files.length || !activeId.value) return
+  if (files.some((f) => (f.type || '').startsWith('image/'))) pendingDrop.value = files
+  else uploadAndSend(files, 'file')
+}
+async function chooseDrop(mode) { const files = pendingDrop.value; pendingDrop.value = null; if (files) await uploadAndSend(files, mode) }
 
 // ── голосовые ────────────────────────────────────────────────────────────
 const recording = ref(false)
@@ -318,10 +365,17 @@ function statusOf(m) {
   return 'sent'
 }
 const typingLabel = computed(() => { const t = chatState.typing[activeId.value]; return t ? `${t.name} печатает…` : '' })
+// сообщения одного автора группируются, пока между ними < 15 минут
+const GROUP_GAP = 15 * 60 * 1000
+function sameGroup(a, b) {
+  if (!a || !b || a.author_id !== b.author_id) return false
+  const ta = a.created_at ? new Date(a.created_at).getTime() : 0
+  const tb = b.created_at ? new Date(b.created_at).getTime() : 0
+  return Math.abs(tb - ta) <= GROUP_GAP
+}
 function showAuthor(m, i) {
   if (isMine(m) || !isGroup.value) return false
-  const prev = chatState.messages[i - 1]
-  return !prev || prev.author_id !== m.author_id
+  return !sameGroup(chatState.messages[i - 1], m) // первый в группе
 }
 // широкая область переписки → все сообщения слева; узкая → свои справа, чужие слева
 const convEl = ref(null)
@@ -349,7 +403,7 @@ const isGroup = computed(() => activeChat.value?.type === 'group')
 const memberById = computed(() => { const map = {}; for (const x of chatState.members || []) map[x.user_id] = x; return map })
 function avatarOf(m) { return memberById.value[m.author_id]?.avatar_url || null }
 function nameOf(m) { return m.author_name || memberById.value[m.author_id]?.full_name || '' }
-function isRunEnd(m, i) { const n = chatState.messages[i + 1]; return !n || n.author_id !== m.author_id }
+function isRunEnd(m, i) { return !sameGroup(m, chatState.messages[i + 1]) } // последний в группе — к нему аватар
 function rowJustify(m) { return (isMine(m) && !wide.value) ? 'justify-end' : 'justify-start' }
 function fmtTime(ts) { if (!ts) return ''; const d = new Date(ts); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}` }
 function initials(name) { return (name || '?').trim()[0]?.toUpperCase() || '?' }
@@ -573,8 +627,14 @@ onBeforeUnmount(() => {
           </div>
         </header>
 
-        <div ref="scroller" class="chat-bg flex-1 space-y-1 overflow-y-auto p-4"
-             @scroll="onScroll" @click="onScrollerClick" @mousedown="onScrollerDown" @touchstart="onScrollerDown">
+        <AudioBar />
+
+        <div ref="scroller" class="chat-bg relative flex-1 space-y-1 overflow-y-auto p-4"
+             @scroll="onScroll" @click="onScrollerClick" @mousedown="onScrollerDown" @touchstart="onScrollerDown"
+             @dragover="onDragOver" @dragleave="onDragLeave" @drop="onDrop">
+          <div v-if="dragOver" class="pointer-events-none sticky top-0 z-10 -mx-4 -mt-4 mb-2 flex h-24 items-center justify-center rounded-b-xl border-2 border-dashed border-saffron-400 bg-saffron-500/10 text-sm font-medium text-saffron-700">
+            Отпустите, чтобы отправить
+          </div>
           <template v-for="(m, i) in chatState.messages" :key="m.client_uuid">
           <div v-if="m.client_uuid === firstUnreadKey" class="my-2 flex items-center gap-2 px-2 text-xs text-ink-700/50">
             <span class="h-px flex-1 bg-parchment-300"></span><span>Непрочитанные</span><span class="h-px flex-1 bg-parchment-300"></span>
@@ -620,8 +680,6 @@ onBeforeUnmount(() => {
           </template>
         </div>
 
-        <AudioBar />
-
         <!-- Композер -->
         <div class="border-t border-parchment-200 p-3">
           <div v-if="replyTo" class="mb-2 flex items-center gap-2 rounded-lg bg-parchment-100 px-3 py-1.5 text-sm">
@@ -646,11 +704,11 @@ onBeforeUnmount(() => {
             <button class="mb-0.5 shrink-0 rounded-full p-2 text-ink-700/60 hover:bg-parchment-100 hover:text-saffron-600" title="Прикрепить" :disabled="uploading" @click="fileInput.click()">
               <AppIcon name="paperclip" :size="24" />
             </button>
-            <input ref="fileInput" type="file" accept="image/*" multiple class="hidden" @change="onPickFile" />
+            <input ref="fileInput" type="file" multiple class="hidden" @change="onPickFile" />
 
             <textarea ref="inputEl" v-model="body" rows="1" :maxlength="MAX_LEN"
                       class="chat-input min-h-[2.75rem] flex-1 resize-none rounded-2xl border border-parchment-300 bg-parchment-50 px-4 py-2.5 text-base leading-6 focus:border-saffron-400 focus:outline-none focus:ring-1 focus:ring-saffron-400"
-                      placeholder="Сообщение…" @input="onInput" @keydown="onKeydown"></textarea>
+                      placeholder="Сообщение…" @input="onInput" @keydown="onKeydown" @paste="onPaste"></textarea>
 
             <div class="relative mb-0.5 shrink-0">
               <button class="rounded-full p-2 text-ink-700/60 hover:bg-parchment-100 hover:text-saffron-600" title="Эмодзи" @click="showEmoji = !showEmoji">
@@ -694,6 +752,18 @@ onBeforeUnmount(() => {
         <button v-if="canDelete(ctx.m)" class="flex w-full items-center gap-2.5 border-t border-parchment-100 px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50" @click="ctxDelete"><AppIcon name="trash" :size="15" /> Удалить</button>
       </div>
     </template>
+
+    <!-- Выбор способа отправки перетащенных файлов -->
+    <div v-if="pendingDrop" class="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/40 p-4" @click.self="pendingDrop = null">
+      <div class="w-full max-w-xs overflow-hidden rounded-xl bg-white shadow-xl">
+        <div class="border-b border-parchment-200 px-4 py-3 text-center font-medium text-ink-900">Как отправить?</div>
+        <div class="p-3">
+          <button class="btn-primary mb-2 w-full" @click="chooseDrop('picture')">Картинкой</button>
+          <button class="btn-outline mb-2 w-full" @click="chooseDrop('file')">Файлом</button>
+          <button class="btn-ghost w-full" @click="pendingDrop = null">Отмена</button>
+        </div>
+      </div>
+    </div>
 
     <!-- Контекстное меню списка чатов (ПКМ) -->
     <template v-if="listCtx.open">
@@ -777,6 +847,17 @@ onBeforeUnmount(() => {
 .markdown-on-accent :deep(blockquote) { border-color: rgba(255,255,255,.5); color: rgba(255,255,255,.85); }
 /* эмодзи в сообщениях — крупнее текста */
 .markdown-body :deep(.chat-emoji) { font-size: 1.5em; line-height: 1; vertical-align: -0.15em; }
+
+/* карточка файла-вложения */
+.markdown-body :deep(.chat-file) {
+  display: inline-flex; align-items: center; gap: 0.5rem;
+  padding: 0.5rem 0.75rem; margin: 0.15rem 0;
+  border-radius: 0.75rem; background: rgba(0,0,0,0.05); text-decoration: none;
+  max-width: 100%;
+}
+.markdown-on-accent :deep(.chat-file) { background: rgba(255,255,255,0.18); color: #fff; }
+.markdown-body :deep(.chat-file__ic) { font-size: 1.2em; }
+.markdown-body :deep(.chat-file__name) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-decoration: underline; }
 
 /* тематический ведический фон переписки — многослойная лотос-мандала (латтис) */
 .chat-bg {

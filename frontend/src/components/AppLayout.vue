@@ -20,6 +20,29 @@ const profileMenu = ref(false)
 const collapsed = ref(localStorage.getItem('sidebarCollapsed') === '1')
 watch(collapsed, (v) => localStorage.setItem('sidebarCollapsed', v ? '1' : '0'))
 onEscape(() => { profileMenu.value = false; sidebarOpen.value = false })
+
+// плавное изменение ширины бокового меню перетаскиванием (десктоп, развёрнутое)
+const NAV_MIN = 200
+const NAV_MAX = 440
+const navWidth = ref(Number(localStorage.getItem('navWidth')) || 256)
+const isDesktop = ref(typeof window !== 'undefined' && window.innerWidth >= 1024)
+const navResizing = ref(false)
+function onWinResize() { isDesktop.value = window.innerWidth >= 1024 }
+function startNavResize(e) {
+  const startX = e.clientX
+  const startW = navWidth.value
+  navResizing.value = true
+  const move = (ev) => { navWidth.value = Math.max(NAV_MIN, Math.min(NAV_MAX, startW + (ev.clientX - startX))) }
+  const up = () => {
+    navResizing.value = false
+    document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up)
+    document.body.style.userSelect = ''
+    try { localStorage.setItem('navWidth', String(navWidth.value)) } catch { /* ignore */ }
+  }
+  document.addEventListener('mousemove', move); document.addEventListener('mouseup', up)
+  document.body.style.userSelect = 'none'
+  e.preventDefault()
+}
 // незаапрувленный кандидат — без левого меню, только экран ожидания
 const showSidebar = computed(() => !auth.isPending)
 
@@ -72,12 +95,13 @@ function badgeFor(name) {
 let countsTimer = null
 onMounted(() => {
   refreshNavCounts(); countsTimer = setInterval(refreshNavCounts, 15000)
+  window.addEventListener('resize', onWinResize)
   // мессенджер работает в фоне на всём кабинете (доставка + бейдж непрочитанного)
   if (!auth.isPending && auth.user) {
     initChat({ meId: auth.user.id, getToken: () => auth.token }).catch((e) => console.warn('[chat] init failed', e))
   }
 })
-onBeforeUnmount(() => { clearInterval(countsTimer); teardownChat() })
+onBeforeUnmount(() => { clearInterval(countsTimer); teardownChat(); window.removeEventListener('resize', onWinResize) })
 // обновлять при переходах (в т.ч. после просмотра ветки — счётчик у всех уменьшается)
 watch(() => route.fullPath, refreshNavCounts)
 
@@ -95,8 +119,11 @@ function logout() {
     <aside
       v-if="showSidebar"
       class="fixed inset-y-0 left-0 z-30 flex w-64 transform flex-col border-r border-parchment-200 bg-white transition-all lg:translate-x-0"
-      :class="[sidebarOpen ? 'translate-x-0' : '-translate-x-full', collapsed && 'lg:w-16']"
+      :class="[sidebarOpen ? 'translate-x-0' : '-translate-x-full', collapsed && 'lg:w-16', navResizing && '!transition-none']"
+      :style="isDesktop && !collapsed ? { width: navWidth + 'px' } : null"
     >
+      <!-- перетаскивание правого края для изменения ширины (десктоп, развёрнутое) -->
+      <div v-if="!collapsed" class="absolute inset-y-0 right-0 z-40 hidden w-1.5 cursor-col-resize hover:bg-saffron-300/50 lg:block" @mousedown="startNavResize"></div>
       <div class="flex h-16 shrink-0 items-center gap-2.5 border-b border-parchment-200 px-5" :class="collapsed && 'lg:justify-center lg:px-0'">
         <img src="/lotus-mark.png" alt="" class="h-9 w-auto" :class="collapsed && 'lg:hidden'" />
         <span class="font-display text-2xl font-semibold leading-none text-ink-900" :class="collapsed && 'lg:hidden'">Манибандха</span>
@@ -115,7 +142,7 @@ function logout() {
           <RouterLink
             v-if="canShow(item)"
             :to="{ name: item.name }"
-            class="mb-1 flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-ink-700 hover:bg-parchment-100"
+            class="mb-1 flex items-center gap-3 rounded-lg px-3 py-2 text-[15px] font-medium text-ink-700 hover:bg-parchment-100"
             :class="[collapsed && 'lg:justify-center lg:px-2', navActive(item) && 'bg-saffron-500/10 text-saffron-700']"
             active-class="bg-saffron-500/10 text-saffron-700"
             :title="collapsed ? item.label : ''"
@@ -176,7 +203,8 @@ function logout() {
     <div v-if="profileMenu" class="fixed inset-0 z-20" @click="profileMenu = false"></div>
 
     <!-- Main -->
-    <div :class="showSidebar && (collapsed ? 'lg:pl-16' : 'lg:pl-64')">
+    <div :class="[showSidebar && collapsed && 'lg:pl-16', navResizing && '!transition-none']"
+         :style="isDesktop && showSidebar && !collapsed ? { paddingLeft: navWidth + 'px' } : null">
       <header class="sticky top-0 z-10 flex h-16 items-center gap-3 border-b border-parchment-200 bg-parchment-50/90 px-4 backdrop-blur sm:px-6">
         <button v-if="showSidebar" class="-ml-1 shrink-0 rounded-lg p-2 text-ink-800 hover:bg-parchment-200 lg:hidden" @click="sidebarOpen = true">
           <AppIcon name="menu" :size="28" :stroke="2" />

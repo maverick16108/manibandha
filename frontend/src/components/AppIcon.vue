@@ -233,6 +233,11 @@ defineProps({
       <path d="M10 10v6.5M14 10v6.5" />
     </template>
 
+    <!-- paperclip (прикрепить) -->
+    <template v-else-if="name === 'paperclip'">
+      <path d="M20 11.5 12 19.5a5 5 0 0 1-7-7l8-8a3.3 3.3 0 0 1 4.7 4.7l-8 8a1.7 1.7 0 0 1-2.4-2.4l7.3-7.3" />
+    </template>
+
     <!-- react (смайл — добавить реакцию) -->
     <template v-else-if="name === 'react'">
       <circle cx="12" cy="12" r="8.5" />

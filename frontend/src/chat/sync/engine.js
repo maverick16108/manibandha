@@ -161,7 +161,7 @@ export class ChatEngine {
     } catch { return 0; }
   }
 
-  async send(chatId, body, replyToId = null) {
+  async send(chatId, body, replyToId = null, replyQuote = null) {
     const text = (body || '').trim();
     if (!text) return null;
     const uuid = this._genUuid();
@@ -171,18 +171,23 @@ export class ChatEngine {
       {
         sql: `INSERT INTO messages(chat_id,client_uuid,id,seq,author_id,author_name,body,reply_to_id,reply_preview,
                                    created_at,edited_at,edit_count,deleted,status,local_ts)
-              VALUES(?,?,NULL,NULL,?,NULL,?,?,NULL,?,NULL,0,0,'pending',?)`,
-        params: [chatId, uuid, this.meId, text, replyToId, createdIso, ts],
+              VALUES(?,?,NULL,NULL,?,NULL,?,?,?,?,NULL,0,0,'pending',?)`,
+        params: [chatId, uuid, this.meId, text, replyToId, replyQuote || null, createdIso, ts],
       },
       {
-        sql: `INSERT INTO outbox(client_uuid,chat_id,body,reply_to_id,created_at,attempts)
-              VALUES(?,?,?,?,?,0)`,
-        params: [uuid, chatId, text, replyToId, createdIso],
+        sql: `INSERT INTO outbox(client_uuid,chat_id,body,reply_to_id,reply_quote,created_at,attempts)
+              VALUES(?,?,?,?,?,?,0)`,
+        params: [uuid, chatId, text, replyToId, replyQuote || null, createdIso],
       },
       { sql: 'UPDATE chats SET updated_at=? WHERE id=?', params: [createdIso, chatId] },
     ], ['messages', 'outbox', 'chats']);
     this.flushOutbox();
     return uuid;
+  }
+
+  async updateChat(chatId, payload) {
+    const c = await this.api.updateChat(chatId, payload);
+    await this.upsertChatMeta(c);
   }
 
   async flushOutbox() {
@@ -199,7 +204,7 @@ export class ChatEngine {
   async _flushOne(row) {
     try {
       const m = await this.api.send(row.chat_id, {
-        client_uuid: row.client_uuid, body: row.body, reply_to_id: row.reply_to_id || null,
+        client_uuid: row.client_uuid, body: row.body, reply_to_id: row.reply_to_id || null, reply_quote: row.reply_quote || null,
       });
       await this._writeMessage(m, true);       // проставит id/seq/status=sent и удалит из outbox
       await this._recomputeUnread(row.chat_id);

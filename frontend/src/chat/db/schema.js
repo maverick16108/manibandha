@@ -55,6 +55,7 @@ CREATE TABLE IF NOT EXISTS outbox (
   chat_id     INTEGER NOT NULL,
   body        TEXT,
   reply_to_id INTEGER,
+  reply_quote TEXT,
   created_at  TEXT,
   attempts    INTEGER DEFAULT 0
 );
@@ -65,4 +66,5 @@ CREATE TABLE IF NOT EXISTS outbox (
 export const MIGRATIONS = [
   'ALTER TABLE messages ADD COLUMN reactions TEXT',
   'ALTER TABLE messages ADD COLUMN my_reaction TEXT',
+  'ALTER TABLE outbox ADD COLUMN reply_quote TEXT',
 ];

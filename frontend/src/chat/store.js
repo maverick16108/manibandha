@@ -146,10 +146,14 @@ async function markReadNow() {
   if (maxSeq) await engine?.markRead(chatState.activeChatId, maxSeq);
 }
 
-export async function sendMessage(body, replyToId = null) {
+export async function sendMessage(body, replyToId = null, replyQuote = null) {
   if (!chatState.activeChatId) return;
-  await engine?.send(chatState.activeChatId, body, replyToId);
+  await engine?.send(chatState.activeChatId, body, replyToId, replyQuote);
   await markReadNow();
+}
+
+export async function updateChat(chatId, payload) {
+  await engine?.updateChat(chatId, payload);
 }
 
 export function sendTyping() {

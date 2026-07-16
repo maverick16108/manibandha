@@ -12,7 +12,7 @@ import { usePageTitle } from '../composables/pageTitle'
 import {
   chatState, initChat, openChat, closeChat, sendMessage, sendTyping,
   editMessage, deleteMessage, retryFailed, loadOlder, loadContacts, startDirect, startGroup,
-  reactMessage, REACTION_EMOJIS,
+  reactMessage, REACTION_EMOJIS, updateChat,
 } from '../chat/store'
 
 usePageTitle('Чат')
@@ -34,15 +34,38 @@ const uploading = ref(false)
 
 const EMOJI_PALETTE = ['😀','😁','😂','🤣','😊','😍','😘','😎','🤔','🙏','👍','👎','👌','🙌','👏','🔥','❤️','🧡','💛','💚','💙','💜','🎉','✨','⭐','🌟','💯','✅','❌','⚡','🌸','🌞','🍀','🕉️','📿','🙇','😢','😅','😉','🤗']
 
+// эмодзи в сообщениях рисуем крупнее (как в мессенджерах)
+const EMOJI_RE = /(\p{Extended_Pictographic}(?:️|‍\p{Extended_Pictographic})*)/gu
+function renderChatBody(b) { return renderMarkdown(b).replace(EMOJI_RE, '<span class="chat-emoji">$1</span>') }
+
 // ── активный чат по маршруту ────────────────────────────────────────────
 const activeId = computed(() => (route.params.id ? Number(route.params.id) : null))
 const activeChat = computed(() => chatState.chats.find((c) => c.id === activeId.value) || null)
 
-watch(activeId, async (id) => {
-  replyTo.value = null; editingMsg.value = null; body.value = ''; closeCtx()
+watch(activeId, async (id, oldId) => {
+  if (oldId && !editingMsg.value) saveDraft(oldId, body.value) // сохранить черновик прежнего чата
+  replyTo.value = null; editingMsg.value = null; closeCtx()
+  body.value = id ? loadDraft(id) : ''
   if (id) { await openChat(id); scrollToBottom() }
   else closeChat()
+  nextTick(autoGrow)
 }, { immediate: false })
+
+// автооткрытие первого чата при входе в раздел (на десктопе)
+const autoOpened = ref(false)
+watch(() => [chatState.ready, chatState.chats.length], () => {
+  if (!autoOpened.value && chatState.ready && !activeId.value && chatState.chats.length && window.innerWidth >= 640) {
+    autoOpened.value = true
+    router.replace({ name: 'chat', params: { id: chatState.chats[0].id } })
+  }
+})
+
+// ── черновики: запоминаем ввод по чату (переживает уход со страницы) ──────
+function draftKey(id) { return `chatDraft:${id}` }
+function loadDraft(id) { try { return localStorage.getItem(draftKey(id)) || '' } catch { return '' } }
+function saveDraft(id, text) { try { if ((text || '').trim()) localStorage.setItem(draftKey(id), text); else localStorage.removeItem(draftKey(id)) } catch { /* ignore */ } }
+let draftTimer = null
+function saveDraftDebounced(id, text) { if (draftTimer) clearTimeout(draftTimer); draftTimer = setTimeout(() => saveDraft(id, text), 300) }
 
 watch(() => chatState.messages.length, () => nextTick(scrollToBottom))
 function scrollToBottom() { nextTick(() => { const el = scroller.value; if (el) el.scrollTop = el.scrollHeight }) }
@@ -79,7 +102,7 @@ function canEdit(m) { return isMine(m) && m.id && !m.deleted && !isVoice(m) && (
 function canDelete(m) { return isMine(m) && m.id && !m.deleted }
 function isVoice(m) { return /@\[audio\]\(/.test(m.body || '') }
 
-function ctxReply() { startReply(ctx.m); closeCtx() }
+function ctxReply() { startReply(ctx.m, ctx.selText); closeCtx() }
 async function ctxReact(emoji) { const m = ctx.m; closeCtx(); if (m?.id) await reactMessage(m.id, emoji) }
 function ctxCopy() {
   const m = ctx.m
@@ -93,10 +116,21 @@ async function ctxDelete() { const m = ctx.m; closeCtx(); if (m?.id) await delet
 function cleanBody(b) {
   return (b || '').replace(/@\[audio\]\([^)]*\)/g, '🎤 Голосовое сообщение').replace(/!\[[^\]]*\]\([^)]*\)/g, '').trim()
 }
+// копировать можно только когда есть текст (голосовое/фото — нечего копировать)
+function canCopy(m) {
+  if (!m) return false
+  const t = (m.body || '').replace(/@\[audio\]\([^)]*\)/g, '').replace(/!\[[^\]]*\]\([^)]*\)/g, '').trim()
+  return !!t
+}
 
-function startReply(m) { editingMsg.value = null; replyTo.value = { id: m.id, author_name: m.author_name, body: snippet(m.body) } }
+function startReply(m, selText) {
+  editingMsg.value = null
+  const sel = (selText || '').trim()
+  replyTo.value = { id: m.id, author_name: nameOf(m), body: sel ? sel.slice(0, 200) : snippet(m.body), quote: sel ? sel.slice(0, 300) : null }
+  nextTick(() => inputEl.value?.focus())
+}
 function startEdit(m) { replyTo.value = null; editingMsg.value = m; body.value = m.body; nextTick(() => { autoGrow(); inputEl.value?.focus() }) }
-function cancelEdit() { editingMsg.value = null; body.value = '' }
+function cancelEdit() { editingMsg.value = null; body.value = activeId.value ? loadDraft(activeId.value) : '' }
 function snippet(b) {
   return (b || '').replace(/@\[audio\]\([^)]*\)/g, '🎤 Голосовое').replace(/!\[[^\]]*\]\([^)]*\)/g, '🖼 Фото').replace(/\s+/g, ' ').trim().slice(0, 80)
 }
@@ -112,7 +146,7 @@ function onInput() {
   if (body.value.length > MAX_LEN) body.value = body.value.slice(0, MAX_LEN)
   autoGrow()
 }
-watch(body, () => nextTick(autoGrow))
+watch(body, () => { nextTick(autoGrow); if (activeId.value && !editingMsg.value) saveDraftDebounced(activeId.value, body.value) })
 
 let lastTyping = 0
 function onKeydown(e) {
@@ -131,9 +165,10 @@ async function send() {
     return
   }
   const reply = replyTo.value?.id || null
+  const quote = replyTo.value?.quote || null
   body.value = ''; replyTo.value = null
   nextTick(autoGrow)
-  await sendMessage(text, reply)
+  await sendMessage(text, reply, quote)
   scrollToBottom()
 }
 
@@ -222,10 +257,20 @@ function statusOf(m) {
 }
 const typingLabel = computed(() => { const t = chatState.typing[activeId.value]; return t ? `${t.name} печатает…` : '' })
 function showAuthor(m, i) {
-  if (isMine(m) || activeChat.value?.type !== 'group') return false
+  if (isMine(m) || !isGroup.value) return false
   const prev = chatState.messages[i - 1]
   return !prev || prev.author_id !== m.author_id
 }
+// широкая область переписки → все сообщения слева; узкая → свои справа, чужие слева
+const convEl = ref(null)
+const wide = ref(false)
+let resizeObs = null
+const isGroup = computed(() => activeChat.value?.type === 'group')
+const memberById = computed(() => { const map = {}; for (const x of chatState.members || []) map[x.user_id] = x; return map })
+function avatarOf(m) { return memberById.value[m.author_id]?.avatar_url || null }
+function nameOf(m) { return m.author_name || memberById.value[m.author_id]?.full_name || '' }
+function isRunEnd(m, i) { const n = chatState.messages[i + 1]; return !n || n.author_id !== m.author_id }
+function rowJustify(m) { return (isMine(m) && !wide.value) ? 'justify-end' : 'justify-start' }
 function fmtTime(ts) { if (!ts) return ''; const d = new Date(ts); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}` }
 function initials(name) { return (name || '?').trim()[0]?.toUpperCase() || '?' }
 
@@ -276,7 +321,12 @@ async function onScroll() {
 const newTab = ref('direct')
 const groupTitle = ref('')
 const groupMembers = ref([])
-async function openNew() { showNew.value = true; newTab.value = 'direct'; groupTitle.value = ''; groupMembers.value = []; await loadContacts() }
+const contactSearch = ref('')
+const filteredContacts = computed(() => {
+  const q = contactSearch.value.trim().toLowerCase()
+  return q ? chatState.contacts.filter((u) => (u.full_name || '').toLowerCase().includes(q)) : chatState.contacts
+})
+async function openNew() { showNew.value = true; newTab.value = 'direct'; groupTitle.value = ''; groupMembers.value = []; contactSearch.value = ''; await loadContacts() }
 function closeNew() { showNew.value = false }
 async function pickDirect(u) { const id = await startDirect(u.id); closeNew(); router.push({ name: 'chat', params: { id } }) }
 function toggleMember(u) { const i = groupMembers.value.indexOf(u.id); if (i >= 0) groupMembers.value.splice(i, 1); else groupMembers.value.push(u.id) }
@@ -286,10 +336,70 @@ async function createGroup() {
   const id = await startGroup(title, [...groupMembers.value]); closeNew(); router.push({ name: 'chat', params: { id } })
 }
 
-function onGlobalKey(e) { if (e.key === 'Escape') { if (recording.value) cancelRec(); else if (ctx.open) closeCtx(); else if (editingMsg.value) cancelEdit(); else if (replyTo.value) replyTo.value = null; else showEmoji.value = false } }
+// ── настройки группы (название + фото) ─────────────────────────────────
+const showGroupEdit = ref(false)
+const gTitle = ref('')
+const gPhoto = ref('')
+const gUploading = ref(false)
+const groupPhotoInput = ref(null)
+function openGroupEdit() {
+  if (!isGroup.value) return
+  gTitle.value = activeChat.value.title || ''
+  gPhoto.value = activeChat.value.avatar_url || ''
+  showGroupEdit.value = true
+}
+async function onGroupPhoto(ev) {
+  const f = (ev.target.files || [])[0]
+  if (groupPhotoInput.value) groupPhotoInput.value.value = ''
+  if (!f || !f.type.startsWith('image/')) return
+  gUploading.value = true
+  try {
+    const fd = new FormData(); fd.append('files', f)
+    const { data } = await client.post('/uploads', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+    gPhoto.value = data.urls?.[0] || gPhoto.value
+  } catch { showToast('Не удалось загрузить') } finally { gUploading.value = false }
+}
+async function saveGroup() {
+  const title = gTitle.value.trim()
+  if (!title) return
+  await updateChat(activeId.value, { title, photo_url: gPhoto.value || null })
+  showGroupEdit.value = false
+}
+
+function onGlobalKey(e) {
+  if (e.key !== 'Escape') return
+  if (recording.value) cancelRec()
+  else if (showGroupEdit.value) showGroupEdit.value = false
+  else if (showNew.value) closeNew()
+  else if (showEmoji.value) showEmoji.value = false
+  else if (ctx.open) closeCtx()
+  else if (editingMsg.value) cancelEdit()
+  else if (replyTo.value) replyTo.value = null
+}
+
+// печать в любом месте страницы → в поле ввода сообщения (как в мессенджерах)
+function onDocType(e) {
+  if (!activeId.value || recording.value || ctx.open || showNew.value) return
+  if (e.ctrlKey || e.metaKey || e.altKey) return
+  const t = e.target
+  const tag = (t.tagName || '').toLowerCase()
+  if (tag === 'input' || tag === 'textarea' || tag === 'select' || t.isContentEditable) return
+  const focusEnd = () => nextTick(() => { const el = inputEl.value; if (el) { el.focus(); el.selectionStart = el.selectionEnd = el.value.length; autoGrow() } })
+  if (e.key.length === 1 && e.key !== ' ') {
+    if (body.value.length >= MAX_LEN) return
+    e.preventDefault(); body.value = (body.value + e.key).slice(0, MAX_LEN); focusEnd()
+  } else if (e.key === 'Backspace' && body.value) {
+    e.preventDefault(); body.value = body.value.slice(0, -1); focusEnd()
+  }
+}
 
 onMounted(async () => {
   document.addEventListener('keydown', onGlobalKey)
+  document.addEventListener('keydown', onDocType)
+  if (convEl.value && typeof ResizeObserver !== 'undefined') {
+    resizeObs = new ResizeObserver((entries) => { for (const e of entries) wide.value = e.contentRect.width > 900 })
+    resizeObs.observe(convEl.value)
+  }
   if (!auth.isPending && auth.user) {
     await initChat({ meId: auth.user.id, getToken: () => auth.token })
     if (activeId.value) { await openChat(activeId.value); scrollToBottom() }
@@ -297,6 +407,10 @@ onMounted(async () => {
 })
 onBeforeUnmount(() => {
   document.removeEventListener('keydown', onGlobalKey)
+  document.removeEventListener('keydown', onDocType)
+  resizeObs?.disconnect()
+  if (draftTimer) clearTimeout(draftTimer)
+  if (activeId.value && !editingMsg.value) saveDraft(activeId.value, body.value) // сохранить черновик при уходе
   if (recording.value) { recCanceled = true; stopRec() }
   cleanupRec(); closeChat()
 })
@@ -343,16 +457,19 @@ onBeforeUnmount(() => {
       <template v-if="activeChat">
         <header class="flex items-center gap-3 border-b border-parchment-200 px-4 py-2.5">
           <button class="rounded-lg p-1.5 text-ink-700/60 hover:bg-parchment-100 sm:hidden" @click="backToList"><AppIcon name="chevron" :size="18" class="rotate-90" /></button>
-          <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-semibold text-white"
-                :class="activeChat.type === 'group' ? 'bg-gradient-to-br from-sage-400 to-sage-600' : 'bg-gradient-to-br from-saffron-400 to-saffron-600'">
-            <AppIcon v-if="activeChat.type === 'group'" name="users" :size="16" /><template v-else>{{ initials(activeChat.title) }}</template>
-          </span>
-          <div class="min-w-0 flex-1">
-            <div class="truncate font-medium text-ink-900">{{ activeChat.title }}</div>
-            <div class="truncate text-xs text-ink-700/50">
-              <span v-if="typingLabel" class="text-saffron-600">{{ typingLabel }}</span>
-              <span v-else-if="activeChat.type === 'group'">{{ activeChat.members.length }} участников</span>
-              <span v-else>{{ chatState.connection === 'online' ? 'в сети' : 'не в сети' }}</span>
+          <div class="flex min-w-0 flex-1 items-center gap-3" :class="isGroup && 'cursor-pointer'" @click="isGroup && openGroupEdit()">
+            <img v-if="activeChat.avatar_url" :src="activeChat.avatar_url" class="photo-bw h-9 w-9 shrink-0 rounded-full object-cover" />
+            <span v-else class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-semibold text-white"
+                  :class="activeChat.type === 'group' ? 'bg-gradient-to-br from-sage-400 to-sage-600' : 'bg-gradient-to-br from-saffron-400 to-saffron-600'">
+              <AppIcon v-if="activeChat.type === 'group'" name="users" :size="16" /><template v-else>{{ initials(activeChat.title) }}</template>
+            </span>
+            <div class="min-w-0 flex-1">
+              <div class="truncate font-medium text-ink-900">{{ activeChat.title }}</div>
+              <div class="truncate text-xs text-ink-700/50">
+                <span v-if="typingLabel" class="text-saffron-600">{{ typingLabel }}</span>
+                <span v-else-if="activeChat.type === 'group'">{{ activeChat.members.length }} участников</span>
+                <span v-else>{{ chatState.connection === 'online' ? 'в сети' : 'не в сети' }}</span>
+              </div>
             </div>
           </div>
         </header>
@@ -360,15 +477,22 @@ onBeforeUnmount(() => {
         <div ref="scroller" class="flex-1 space-y-1 overflow-y-auto bg-parchment-50/40 p-4"
              @scroll="onScroll" @click="onScrollerClick" @mousedown="onScrollerDown" @touchstart="onScrollerDown">
           <div v-for="(m, i) in chatState.messages" :key="m.client_uuid" :id="`msg-${m.id}`"
-               class="group flex" :class="isMine(m) ? 'justify-end' : 'justify-start'">
-            <div class="relative max-w-[78%] rounded-2xl px-3 py-2 text-sm shadow-sm"
-                 :class="isMine(m) ? 'bg-saffron-500 text-white' : 'bg-white text-ink-900 ring-1 ring-parchment-200'"
-                 :data-audio-label="`${m.author_name || 'Голосовое'} · ${fmtTime(m.created_at)}`"
+               class="group flex items-end gap-2" :class="rowJustify(m)">
+            <!-- аватар (в группах, у чужих сообщений) -->
+            <template v-if="isGroup && !isMine(m)">
+              <img v-if="avatarOf(m) && isRunEnd(m, i)" :src="avatarOf(m)" class="photo-bw h-8 w-8 shrink-0 rounded-full object-cover" />
+              <span v-else-if="isRunEnd(m, i)" class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-sage-400 to-sage-600 text-xs font-semibold text-white">{{ initials(nameOf(m)) }}</span>
+              <span v-else class="h-8 w-8 shrink-0"></span>
+            </template>
+            <span v-else-if="isGroup && isMine(m) && wide" class="h-8 w-8 shrink-0"></span>
+            <div class="relative rounded-2xl px-3 py-2 text-sm shadow-sm"
+                 :class="[isMine(m) ? 'bg-saffron-500 text-white' : 'bg-white text-ink-900 ring-1 ring-parchment-200', wide ? 'max-w-[600px]' : 'max-w-[78%]']"
+                 :data-audio-label="`${nameOf(m) || 'Голосовое'} · ${fmtTime(m.created_at)}`"
                  @contextmenu="onContext($event, m)">
-              <div v-if="showAuthor(m, i)" class="mb-0.5 text-xs font-semibold text-sage-600">{{ m.author_name }}</div>
+              <div v-if="showAuthor(m, i)" class="mb-0.5 text-xs font-semibold text-sage-600">{{ nameOf(m) }}</div>
               <div v-if="m.reply_preview" class="mb-1 border-l-2 pl-2 text-xs opacity-80" :class="isMine(m) ? 'border-white/60' : 'border-saffron-400'">{{ m.reply_preview }}</div>
               <div v-if="m.deleted" class="italic opacity-60">сообщение удалено</div>
-              <div v-else class="markdown-body break-words" :class="isMine(m) && 'markdown-on-accent'" v-html="renderMarkdown(m.body)"></div>
+              <div v-else class="markdown-body break-words" :class="isMine(m) && 'markdown-on-accent'" v-html="renderChatBody(m.body)"></div>
 
               <div v-if="parseReactions(m).length" class="mt-1 flex flex-wrap gap-1">
                 <button v-for="r in parseReactions(m)" :key="r.emoji" @click.stop="onChip(m, r.emoji)"
@@ -401,9 +525,9 @@ onBeforeUnmount(() => {
             <span class="min-w-0 flex-1 truncate text-ink-700/70"><b class="text-ink-800">{{ replyTo.author_name }}</b>: {{ replyTo.body }}</span>
             <button class="text-ink-700/50 hover:text-ink-900" @click="replyTo = null"><AppIcon name="close" :size="15" /></button>
           </div>
-          <div v-else-if="editingMsg" class="mb-2 flex items-center gap-2 rounded-lg bg-parchment-100 px-3 py-1.5 text-sm">
-            <AppIcon name="edit" :size="14" class="text-saffron-600" />
-            <span class="min-w-0 flex-1 truncate text-ink-700/70">Редактирование сообщения</span>
+          <div v-else-if="editingMsg" class="mb-2 flex items-center gap-2 rounded-lg border-l-2 border-saffron-400 bg-parchment-100 px-3 py-1.5 text-sm">
+            <AppIcon name="edit" :size="14" class="shrink-0 text-saffron-600" />
+            <span class="min-w-0 flex-1 truncate text-ink-700/70"><b class="text-saffron-700">Редактирование</b> · {{ snippet(editingMsg.body) }}</span>
             <button class="text-ink-700/50 hover:text-ink-900" @click="cancelEdit"><AppIcon name="close" :size="15" /></button>
           </div>
 
@@ -430,8 +554,8 @@ onBeforeUnmount(() => {
               </button>
               <template v-if="showEmoji">
                 <div class="fixed inset-0 z-10" @click="showEmoji = false"></div>
-                <div class="absolute bottom-full right-0 z-20 mb-2 grid w-64 grid-cols-8 gap-1 rounded-xl bg-white p-2 shadow-lg ring-1 ring-parchment-200">
-                  <button v-for="e in EMOJI_PALETTE" :key="e" class="rounded p-1 text-lg leading-none hover:bg-parchment-100" @click="insertEmoji(e)">{{ e }}</button>
+                <div class="absolute bottom-full right-0 z-20 mb-2 grid w-80 grid-cols-7 gap-1 rounded-xl bg-white p-2 shadow-lg ring-1 ring-parchment-200">
+                  <button v-for="e in EMOJI_PALETTE" :key="e" class="rounded p-1 text-2xl leading-none hover:bg-parchment-100" @click="insertEmoji(e)">{{ e }}</button>
                 </div>
               </template>
             </div>
@@ -461,7 +585,7 @@ onBeforeUnmount(() => {
         </div>
         <div class="my-1 border-t border-parchment-100"></div>
         <button class="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-ink-700 hover:bg-parchment-100" @click="ctxReply"><AppIcon name="reply" :size="15" /> Ответить</button>
-        <button class="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-ink-700 hover:bg-parchment-100" @click="ctxCopy"><AppIcon name="copy" :size="15" /> Копировать</button>
+        <button v-if="canCopy(ctx.m) || ctx.selText" class="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-ink-700 hover:bg-parchment-100" @click="ctxCopy"><AppIcon name="copy" :size="15" /> Копировать</button>
         <button v-if="canEdit(ctx.m)" class="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-ink-700 hover:bg-parchment-100" @click="ctxEdit"><AppIcon name="edit" :size="15" /> Изменить</button>
         <button v-if="canDelete(ctx.m)" class="flex w-full items-center gap-2.5 border-t border-parchment-100 px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50" @click="ctxDelete"><AppIcon name="trash" :size="15" /> Удалить</button>
       </div>
@@ -469,16 +593,22 @@ onBeforeUnmount(() => {
 
     <!-- Модалка нового чата -->
     <div v-if="showNew" class="fixed inset-0 z-40 flex items-center justify-center bg-ink-900/40 p-4" @click.self="closeNew">
-      <div class="w-full max-w-md overflow-hidden rounded-xl bg-white shadow-xl">
+      <div class="flex max-h-[80vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl bg-white shadow-xl">
         <div class="flex border-b border-parchment-200">
           <button class="flex-1 px-4 py-3 text-sm font-medium" :class="newTab === 'direct' ? 'border-b-2 border-saffron-500 text-saffron-700' : 'text-ink-700/60'" @click="newTab = 'direct'">Личный чат</button>
           <button class="flex-1 px-4 py-3 text-sm font-medium" :class="newTab === 'group' ? 'border-b-2 border-saffron-500 text-saffron-700' : 'text-ink-700/60'" @click="newTab = 'group'">Группа</button>
           <button class="px-3 text-ink-700/40 hover:text-ink-900" @click="closeNew"><AppIcon name="close" :size="18" /></button>
         </div>
         <div v-if="newTab === 'group'" class="border-b border-parchment-200 p-3"><input v-model="groupTitle" class="input" placeholder="Название группы" /></div>
-        <div class="max-h-80 overflow-y-auto">
-          <p v-if="!chatState.contacts.length" class="p-4 text-sm text-ink-700/50">Нет доступных контактов.</p>
-          <button v-for="u in chatState.contacts" :key="u.id"
+        <div class="border-b border-parchment-200 p-3">
+          <div class="relative">
+            <AppIcon name="search" :size="16" class="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-700/40" />
+            <input v-model="contactSearch" class="input h-9 w-full pl-8 text-sm" placeholder="Поиск участников" />
+          </div>
+        </div>
+        <div class="flex-1 overflow-y-auto">
+          <p v-if="!filteredContacts.length" class="p-4 text-sm text-ink-700/50">{{ chatState.contacts.length ? 'Никто не найден.' : 'Нет доступных контактов.' }}</p>
+          <button v-for="u in filteredContacts" :key="u.id"
                   class="flex w-full items-center gap-3 border-b border-parchment-100 px-4 py-2.5 text-left hover:bg-parchment-50"
                   @click="newTab === 'direct' ? pickDirect(u) : toggleMember(u)">
             <img v-if="u.avatar_url" :src="u.avatar_url" class="photo-bw h-9 w-9 shrink-0 rounded-full object-cover" />
@@ -493,10 +623,41 @@ onBeforeUnmount(() => {
         </div>
       </div>
     </div>
+
+    <!-- Модалка настроек группы (название + фото) -->
+    <div v-if="showGroupEdit" class="fixed inset-0 z-40 flex items-center justify-center bg-ink-900/40 p-4" @click.self="showGroupEdit = false">
+      <div class="w-full max-w-md overflow-hidden rounded-xl bg-white shadow-xl">
+        <div class="flex items-center justify-between border-b border-parchment-200 px-4 py-3">
+          <h3 class="font-medium text-ink-900">Настройки группы</h3>
+          <button class="text-ink-700/40 hover:text-ink-900" @click="showGroupEdit = false"><AppIcon name="close" :size="18" /></button>
+        </div>
+        <div class="space-y-4 p-4">
+          <div class="flex items-center gap-4">
+            <img v-if="gPhoto" :src="gPhoto" class="photo-bw h-16 w-16 shrink-0 rounded-full object-cover" />
+            <span v-else class="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-sage-400 to-sage-600 text-white"><AppIcon name="users" :size="28" /></span>
+            <div class="flex gap-2">
+              <button class="btn-outline text-sm" :disabled="gUploading" @click="groupPhotoInput.click()">{{ gUploading ? '…' : 'Загрузить фото' }}</button>
+              <button v-if="gPhoto" class="btn-ghost text-sm text-red-600" @click="gPhoto = ''">Убрать</button>
+            </div>
+            <input ref="groupPhotoInput" type="file" accept="image/*" class="hidden" @change="onGroupPhoto" />
+          </div>
+          <div>
+            <label class="label">Название</label>
+            <input v-model="gTitle" class="input" placeholder="Название группы" />
+          </div>
+        </div>
+        <div class="flex justify-end gap-2 border-t border-parchment-200 p-3">
+          <button class="btn-ghost" @click="showGroupEdit = false">Отмена</button>
+          <button class="btn-primary" :disabled="!gTitle.trim()" @click="saveGroup">Сохранить</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <style scoped>
 .markdown-on-accent :deep(a) { color: #fff; text-decoration: underline; }
 .markdown-on-accent :deep(blockquote) { border-color: rgba(255,255,255,.5); color: rgba(255,255,255,.85); }
+/* эмодзи в сообщениях — крупнее текста */
+.markdown-body :deep(.chat-emoji) { font-size: 1.5em; line-height: 1; vertical-align: -0.15em; }
 </style>

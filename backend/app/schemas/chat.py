@@ -56,6 +56,12 @@ class SendMessageIn(BaseModel):
     client_uuid: str
     body: str
     reply_to_id: int | None = None
+    reply_quote: str | None = None  # цитата выделенного фрагмента при ответе
+
+
+class ChatUpdateIn(BaseModel):
+    title: str | None = None
+    photo_url: str | None = None
 
 
 class EditMessageIn(BaseModel):

@@ -66,6 +66,7 @@ class ChatMessage(Base):
     author_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     body: Mapped[str] = mapped_column(Text, nullable=False)  # текст/markdown; голосовое — токен @[audio](url)
     reply_to_id: Mapped[int | None] = mapped_column(ForeignKey("chat_messages.id", ondelete="SET NULL"), nullable=True)
+    reply_quote: Mapped[str | None] = mapped_column(Text, nullable=True)  # цитата (выделенный фрагмент) при ответе
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     edited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

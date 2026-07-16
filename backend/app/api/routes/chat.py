@@ -16,7 +16,7 @@ from app.core.database import get_db
 from app.core.enums import ChatType, Role
 from app.models import Chat, ChatMember, ChatMessage, ChatMessageReaction, Disciple, User
 from app.schemas.chat import (
-    ChatCreateIn, ChatMemberOut, ChatMessageOut, ChatOut, ChatUpdate, ContactOut,
+    ChatCreateIn, ChatMemberOut, ChatMessageOut, ChatOut, ChatUpdate, ChatUpdateIn, ContactOut,
     EditMessageIn, ReadIn, SendMessageIn, UpdatesOut,
 )
 
@@ -88,7 +88,9 @@ def _my_reaction(m: ChatMessage, user_id: int | None) -> str | None:
 
 def _msg_out(m: ChatMessage, user_id: int | None = None) -> ChatMessageOut:
     reply_preview = None
-    if m.reply_to_id and getattr(m, "reply_to", None):
+    if m.reply_quote:
+        reply_preview = m.reply_quote[:200]
+    elif m.reply_to_id and getattr(m, "reply_to", None):
         reply_preview = _snippet(m.reply_to.body)
     return ChatMessageOut(
         id=m.id, chat_id=m.chat_id, seq=m.seq, client_uuid=m.client_uuid,
@@ -241,6 +243,25 @@ def get_chat(chat_id: int, db: Session = Depends(get_db), user: User = Depends(c
     return _chat_out(db, chat, user)
 
 
+@router.patch("/{chat_id}", response_model=ChatOut)
+async def update_chat(chat_id: int, payload: ChatUpdateIn, db: Session = Depends(get_db), user: User = Depends(chat_user)):
+    """Изменить название/фото группы (участник группы)."""
+    chat = _require_membership(db, user, chat_id)
+    if chat.type != ChatType.group:
+        raise HTTPException(status_code=400, detail="Настройки доступны только для групп")
+    if payload.title is not None:
+        title = payload.title.strip()
+        if not title:
+            raise HTTPException(status_code=400, detail="Название не может быть пустым")
+        chat.title = title
+    if payload.photo_url is not None:
+        chat.photo_url = payload.photo_url or None
+    db.commit()
+    db.refresh(chat)
+    await _broadcast(db, chat_id, {"type": "chat", "chat_id": chat_id})
+    return _chat_out(db, chat, user)
+
+
 @router.get("/{chat_id}/messages", response_model=list[ChatMessageOut])
 def list_messages(chat_id: int, before_seq: int | None = None, limit: int = 50,
                   db: Session = Depends(get_db), user: User = Depends(chat_user)):
@@ -285,6 +306,7 @@ async def send_message(chat_id: int, payload: SendMessageIn, db: Session = Depen
     msg = ChatMessage(
         chat_id=chat_id, seq=_next_seq(db), client_uuid=payload.client_uuid,
         author_id=user.id, body=body, reply_to_id=reply_to_id,
+        reply_quote=(payload.reply_quote or None),
     )
     db.add(msg)
     chat.updated_at = func.now()

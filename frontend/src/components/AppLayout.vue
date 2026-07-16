@@ -42,7 +42,7 @@ const nav = [
 
 // top-level sections (nav) — everything else is a sub-page, so show a back button
 const topLevel = new Set(nav.map((n) => n.name))
-const showBack = computed(() => route.name && !topLevel.has(route.name))
+const showBack = computed(() => route.name && !topLevel.has(route.name) && route.name !== 'chat')
 function goBack() {
   if (backTarget.value) { router.push(backTarget.value); return }
   if (window.history.length > 1) router.back()

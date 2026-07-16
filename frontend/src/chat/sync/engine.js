@@ -91,9 +91,11 @@ export class ChatEngine {
     // авторитетное сообщение пришло — убрать из очереди отправки
     await this.db.run('DELETE FROM outbox WHERE client_uuid=?', [uuid], []);
     if (m.seq != null) {
+      // updated_at не двигаем назад — иначе список чатов «дёргается» при подгрузке истории
       await this.db.run(
-        'UPDATE chats SET last_seq=MAX(last_seq,?), updated_at=? WHERE id=?',
-        [m.seq, m.created_at || null, m.chat_id], [],
+        `UPDATE chats SET last_seq=MAX(last_seq,?),
+           updated_at=CASE WHEN ? > COALESCE(updated_at,'') THEN ? ELSE updated_at END WHERE id=?`,
+        [m.seq, m.created_at || '', m.created_at || null, m.chat_id], [],
       );
       if (m.author_id === this.meId) {
         await this.db.run('UPDATE chats SET my_last_read_seq=MAX(my_last_read_seq,?) WHERE id=?', [m.seq, m.chat_id], []);

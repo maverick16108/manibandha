@@ -6,6 +6,7 @@ import { ROLE_LABELS } from '../lib/format'
 import { pageTitle } from '../composables/pageTitle'
 import { onEscape } from '../composables/useEscape'
 import { navCounts, refreshNavCounts } from '../composables/navCounts'
+import { chatState, initChat, teardownChat } from '../chat/store'
 import { toastState } from '../composables/toast'
 import { backTarget } from '../composables/backTarget'
 import AppIcon from './AppIcon.vue'
@@ -28,6 +29,7 @@ const nav = [
   { name: 'calendar', label: 'События', icon: 'calendar', caps: ['calendar.view'] },
   { name: 'disciples', label: 'Ученики', icon: 'disciples', caps: ['disciples.view_all', 'disciples.view_own'] },
   { name: 'approvals', label: 'Заявки', icon: 'shield', caps: ['disciples.approve'] },
+  { name: 'chat-home', label: 'Чат', icon: 'chat', always: true },
   { name: 'questions', label: 'Вопросы', icon: 'chat', caps: ['questions.ask', 'questions.answer', 'questions.view_all'] },
   { name: 'service-reports', label: 'Отчёты', icon: 'reports', caps: ['reports.write', 'reports.read_all'] },
   { name: 'forum', label: 'Форум', icon: 'forum', caps: ['forum.view'] },
@@ -48,11 +50,13 @@ function goBack() {
 }
 
 function canShow(item) {
+  if (item.always) return !auth.isPending
   return (item.caps || []).some((c) => auth.can(c))
 }
 
 // бейджи непросмотренного в меню
 function badgeFor(name) {
+  if (name === 'chat-home') return chatState.totalUnread
   if (name === 'questions') return navCounts.questions
   if (name === 'service-reports') return navCounts.reports
   if (name === 'approvals') return navCounts.approvals
@@ -61,8 +65,14 @@ function badgeFor(name) {
   return 0
 }
 let countsTimer = null
-onMounted(() => { refreshNavCounts(); countsTimer = setInterval(refreshNavCounts, 15000) })
-onBeforeUnmount(() => clearInterval(countsTimer))
+onMounted(() => {
+  refreshNavCounts(); countsTimer = setInterval(refreshNavCounts, 15000)
+  // мессенджер работает в фоне на всём кабинете (доставка + бейдж непрочитанного)
+  if (!auth.isPending && auth.user) {
+    initChat({ meId: auth.user.id, getToken: () => auth.token }).catch((e) => console.warn('[chat] init failed', e))
+  }
+})
+onBeforeUnmount(() => { clearInterval(countsTimer); teardownChat() })
 // обновлять при переходах (в т.ч. после просмотра ветки — счётчик у всех уменьшается)
 watch(() => route.fullPath, refreshNavCounts)
 

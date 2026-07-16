@@ -1,0 +1,288 @@
+// Sync-движок мессенджера (framework-agnostic). Сервер — источник истины.
+//
+// Отправка: оптимистично пишем message(status=pending) + outbox, показываем сразу;
+//   POST идемпотентен по client_uuid; после ACK — серверные id/seq, status=sent.
+// Приём: WS отдаёт апдейты (применяем идемпотентным upsert по client_uuid);
+//   курсор pts двигаем только догоном GET /updates?since=pts (не теряем «потерянный» бродкаст).
+// Реконнект: catchUp() добирает пропущенное, flushOutbox() дошлёт неотправленное.
+
+const MAX_ATTEMPTS = 5;
+
+export class ChatEngine {
+  constructor({ db, api, meId, onEphemeral, genUuid, now }) {
+    this.db = db;
+    this.api = api;
+    this.meId = meId;
+    this.onEphemeral = onEphemeral || (() => {});
+    this._genUuid = genUuid || (() => globalThis.crypto.randomUUID());
+    this._now = now || (() => Date.now());
+    this._catchUpQueued = false;
+    this._flushing = false;
+  }
+
+  // ── sync_state / pts ──────────────────────────────────────────────────
+  async _getPts() {
+    const row = await this.db.get("SELECT value FROM sync_state WHERE key='pts'");
+    return row ? Number(row.value) || 0 : 0;
+  }
+  async _setPts(v) {
+    await this.db.run(
+      "INSERT INTO sync_state(key,value) VALUES('pts',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+      [String(v)],
+    );
+  }
+
+  // ── запись чатов/сообщений в локальную БД ─────────────────────────────
+  async upsertChatMeta(chat) {
+    const items = [{
+      sql: `INSERT INTO chats(id,type,title,photo_url,created_by,updated_at,last_seq,my_last_read_seq,unread)
+            VALUES(?,?,?,?,?,?,?,?,?)
+            ON CONFLICT(id) DO UPDATE SET type=excluded.type, title=excluded.title,
+              photo_url=excluded.photo_url, created_by=excluded.created_by, updated_at=excluded.updated_at`,
+      params: [
+        chat.id, chat.type, chat.title || null, chat.photo_url || null, chat.created_by || null,
+        chat.updated_at || null, chat.last_message?.seq || 0, myLastRead(chat, this.meId), chat.unread || 0,
+      ],
+    }];
+    for (const m of chat.members || []) {
+      items.push({
+        sql: `INSERT INTO members(chat_id,user_id,full_name,avatar_url,role,last_read_seq)
+              VALUES(?,?,?,?,?,?)
+              ON CONFLICT(chat_id,user_id) DO UPDATE SET full_name=excluded.full_name,
+                avatar_url=excluded.avatar_url, role=excluded.role, last_read_seq=excluded.last_read_seq`,
+        params: [chat.id, m.user_id, m.full_name || null, m.avatar_url || null, m.role || 'member', m.last_read_seq || 0],
+      });
+    }
+    await this.db.batch(items, ['chats', 'members']);
+    if (chat.last_message) await this._writeMessage(chat.last_message, false);
+    await this._recomputeUnread(chat.id);
+  }
+
+  async _ensureChat(chatId) {
+    const c = await this.db.get('SELECT id FROM chats WHERE id=?', [chatId]);
+    if (!c) {
+      try {
+        const chat = await this.api.getChat(chatId);
+        await this.upsertChatMeta(chat);
+      } catch { /* нет доступа/сети — сообщение всё равно сохраним */ }
+    }
+  }
+
+  async _writeMessage(m, emit = true) {
+    const uuid = m.client_uuid || `srv:${m.id}`;
+    const localTs = m.created_at ? Date.parse(m.created_at) || 0 : this._now();
+    await this.db.run(
+      `INSERT INTO messages(chat_id,client_uuid,id,seq,author_id,author_name,body,reply_to_id,reply_preview,
+                            created_at,edited_at,edit_count,deleted,status,local_ts)
+       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?, 'sent', ?)
+       ON CONFLICT(chat_id,client_uuid) DO UPDATE SET
+         id=excluded.id, seq=excluded.seq, author_id=excluded.author_id, author_name=excluded.author_name,
+         body=excluded.body, reply_to_id=excluded.reply_to_id, reply_preview=excluded.reply_preview,
+         created_at=excluded.created_at, edited_at=excluded.edited_at, edit_count=excluded.edit_count,
+         deleted=excluded.deleted, status='sent'`,
+      [m.chat_id, uuid, m.id ?? null, m.seq ?? null, m.author_id ?? null, m.author_name || null,
+       m.deleted ? '' : (m.body || ''), m.reply_to_id ?? null, m.reply_preview || null,
+       m.created_at || null, m.edited_at || null, m.edit_count || 0, m.deleted ? 1 : 0, localTs],
+      emit ? ['messages'] : [],
+    );
+    // авторитетное сообщение пришло — убрать из очереди отправки
+    await this.db.run('DELETE FROM outbox WHERE client_uuid=?', [uuid], []);
+    if (m.seq != null) {
+      await this.db.run(
+        'UPDATE chats SET last_seq=MAX(last_seq,?), updated_at=? WHERE id=?',
+        [m.seq, m.created_at || null, m.chat_id], [],
+      );
+      if (m.author_id === this.meId) {
+        await this.db.run('UPDATE chats SET my_last_read_seq=MAX(my_last_read_seq,?) WHERE id=?', [m.seq, m.chat_id], []);
+      }
+    }
+  }
+
+  async _applyServerMessage(m) {
+    await this._ensureChat(m.chat_id);
+    await this._writeMessage(m, true);
+    await this._recomputeUnread(m.chat_id);
+  }
+
+  async _recomputeUnread(chatId) {
+    await this.db.run(
+      `UPDATE chats SET unread = (
+         SELECT COUNT(*) FROM messages
+         WHERE messages.chat_id = chats.id AND messages.deleted=0
+           AND messages.author_id != ? AND messages.seq IS NOT NULL
+           AND messages.seq > chats.my_last_read_seq
+       ) WHERE id = ?`,
+      [this.meId, chatId], ['chats'],
+    );
+  }
+
+  // ── публичное API ──────────────────────────────────────────────────────
+  async bootstrap() {
+    try {
+      const chats = await this.api.listChats();
+      for (const c of chats) await this.upsertChatMeta(c);
+    } catch (e) { console.warn('[chat] listChats failed', e); }
+    await this.catchUp();
+    await this.flushOutbox();
+  }
+
+  async catchUp() {
+    if (this._catchUpQueued) return;
+    this._catchUpQueued = true;
+    try {
+      let pts = await this._getPts();
+      for (let i = 0; i < 100; i++) {
+        let resp;
+        try { resp = await this.api.getUpdates(pts); } catch { break; }
+        for (const u of resp.updates || []) {
+          if (u.type === 'message' && u.message) await this._applyServerMessage(u.message);
+        }
+        const np = Number(resp.pts) || pts;
+        if (np <= pts) break;
+        pts = np;
+        await this._setPts(pts);
+        if (!resp.has_more) break;
+      }
+    } finally {
+      this._catchUpQueued = false;
+    }
+  }
+
+  // подгрузить актуальные сообщения чата (сверка правок/удалений при открытии)
+  async ensureChatMessages(chatId, beforeSeq) {
+    try {
+      const msgs = await this.api.listMessages(chatId, beforeSeq, 50);
+      for (const m of msgs) await this._writeMessage(m, false);
+      await this._recomputeUnread(chatId);
+      // один сигнал перерисовки после пакетной записи истории
+      await this.db.run("UPDATE sync_state SET value=value WHERE key='pts'", [], ['messages']);
+      return msgs.length;
+    } catch { return 0; }
+  }
+
+  async send(chatId, body, replyToId = null) {
+    const text = (body || '').trim();
+    if (!text) return null;
+    const uuid = this._genUuid();
+    const ts = this._now();
+    const createdIso = new Date(ts).toISOString();
+    await this.db.batch([
+      {
+        sql: `INSERT INTO messages(chat_id,client_uuid,id,seq,author_id,author_name,body,reply_to_id,reply_preview,
+                                   created_at,edited_at,edit_count,deleted,status,local_ts)
+              VALUES(?,?,NULL,NULL,?,NULL,?,?,NULL,?,NULL,0,0,'pending',?)`,
+        params: [chatId, uuid, this.meId, text, replyToId, createdIso, ts],
+      },
+      {
+        sql: `INSERT INTO outbox(client_uuid,chat_id,body,reply_to_id,created_at,attempts)
+              VALUES(?,?,?,?,?,0)`,
+        params: [uuid, chatId, text, replyToId, createdIso],
+      },
+      { sql: 'UPDATE chats SET updated_at=? WHERE id=?', params: [createdIso, chatId] },
+    ], ['messages', 'outbox', 'chats']);
+    this.flushOutbox();
+    return uuid;
+  }
+
+  async flushOutbox() {
+    if (this._flushing) return;
+    this._flushing = true;
+    try {
+      const rows = await this.db.all('SELECT * FROM outbox ORDER BY created_at ASC, rowid ASC');
+      for (const row of rows) await this._flushOne(row);
+    } finally {
+      this._flushing = false;
+    }
+  }
+
+  async _flushOne(row) {
+    try {
+      const m = await this.api.send(row.chat_id, {
+        client_uuid: row.client_uuid, body: row.body, reply_to_id: row.reply_to_id || null,
+      });
+      await this._writeMessage(m, true);       // проставит id/seq/status=sent и удалит из outbox
+      await this._recomputeUnread(row.chat_id);
+    } catch (e) {
+      const attempts = (row.attempts || 0) + 1;
+      const status = attempts >= MAX_ATTEMPTS ? 'failed' : 'pending';
+      await this.db.run('UPDATE outbox SET attempts=? WHERE client_uuid=?', [attempts, row.client_uuid], []);
+      await this.db.run('UPDATE messages SET status=? WHERE chat_id=? AND client_uuid=?',
+        [status, row.chat_id, row.client_uuid], ['messages']);
+    }
+  }
+
+  async retryFailed() {
+    await this.db.run("UPDATE outbox SET attempts=0", [], []);
+    await this.db.run("UPDATE messages SET status='pending' WHERE status='failed'", [], ['messages']);
+    await this.flushOutbox();
+  }
+
+  async markRead(chatId, seq) {
+    if (!seq) return;
+    await this.db.run(
+      'UPDATE chats SET my_last_read_seq=MAX(my_last_read_seq,?), unread=0 WHERE id=?',
+      [seq, chatId], ['chats'],
+    );
+    await this.db.run('UPDATE members SET last_read_seq=MAX(last_read_seq,?) WHERE chat_id=? AND user_id=?',
+      [seq, chatId, this.meId], ['members']);
+    try { await this.api.markRead(chatId, seq); } catch { /* дошлём позже */ }
+  }
+
+  async editMessage(chatId, messageId, body) {
+    const m = await this.api.editMessage(chatId, messageId, body);
+    await this._writeMessage(m, true);
+  }
+
+  async deleteMessage(chatId, messageId) {
+    await this.api.deleteMessage(chatId, messageId);
+    await this.db.run('UPDATE messages SET deleted=1, body=\'\' WHERE chat_id=? AND id=?', [chatId, messageId], ['messages']);
+  }
+
+  async createChat(payload) {
+    const c = await this.api.createChat(payload);
+    await this.upsertChatMeta(c);
+    return c.id;
+  }
+
+  // ── обработка WS-апдейтов ───────────────────────────────────────────────
+  async handleWs(evt) {
+    switch (evt.type) {
+      case 'message':
+        if (evt.message) {
+          await this._applyServerMessage(evt.message);
+          this._queueCatchUp(); // сдвинуть pts (закрыть возможные пропуски)
+        }
+        break;
+      case 'edit':
+        if (evt.message) await this._writeMessage(evt.message, true);
+        break;
+      case 'delete':
+        await this.db.run('UPDATE messages SET deleted=1, body=\'\' WHERE chat_id=? AND id=?',
+          [evt.chat_id, evt.message_id], ['messages']);
+        break;
+      case 'read':
+        await this.db.run('UPDATE members SET last_read_seq=MAX(last_read_seq,?) WHERE chat_id=? AND user_id=?',
+          [evt.last_read_seq, evt.chat_id, evt.user_id], ['members']);
+        break;
+      case 'typing':
+        this.onEphemeral({ type: 'typing', chatId: evt.chat_id, userId: evt.user_id, name: evt.name });
+        break;
+      case 'chat': {
+        try { const c = await this.api.getChat(evt.chat_id); await this.upsertChatMeta(c); } catch { /* ignore */ }
+        break;
+      }
+      default: break;
+    }
+  }
+
+  _queueCatchUp() {
+    // микродебаунс, чтобы не звать /updates на каждое WS-сообщение
+    if (this._cuTimer) return;
+    this._cuTimer = setTimeout(() => { this._cuTimer = null; this.catchUp(); }, 300);
+  }
+}
+
+function myLastRead(chat, meId) {
+  const me = (chat.members || []).find((m) => m.user_id === meId);
+  return me ? me.last_read_seq || 0 : 0;
+}

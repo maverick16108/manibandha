@@ -68,4 +68,5 @@ export const MIGRATIONS = [
   'ALTER TABLE messages ADD COLUMN reactions TEXT',
   'ALTER TABLE messages ADD COLUMN my_reaction TEXT',
   'ALTER TABLE outbox ADD COLUMN reply_quote TEXT',
+  'ALTER TABLE chats ADD COLUMN pinned INTEGER DEFAULT 0',
 ];

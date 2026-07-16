@@ -48,10 +48,10 @@ export async function initChat({ meId, getToken }) {
       onStatus: (s) => { chatState.connection = s; },
     });
     unsub = db.subscribe(({ tables }) => onDbChange(tables));
-    await engine.bootstrap();
+    try { await engine.bootstrap(); } catch (e) { console.warn('[chat] bootstrap failed', e); }
     socket.connect();
-    await refreshChats();
-    chatState.ready = true;
+    try { await refreshChats(); } catch (e) { console.warn('[chat] refreshChats failed', e); }
+    chatState.ready = true; // показываем список даже если что-то пошло не так
     // страховочный догон (на случай пропущенного WS-бродкаста)
     safetyTimer = setInterval(() => { engine?.catchUp(); engine?.flushOutbox(); }, 25000);
     // очистка индикатора «печатает…»

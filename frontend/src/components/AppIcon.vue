@@ -115,6 +115,12 @@ defineProps({
       <rect x="13.5" y="13.5" width="7" height="7" rx="1.5" />
     </template>
 
+    <!-- copy -->
+    <template v-else-if="name === 'copy'">
+      <rect x="9" y="9" width="12" height="12" rx="2" />
+      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+    </template>
+
     <!-- clock -->
     <template v-else-if="name === 'clock'">
       <circle cx="12" cy="12" r="9" />

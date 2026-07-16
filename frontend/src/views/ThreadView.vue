@@ -14,6 +14,7 @@ import { backTarget } from '../composables/backTarget'
 import { confirmDialog } from '../composables/confirm'
 import { player, playAudio, seek, closePlayer } from '../composables/audioPlayer'
 import { refreshNavCounts } from '../composables/navCounts'
+import { showToast } from '../composables/toast'
 
 const route = useRoute()
 const auth = useAuthStore()
@@ -53,7 +54,7 @@ const replyTo = ref(null)    // сообщение, на которое отве
 let prevBody = ''            // черновик, сохранённый на время редактирования
 const REACTIONS = ['❤️', '👍', '🙏', '🔥', '😂', '🎉']
 // контекстное меню у курсора
-const ctx = reactive({ open: false, x: 0, y: 0, m: null })
+const ctx = reactive({ open: false, x: 0, y: 0, m: null, selText: '' })
 function closeCtx() { ctx.open = false; ctx.m = null }
 function onEsc(e) {
   if (e.key !== 'Escape') return
@@ -287,7 +288,22 @@ function onContext(e, m) {
   ctx.x = e.clientX
   ctx.y = e.clientY
   ctx.m = m
+  ctx.selText = (window.getSelection?.().toString() || '').trim() // запомним выделение на момент ПКМ
   ctx.open = true
+}
+// копировать: выделенный текст, иначе всё сообщение
+function copyMessage(m) {
+  const text = ctx.selText || cleanBody(m.body)
+  closeCtx()
+  if (!text) return
+  navigator.clipboard?.writeText(text).then(() => showToast('Скопировано')).catch(() => {})
+}
+function cleanBody(body) {
+  return (body || '')
+    .replace(/@\[audio\]\([^)]*\)/g, '🎤 Голосовое сообщение')
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
+    .replace(/^&gt;\s?/gm, '').replace(/^>\s?/gm, '')
+    .trim()
 }
 // ответ на сообщение — цитата появляется над формой ввода
 function startReply(m) {
@@ -430,6 +446,9 @@ onBeforeUnmount(() => { if (ws) ws.close(); clearTimeout(typingTimer); clearInte
           </div>
           <button class="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-ink-700 hover:bg-parchment-100" @click="startReply(ctx.m)">
             <AppIcon name="reply" :size="16" /> Ответить
+          </button>
+          <button class="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-ink-700 hover:bg-parchment-100" @click="copyMessage(ctx.m)">
+            <AppIcon name="copy" :size="16" /> {{ ctx.selText ? 'Копировать выделенное' : 'Копировать' }}
           </button>
           <template v-if="canModify(ctx.m)">
             <button class="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-ink-700 hover:bg-parchment-100" @click="startEdit(ctx.m)">

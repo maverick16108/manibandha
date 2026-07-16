@@ -4,7 +4,7 @@ from sqlalchemy import Boolean, Date, DateTime, Enum, ForeignKey, String, Text, 
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
-from app.core.enums import InitiationStatus, MaritalStatus
+from app.core.enums import Gender, InitiationStatus, MaritalStatus
 
 
 class Disciple(Base):
@@ -29,6 +29,7 @@ class Disciple(Base):
     temple_id: Mapped[int | None] = mapped_column(ForeignKey("temples.id", ondelete="SET NULL"), nullable=True)
 
     # Personal
+    gender: Mapped[Gender | None] = mapped_column(Enum(Gender, native_enum=False), nullable=True)
     marital_status: Mapped[MaritalStatus | None] = mapped_column(Enum(MaritalStatus, native_enum=False), nullable=True)
     date_of_birth: Mapped[date | None] = mapped_column(Date, nullable=True)
 

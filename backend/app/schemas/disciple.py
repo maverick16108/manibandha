@@ -2,7 +2,7 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict
 
-from app.core.enums import InitiationStatus, MaritalStatus
+from app.core.enums import Gender, InitiationStatus, MaritalStatus
 from app.schemas.checklist import ChecklistItemOut
 from app.schemas.temple import TempleOut
 
@@ -27,6 +27,7 @@ class DiscipleBase(BaseModel):
     city: str | None = None
     temple_id: int | None = None
 
+    gender: Gender | None = None
     marital_status: MaritalStatus | None = None
     date_of_birth: date | None = None
 
@@ -65,6 +66,7 @@ class DiscipleUpdate(BaseModel):
     region: str | None = None
     city: str | None = None
     temple_id: int | None = None
+    gender: Gender | None = None
     marital_status: MaritalStatus | None = None
     date_of_birth: date | None = None
     initiation_status: InitiationStatus | None = None

@@ -7,7 +7,7 @@ import { confirmDialog } from '../composables/confirm'
 import AppSelect from '../components/AppSelect.vue'
 import AppSkeleton from '../components/AppSkeleton.vue'
 import AppIcon from '../components/AppIcon.vue'
-import { STATUS_LABELS, STATUS_ORDER, STATUS_BADGE, MARITAL_LABELS, formatDate, formatPhone, phoneList } from '../lib/format'
+import { STATUS_LABELS, STATUS_ORDER, STATUS_BADGE, MARITAL_LABELS, GENDER_LABELS, formatDate, formatPhone, phoneList } from '../lib/format'
 import { usePageTitle } from '../composables/pageTitle'
 import { openLightbox } from '../composables/lightbox'
 
@@ -205,6 +205,7 @@ onMounted(async () => {
           <div class="flex justify-between"><dt class="text-ink-700/60">Мессенджер</dt><dd class="text-ink-800">{{ d.messenger || '—' }}</dd></div>
           <div class="flex justify-between"><dt class="text-ink-700/60">Страна / город</dt><dd class="text-ink-800">{{ d.country || '—' }}<span v-if="d.city">, {{ d.city }}</span></dd></div>
           <div class="flex justify-between"><dt class="text-ink-700/60">Область</dt><dd class="text-ink-800">{{ d.region || '—' }}</dd></div>
+          <div class="flex justify-between"><dt class="text-ink-700/60">Пол</dt><dd class="text-ink-800">{{ GENDER_LABELS[d.gender] || '—' }}</dd></div>
           <div class="flex justify-between"><dt class="text-ink-700/60">Семейное положение</dt><dd class="text-ink-800">{{ MARITAL_LABELS[d.marital_status] || '—' }}</dd></div>
           <div class="flex justify-between"><dt class="text-ink-700/60">Дата рождения</dt><dd class="text-ink-800">{{ formatDate(d.date_of_birth) }}</dd></div>
           <div class="flex justify-between"><dt class="text-ink-700/60">Куратор</dt><dd class="text-ink-800">{{ d.mentor?.name || '—' }}</dd></div>

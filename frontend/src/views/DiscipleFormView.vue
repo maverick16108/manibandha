@@ -8,9 +8,10 @@ import AppSelect from '../components/AppSelect.vue'
 import AppDatePicker from '../components/AppDatePicker.vue'
 import PhotoUpload from '../components/PhotoUpload.vue'
 import PhoneInput from '../components/PhoneInput.vue'
-import { STATUS_LABELS, STATUS_ORDER, MARITAL_LABELS } from '../lib/format'
+import { STATUS_LABELS, STATUS_ORDER, MARITAL_LABELS, GENDER_LABELS } from '../lib/format'
 import { usePageTitle } from '../composables/pageTitle'
 
+const genderOptions = [{ value: '', label: '—' }, ...Object.entries(GENDER_LABELS).map(([value, label]) => ({ value, label }))]
 const maritalOptions = [{ value: '', label: '—' }, ...Object.entries(MARITAL_LABELS).map(([value, label]) => ({ value, label }))]
 const statusOptions = STATUS_ORDER.map((s) => ({ value: s, label: STATUS_LABELS[s] }))
 
@@ -55,7 +56,7 @@ const form = reactive({
   material_name: '', spiritual_name: '', photo_url: '',
   phone: '', email: '', messenger: '',
   country: '', region: '', city: '',
-  marital_status: '', date_of_birth: '',
+  gender: '', marital_status: '', date_of_birth: '',
   initiation_status: 'aspirant', pranama_date: '', harinama_date: '', harinama_name: '', brahman_date: '',
   seva: '', current_activity: '',
   mentor_id: '', mentor_name: '', is_mentor: false, recommended_by: '', application_date: '', ready_for_pranama: false, ready_for_initiation: false,
@@ -76,10 +77,11 @@ const REQUIRED_MSG = {
   region: 'Выберите область',
   city: 'Выберите город',
   date_of_birth: 'Укажите дату рождения',
+  gender: 'Укажите пол',
   marital_status: 'Выберите семейное положение',
 }
 const requiredFields = computed(() => (selfFill.value
-  ? ['material_name', 'country', 'region', 'city', 'date_of_birth', 'marital_status']
+  ? ['material_name', 'country', 'region', 'city', 'gender', 'date_of_birth', 'marital_status']
   : ['material_name']))
 const req = (f) => requiredFields.value.includes(f)
 function validate() {
@@ -182,6 +184,11 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
           <div><label class="label">Телефон</label><PhoneInput v-model="form.phone" :disabled="selfFill" /></div>
           <div><label class="label">Email</label><input v-model="form.email" type="email" class="input" /></div>
           <div><label class="label">Мессенджер</label><input v-model="form.messenger" class="input" /></div>
+          <div>
+            <label class="label">Пол <span v-if="req('gender')" class="text-red-500">*</span></label>
+            <AppSelect v-model="form.gender" :options="genderOptions" placeholder="—" />
+            <p v-if="errors.gender" class="mt-1 text-xs text-red-600">{{ errors.gender }}</p>
+          </div>
           <div>
             <label class="label">Семейное положение <span v-if="req('marital_status')" class="text-red-500">*</span></label>
             <AppSelect v-model="form.marital_status" :options="maritalOptions" placeholder="—" />

@@ -16,6 +16,11 @@ export const STATUS_BADGE = {
   brahman: 'bg-sage-500/20 text-sage-600',
 }
 
+export const GENDER_LABELS = {
+  male: 'Мужской',
+  female: 'Женский',
+}
+
 export const MARITAL_LABELS = {
   single: 'Не женат / не замужем',
   married: 'В браке',

@@ -22,6 +22,11 @@ class ThreadKind(str, enum.Enum):
     approval = "approval"  # чат зарегистрированного кандидата с апрувером до апрува
 
 
+class Gender(str, enum.Enum):
+    male = "male"      # мужской
+    female = "female"  # женский
+
+
 class MaritalStatus(str, enum.Enum):
     single = "single"
     married = "married"

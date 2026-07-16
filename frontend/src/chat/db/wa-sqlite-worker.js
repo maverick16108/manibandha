@@ -4,7 +4,7 @@ import SQLiteESMFactory from 'wa-sqlite/dist/wa-sqlite.mjs';
 import wasmUrl from 'wa-sqlite/dist/wa-sqlite.wasm?url';
 import * as SQLite from 'wa-sqlite';
 import { AccessHandlePoolVFS } from 'wa-sqlite/src/examples/AccessHandlePoolVFS.js';
-import { SCHEMA_SQL } from './schema.js';
+import { SCHEMA_SQL, MIGRATIONS } from './schema.js';
 
 let sqlite3 = null;
 let db = null;
@@ -18,6 +18,7 @@ async function open(name) {
   sqlite3.vfs_register(vfs, true);
   db = await sqlite3.open_v2(name);
   await sqlite3.exec(db, SCHEMA_SQL);
+  for (const m of MIGRATIONS) { try { await sqlite3.exec(db, m); } catch { /* колонка уже есть */ } }
 }
 
 async function all(sql, params) {
@@ -28,7 +29,9 @@ async function all(sql, params) {
     while ((await sqlite3.step(stmt)) === SQLITE_ROW) {
       const r = sqlite3.row(stmt);
       const o = {};
-      cols.forEach((c, i) => (o[c] = r[i]));
+      // wa-sqlite отдаёт INTEGER как BigInt; приводим к Number, чтобы БД вела
+      // себя как sql.js (иначе ломается ре-биндинг id/seq и JSON.stringify).
+      cols.forEach((c, i) => { const v = r[i]; o[c] = typeof v === 'bigint' ? Number(v) : v; });
       rows.push(o);
     }
   }

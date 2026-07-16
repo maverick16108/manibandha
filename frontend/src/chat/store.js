@@ -164,6 +164,13 @@ export async function deleteMessage(messageId) {
   await engine?.deleteMessage(chatState.activeChatId, messageId);
 }
 
+export const REACTION_EMOJIS = ['❤️', '👍', '🙏', '🔥', '😂', '🎉'];
+
+export async function reactMessage(messageId, emoji) {
+  if (!messageId) return;
+  await engine?.react(chatState.activeChatId, messageId, emoji);
+}
+
 export async function retryFailed() {
   await engine?.retryFailed();
 }

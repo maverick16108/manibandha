@@ -42,6 +42,8 @@ CREATE TABLE IF NOT EXISTS messages (
   edited_at    TEXT,
   edit_count   INTEGER DEFAULT 0,
   deleted      INTEGER DEFAULT 0,
+  reactions    TEXT,                      -- JSON-агрегат [{emoji,count}]
+  my_reaction  TEXT,                      -- эмодзи текущего пользователя
   status       TEXT DEFAULT 'sent',       -- pending | sent | failed
   local_ts     INTEGER,                   -- время локальной вставки (для сортировки pending)
   PRIMARY KEY (chat_id, client_uuid)
@@ -57,3 +59,10 @@ CREATE TABLE IF NOT EXISTS outbox (
   attempts    INTEGER DEFAULT 0
 );
 `;
+
+// Идемпотентные миграции для уже существующих локальных БД (ошибку «duplicate
+// column» глотаем). Выполняются после SCHEMA_SQL при каждом старте.
+export const MIGRATIONS = [
+  'ALTER TABLE messages ADD COLUMN reactions TEXT',
+  'ALTER TABLE messages ADD COLUMN my_reaction TEXT',
+];

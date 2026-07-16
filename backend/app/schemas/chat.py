@@ -28,6 +28,8 @@ class ChatMessageOut(BaseModel):
     edited_at: datetime | None = None
     edit_count: int = 0
     deleted: bool = False
+    reactions: list[dict] = []       # [{emoji, count}] — агрегат
+    my_reaction: str | None = None   # эмодзи текущего пользователя (или null)
 
 
 class ChatOut(BaseModel):

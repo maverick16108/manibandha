@@ -1,7 +1,7 @@
 // sql.js реализация адаптера БД (in-memory + опциональный снапшот в IndexedDB).
 // Не содержит Vite-специфичных импортов → используется и в браузере (фолбэк),
 // и в Node (юнит-тесты sync-движка). Зависимости (initSqlJs, locateFile) — инъекция.
-import { SCHEMA_SQL } from './schema.js';
+import { SCHEMA_SQL, MIGRATIONS } from './schema.js';
 
 const IDB_DB = 'manibandha-chat-sqljs';
 const IDB_STORE = 'snapshots';
@@ -24,6 +24,7 @@ export class SqlJsCore {
     } catch { /* нет снапшота — старт с чистой БД */ }
     this.db = bytes ? new SQL.Database(bytes) : new SQL.Database();
     this.db.run(SCHEMA_SQL);
+    for (const m of MIGRATIONS) { try { this.db.run(m); } catch { /* колонка уже есть */ } }
     return this;
   }
 

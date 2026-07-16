@@ -60,6 +60,13 @@ defineProps({
       <path d="M21 11.5a7.5 7.5 0 0 1-10.9 6.7L4 20l1.8-4.1A7.5 7.5 0 1 1 21 11.5Z" />
     </template>
 
+    <!-- Вопросы (help / question mark) -->
+    <template v-else-if="name === 'question'">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M9.5 9.2a2.6 2.6 0 0 1 5 1c0 1.7-2.5 2-2.5 3.5" />
+      <path d="M12 17h.01" />
+    </template>
+
     <!-- chart (statistics) -->
     <template v-else-if="name === 'chart'">
       <path d="M4 20V10M9.5 20V4M15 20v-6M20.5 20V8M3 20h18" />

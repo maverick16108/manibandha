@@ -30,7 +30,7 @@ const nav = [
   { name: 'disciples', label: 'Ученики', icon: 'disciples', caps: ['disciples.view_all', 'disciples.view_own'] },
   { name: 'approvals', label: 'Заявки', icon: 'shield', caps: ['disciples.approve'] },
   { name: 'chat-home', label: 'Чат', icon: 'chat', always: true },
-  { name: 'questions', label: 'Вопросы', icon: 'chat', caps: ['questions.ask', 'questions.answer', 'questions.view_all'] },
+  { name: 'questions', label: 'Вопросы', icon: 'question', caps: ['questions.ask', 'questions.answer', 'questions.view_all'] },
   { name: 'service-reports', label: 'Отчёты', icon: 'reports', caps: ['reports.write', 'reports.read_all'] },
   { name: 'forum', label: 'Форум', icon: 'forum', caps: ['forum.view'] },
   { name: 'conference', label: 'Конференция', icon: 'video', caps: ['conference.view'] },

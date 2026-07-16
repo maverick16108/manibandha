@@ -73,16 +73,17 @@ export class ChatEngine {
     const localTs = m.created_at ? Date.parse(m.created_at) || 0 : this._now();
     await this.db.run(
       `INSERT INTO messages(chat_id,client_uuid,id,seq,author_id,author_name,body,reply_to_id,reply_preview,
-                            created_at,edited_at,edit_count,deleted,status,local_ts)
-       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?, 'sent', ?)
+                            created_at,edited_at,edit_count,deleted,reactions,my_reaction,status,local_ts)
+       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'sent', ?)
        ON CONFLICT(chat_id,client_uuid) DO UPDATE SET
          id=excluded.id, seq=excluded.seq, author_id=excluded.author_id, author_name=excluded.author_name,
          body=excluded.body, reply_to_id=excluded.reply_to_id, reply_preview=excluded.reply_preview,
          created_at=excluded.created_at, edited_at=excluded.edited_at, edit_count=excluded.edit_count,
-         deleted=excluded.deleted, status='sent'`,
+         deleted=excluded.deleted, reactions=excluded.reactions, my_reaction=excluded.my_reaction, status='sent'`,
       [m.chat_id, uuid, m.id ?? null, m.seq ?? null, m.author_id ?? null, m.author_name || null,
        m.deleted ? '' : (m.body || ''), m.reply_to_id ?? null, m.reply_preview || null,
-       m.created_at || null, m.edited_at || null, m.edit_count || 0, m.deleted ? 1 : 0, localTs],
+       m.created_at || null, m.edited_at || null, m.edit_count || 0, m.deleted ? 1 : 0,
+       JSON.stringify(m.reactions || []), m.my_reaction || null, localTs],
       emit ? ['messages'] : [],
     );
     // авторитетное сообщение пришло — убрать из очереди отправки
@@ -238,6 +239,12 @@ export class ChatEngine {
     await this.db.run('UPDATE messages SET deleted=1, body=\'\' WHERE chat_id=? AND id=?', [chatId, messageId], ['messages']);
   }
 
+  async react(chatId, messageId, emoji) {
+    const res = await this.api.react(chatId, messageId, emoji);  // { reactions, my_reaction }
+    await this.db.run('UPDATE messages SET reactions=?, my_reaction=? WHERE chat_id=? AND id=?',
+      [JSON.stringify(res.reactions || []), res.my_reaction || null, chatId, messageId], ['messages']);
+  }
+
   async createChat(payload) {
     const c = await this.api.createChat(payload);
     await this.upsertChatMeta(c);
@@ -264,6 +271,17 @@ export class ChatEngine {
         await this.db.run('UPDATE members SET last_read_seq=MAX(last_read_seq,?) WHERE chat_id=? AND user_id=?',
           [evt.last_read_seq, evt.chat_id, evt.user_id], ['members']);
         break;
+      case 'react': {
+        const mine = evt.user_id === this.meId;
+        if (mine) {
+          await this.db.run('UPDATE messages SET reactions=?, my_reaction=? WHERE chat_id=? AND id=?',
+            [JSON.stringify(evt.reactions || []), evt.emoji || null, evt.chat_id, evt.message_id], ['messages']);
+        } else {
+          await this.db.run('UPDATE messages SET reactions=? WHERE chat_id=? AND id=?',
+            [JSON.stringify(evt.reactions || []), evt.chat_id, evt.message_id], ['messages']);
+        }
+        break;
+      }
       case 'typing':
         this.onEphemeral({ type: 'typing', chatId: evt.chat_id, userId: evt.user_id, name: evt.name });
         break;

@@ -6,7 +6,7 @@
 import re
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Body, Depends, HTTPException, status
 from sqlalchemy import and_, func, or_, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.api.deps import get_current_user
 from app.core.database import get_db
 from app.core.enums import ChatType, Role
-from app.models import Chat, ChatMember, ChatMessage, Disciple, User
+from app.models import Chat, ChatMember, ChatMessage, ChatMessageReaction, Disciple, User
 from app.schemas.chat import (
     ChatCreateIn, ChatMemberOut, ChatMessageOut, ChatOut, ChatUpdate, ContactOut,
     EditMessageIn, ReadIn, SendMessageIn, UpdatesOut,
@@ -23,6 +23,7 @@ from app.schemas.chat import (
 router = APIRouter(prefix="/chats", tags=["chats"])
 
 EDIT_WINDOW = timedelta(hours=24)
+REACTIONS = ["❤️", "👍", "🙏", "🔥", "😂", "🎉"]  # доступные реакции
 
 
 # ── доступ ────────────────────────────────────────────────────────────────
@@ -71,7 +72,21 @@ def _snippet(body: str) -> str:
     return s[:120]
 
 
-def _msg_out(m: ChatMessage) -> ChatMessageOut:
+def _reactions_agg(m: ChatMessage) -> list[dict]:
+    from collections import Counter
+    counts = Counter(r.emoji for r in m.reactions)
+    ordered = sorted(counts.items(), key=lambda kv: (-kv[1], REACTIONS.index(kv[0]) if kv[0] in REACTIONS else 99))
+    return [{"emoji": e, "count": c} for e, c in ordered]
+
+
+def _my_reaction(m: ChatMessage, user_id: int | None) -> str | None:
+    if not user_id:
+        return None
+    r = next((x for x in m.reactions if x.user_id == user_id), None)
+    return r.emoji if r else None
+
+
+def _msg_out(m: ChatMessage, user_id: int | None = None) -> ChatMessageOut:
     reply_preview = None
     if m.reply_to_id and getattr(m, "reply_to", None):
         reply_preview = _snippet(m.reply_to.body)
@@ -81,6 +96,7 @@ def _msg_out(m: ChatMessage) -> ChatMessageOut:
         body="" if m.deleted else m.body,
         reply_to_id=m.reply_to_id, reply_preview=reply_preview,
         created_at=m.created_at, edited_at=m.edited_at, edit_count=m.edit_count or 0, deleted=m.deleted,
+        reactions=_reactions_agg(m), my_reaction=_my_reaction(m, user_id),
     )
 
 
@@ -112,7 +128,7 @@ def _chat_out(db: Session, chat: Chat, user: User) -> ChatOut:
     return ChatOut(
         id=chat.id, type=chat.type, title=chat.title, photo_url=chat.photo_url,
         created_by=chat.created_by, created_at=chat.created_at, updated_at=chat.updated_at,
-        members=_members_out(chat), last_message=_msg_out(last) if last else None, unread=unread,
+        members=_members_out(chat), last_message=_msg_out(last, user.id) if last else None, unread=unread,
     )
 
 
@@ -157,13 +173,13 @@ def get_updates(since: int = 0, limit: int = 300, db: Session = Depends(get_db),
     limit = max(1, min(limit, 500))
     rows = (
         db.query(ChatMessage)
-        .options(joinedload(ChatMessage.author), joinedload(ChatMessage.reply_to))
+        .options(joinedload(ChatMessage.author), joinedload(ChatMessage.reply_to), joinedload(ChatMessage.reactions))
         .filter(ChatMessage.chat_id.in_(_my_chat_ids(db, user)), ChatMessage.seq > since)
         .order_by(ChatMessage.seq.asc()).limit(limit + 1).all()
     )
     has_more = len(rows) > limit
     rows = rows[:limit]
-    updates = [ChatUpdate(type="message", seq=m.seq, chat_id=m.chat_id, message=_msg_out(m)) for m in rows]
+    updates = [ChatUpdate(type="message", seq=m.seq, chat_id=m.chat_id, message=_msg_out(m, user.id)) for m in rows]
     pts = rows[-1].seq if rows else since
     return UpdatesOut(updates=updates, pts=pts, has_more=has_more)
 
@@ -232,14 +248,14 @@ def list_messages(chat_id: int, before_seq: int | None = None, limit: int = 50,
     limit = max(1, min(limit, 100))
     q = (
         db.query(ChatMessage)
-        .options(joinedload(ChatMessage.author), joinedload(ChatMessage.reply_to))
+        .options(joinedload(ChatMessage.author), joinedload(ChatMessage.reply_to), joinedload(ChatMessage.reactions))
         .filter(ChatMessage.chat_id == chat_id)
     )
     if before_seq:
         q = q.filter(ChatMessage.seq < before_seq)
     rows = q.order_by(ChatMessage.seq.desc()).limit(limit).all()
     rows.reverse()  # по возрастанию для отображения
-    return [_msg_out(m) for m in rows]
+    return [_msg_out(m, user.id) for m in rows]
 
 
 @router.post("/{chat_id}/messages", response_model=ChatMessageOut, status_code=status.HTTP_201_CREATED)
@@ -254,11 +270,11 @@ async def send_message(chat_id: int, payload: SendMessageIn, db: Session = Depen
     # идемпотентность: повтор с тем же uuid не создаёт дубль
     existing = (
         db.query(ChatMessage)
-        .options(joinedload(ChatMessage.author), joinedload(ChatMessage.reply_to))
+        .options(joinedload(ChatMessage.author), joinedload(ChatMessage.reply_to), joinedload(ChatMessage.reactions))
         .filter(ChatMessage.chat_id == chat_id, ChatMessage.client_uuid == payload.client_uuid).first()
     )
     if existing:
-        return _msg_out(existing)
+        return _msg_out(existing, user.id)
 
     reply_to_id = None
     if payload.reply_to_id:
@@ -283,14 +299,14 @@ async def send_message(chat_id: int, payload: SendMessageIn, db: Session = Depen
         db.rollback()  # гонка одинаковых uuid — вернуть уже созданное
         existing = (
             db.query(ChatMessage)
-            .options(joinedload(ChatMessage.author), joinedload(ChatMessage.reply_to))
+            .options(joinedload(ChatMessage.author), joinedload(ChatMessage.reply_to), joinedload(ChatMessage.reactions))
             .filter(ChatMessage.chat_id == chat_id, ChatMessage.client_uuid == payload.client_uuid).first()
         )
         if existing:
-            return _msg_out(existing)
+            return _msg_out(existing, user.id)
         raise
     db.refresh(msg)
-    out = _msg_out(msg)
+    out = _msg_out(msg, user.id)
     await _broadcast(db, chat_id, {"type": "message", "seq": msg.seq, "chat_id": chat_id, "message": out.model_dump(mode="json")})
     return out
 
@@ -317,7 +333,7 @@ async def edit_message(chat_id: int, message_id: int, payload: EditMessageIn,
     msg.edit_count = (msg.edit_count or 0) + 1
     db.commit()
     db.refresh(msg)
-    out = _msg_out(msg)
+    out = _msg_out(msg, user.id)
     await _broadcast(db, chat_id, {"type": "edit", "chat_id": chat_id, "message": out.model_dump(mode="json")})
     return out
 
@@ -344,3 +360,37 @@ async def mark_read(chat_id: int, payload: ReadIn, db: Session = Depends(get_db)
         me.last_read_seq = payload.seq
         db.commit()
         await _broadcast(db, chat_id, {"type": "read", "chat_id": chat_id, "user_id": user.id, "last_read_seq": payload.seq})
+
+
+@router.post("/{chat_id}/messages/{message_id}/react")
+async def react(chat_id: int, message_id: int, payload: dict = Body(...),
+                db: Session = Depends(get_db), user: User = Depends(chat_user)):
+    """Поставить/сменить/снять реакцию-эмодзи (одна на пользователя на сообщение)."""
+    emoji = (payload or {}).get("emoji")
+    if emoji not in REACTIONS:
+        raise HTTPException(status_code=400, detail="Недопустимая реакция")
+    _require_membership(db, user, chat_id)
+    msg = db.get(ChatMessage, message_id)
+    if not msg or msg.chat_id != chat_id:
+        raise HTTPException(status_code=404, detail="Сообщение не найдено")
+    existing = db.query(ChatMessageReaction).filter(
+        ChatMessageReaction.message_id == message_id, ChatMessageReaction.user_id == user.id
+    ).first()
+    if existing:
+        if existing.emoji == emoji:
+            db.delete(existing)   # тот же эмодзи — снять
+            my = None
+        else:
+            existing.emoji = emoji  # сменить
+            my = emoji
+    else:
+        db.add(ChatMessageReaction(message_id=message_id, user_id=user.id, emoji=emoji))
+        my = emoji
+    db.commit()
+    db.refresh(msg)
+    agg = _reactions_agg(msg)
+    await _broadcast(db, chat_id, {
+        "type": "react", "chat_id": chat_id, "message_id": message_id,
+        "user_id": user.id, "reactions": agg, "emoji": my,
+    })
+    return {"reactions": agg, "my_reaction": my}

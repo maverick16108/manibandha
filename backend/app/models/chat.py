@@ -75,3 +75,19 @@ class ChatMessage(Base):
     chat = relationship("Chat", back_populates="messages")
     author = relationship("User")
     reply_to = relationship("ChatMessage", remote_side=[id], foreign_keys=[reply_to_id], uselist=False)
+    reactions = relationship("ChatMessageReaction", back_populates="message", cascade="all, delete-orphan")
+
+
+class ChatMessageReaction(Base):
+    """Реакция-эмодзи на сообщение чата (одна на пользователя на сообщение)."""
+
+    __tablename__ = "chat_message_reactions"
+    __table_args__ = (UniqueConstraint("message_id", "user_id", name="uq_chat_reaction"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    message_id: Mapped[int] = mapped_column(ForeignKey("chat_messages.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    emoji: Mapped[str] = mapped_column(String(16), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    message = relationship("ChatMessage", back_populates="reactions")

@@ -10,6 +10,7 @@ export const chatApi = {
   send: (chatId, payload) => client.post(`/chats/${chatId}/messages`, payload).then((r) => r.data),
   editMessage: (chatId, messageId, body) => client.patch(`/chats/${chatId}/messages/${messageId}`, { body }).then((r) => r.data),
   deleteMessage: (chatId, messageId) => client.delete(`/chats/${chatId}/messages/${messageId}`),
+  react: (chatId, messageId, emoji) => client.post(`/chats/${chatId}/messages/${messageId}/react`, { emoji }).then((r) => r.data),
   markRead: (chatId, seq) => client.post(`/chats/${chatId}/read`, { seq }),
   createChat: (payload) => client.post('/chats', payload).then((r) => r.data),
   contacts: () => client.get('/chats/contacts').then((r) => r.data),

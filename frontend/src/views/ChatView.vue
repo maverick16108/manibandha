@@ -11,6 +11,7 @@ import { usePageTitle } from '../composables/pageTitle'
 import {
   chatState, initChat, openChat, closeChat, sendMessage, sendTyping,
   deleteMessage, retryFailed, loadOlder, loadContacts, startDirect, startGroup,
+  reactMessage, REACTION_EMOJIS,
 } from '../chat/store'
 
 usePageTitle('Чат')
@@ -23,6 +24,7 @@ const body = ref('')
 const replyTo = ref(null)
 const scroller = ref(null)
 const showNew = ref(false)
+const reactPickerFor = ref(null)   // client_uuid сообщения с открытым выбором реакции
 
 // ── активный чат по маршруту ────────────────────────────────────────────
 const activeId = computed(() => (route.params.id ? Number(route.params.id) : null))
@@ -30,9 +32,15 @@ const activeChat = computed(() => chatState.chats.find((c) => c.id === activeId.
 
 watch(activeId, async (id) => {
   replyTo.value = null
+  reactPickerFor.value = null
   if (id) { await openChat(id); scrollToBottom() }
   else closeChat()
 }, { immediate: false })
+
+function parseReactions(m) { try { return JSON.parse(m.reactions || '[]') } catch { return [] } }
+function toggleReactPicker(m) { reactPickerFor.value = reactPickerFor.value === m.client_uuid ? null : m.client_uuid }
+async function pickReaction(m, emoji) { reactPickerFor.value = null; if (m.id) await reactMessage(m.id, emoji) }
+async function onChip(m, emoji) { if (m.id) await reactMessage(m.id, emoji) }
 
 // новые сообщения активного чата → прокрутка вниз (если были внизу)
 watch(() => chatState.messages.length, () => nextTick(scrollToBottom))
@@ -116,6 +124,7 @@ function initials(name) { return (name || '?').trim()[0]?.toUpperCase() || '?' }
 let voiceDragging = false
 function onScrollerClick(e) {
   if (voiceDragging) { voiceDragging = false; return }
+  if (!e.target.closest('.react-pop, .react-btn')) reactPickerFor.value = null
   const btn = e.target.closest('.voice-msg')
   if (!btn) return
   e.preventDefault()
@@ -273,6 +282,18 @@ onBeforeUnmount(() => closeChat())
                    :class="isMine(m) ? 'border-white/60' : 'border-saffron-400'">{{ m.reply_preview }}</div>
               <div v-if="m.deleted" class="italic opacity-60">сообщение удалено</div>
               <div v-else class="markdown-body break-words" :class="isMine(m) && 'markdown-on-accent'" v-html="renderMarkdown(m.body)"></div>
+
+              <!-- реакции -->
+              <div v-if="parseReactions(m).length" class="mt-1 flex flex-wrap gap-1">
+                <button v-for="r in parseReactions(m)" :key="r.emoji" @click.stop="onChip(m, r.emoji)"
+                        class="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-xs ring-1 transition"
+                        :class="m.my_reaction === r.emoji
+                          ? (isMine(m) ? 'bg-white/25 ring-white/60' : 'bg-saffron-500/15 ring-saffron-400')
+                          : (isMine(m) ? 'bg-white/10 ring-white/25' : 'bg-parchment-100 ring-parchment-200')">
+                  <span>{{ r.emoji }}</span><span class="tabular-nums">{{ r.count }}</span>
+                </button>
+              </div>
+
               <div class="mt-0.5 flex items-center justify-end gap-1 text-[10px]"
                    :class="isMine(m) ? 'text-white/70' : 'text-ink-700/40'">
                 <span v-if="m.edit_count">изм. · </span>
@@ -290,12 +311,21 @@ onBeforeUnmount(() => closeChat())
               <!-- действия по наведению -->
               <div class="absolute -top-3 hidden gap-1 group-hover:flex"
                    :class="isMine(m) ? 'right-1' : 'left-1'">
+                <button v-if="m.id && !m.deleted" class="react-btn rounded-full bg-white p-1 text-ink-700/70 shadow ring-1 ring-parchment-200 hover:text-saffron-600" title="Реакция" @click.stop="toggleReactPicker(m)">
+                  <AppIcon name="react" :size="13" />
+                </button>
                 <button v-if="!m.deleted" class="rounded-full bg-white p-1 text-ink-700/70 shadow ring-1 ring-parchment-200 hover:text-saffron-600" title="Ответить" @click.stop="startReply(m)">
                   <AppIcon name="reply" :size="13" />
                 </button>
                 <button v-if="isMine(m) && m.id && !m.deleted" class="rounded-full bg-white p-1 text-ink-700/70 shadow ring-1 ring-parchment-200 hover:text-red-600" title="Удалить" @click.stop="onDelete(m)">
                   <AppIcon name="trash" :size="13" />
                 </button>
+              </div>
+
+              <!-- выбор реакции -->
+              <div v-if="reactPickerFor === m.client_uuid" class="react-pop absolute -top-11 z-10 flex gap-0.5 rounded-full bg-white px-2 py-1 shadow-lg ring-1 ring-parchment-200"
+                   :class="isMine(m) ? 'right-0' : 'left-0'">
+                <button v-for="e in REACTION_EMOJIS" :key="e" class="text-lg leading-none transition hover:scale-125" @click.stop="pickReaction(m, e)">{{ e }}</button>
               </div>
             </div>
           </div>

@@ -233,6 +233,12 @@ defineProps({
       <path d="M10 10v6.5M14 10v6.5" />
     </template>
 
+    <!-- send (отправить — бумажный самолётик) -->
+    <template v-else-if="name === 'send'">
+      <path d="M21.5 12 4 4.5l3 7.5-3 7.5L21.5 12Z" />
+      <path d="M7 12h14" />
+    </template>
+
     <!-- plus (добавить) -->
     <template v-else-if="name === 'plus'">
       <path d="M12 5v14M5 12h14" />

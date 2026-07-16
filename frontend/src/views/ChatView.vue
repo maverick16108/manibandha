@@ -209,6 +209,9 @@ watch(body, () => { nextTick(autoGrow); if (activeId.value && !editingMsg.value)
 
 let lastTyping = 0
 function onKeydown(e) {
+  // не давать браузеру сбрасывать текст поля на Escape (нативный revert);
+  // закрытие оверлеев/ответа/редактирования делает глобальный обработчик
+  if (e.key === 'Escape') { e.preventDefault(); return }
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); return }
   const now = Date.now()
   if (now - lastTyping > 2000) { lastTyping = now; sendTyping() }
@@ -424,11 +427,13 @@ const gTitle = ref('')
 const gPhoto = ref('')
 const gUploading = ref(false)
 const groupPhotoInput = ref(null)
+const gTitleInput = ref(null)
 function openGroupEdit() {
   if (!isGroup.value) return
   gTitle.value = activeChat.value.title || ''
   gPhoto.value = activeChat.value.avatar_url || ''
   showGroupEdit.value = true
+  nextTick(() => gTitleInput.value?.focus())
 }
 async function onGroupPhoto(ev) {
   const f = (ev.target.files || [])[0]
@@ -486,6 +491,7 @@ onMounted(async () => {
   if (!auth.isPending && auth.user) {
     await initChat({ meId: auth.user.id, getToken: () => auth.token })
     if (activeId.value) { await openChat(activeId.value); scrollToBottom() }
+    else maybeAutoOpen()
   }
 })
 onBeforeUnmount(() => {
@@ -567,7 +573,7 @@ onBeforeUnmount(() => {
           </div>
         </header>
 
-        <div ref="scroller" class="flex-1 space-y-1 overflow-y-auto bg-parchment-50/40 p-4"
+        <div ref="scroller" class="chat-bg flex-1 space-y-1 overflow-y-auto p-4"
              @scroll="onScroll" @click="onScrollerClick" @mousedown="onScrollerDown" @touchstart="onScrollerDown">
           <template v-for="(m, i) in chatState.messages" :key="m.client_uuid">
           <div v-if="m.client_uuid === firstUnreadKey" class="my-2 flex items-center gap-2 px-2 text-xs text-ink-700/50">
@@ -659,10 +665,10 @@ onBeforeUnmount(() => {
             </div>
 
             <button v-if="body.trim()" class="mb-0.5 shrink-0 rounded-full bg-saffron-500 p-2 text-white hover:bg-saffron-600" title="Отправить" @click="send">
-              <AppIcon name="forward" :size="20" />
+              <AppIcon name="send" :size="20" />
             </button>
             <button v-else class="mb-0.5 shrink-0 rounded-full p-2 text-ink-700/60 hover:bg-parchment-100 hover:text-saffron-600" title="Голосовое" :disabled="uploading" @click="startRec">
-              <AppIcon name="mic" :size="20" />
+              <AppIcon name="mic" :size="24" />
             </button>
           </div>
         </div>
@@ -754,7 +760,7 @@ onBeforeUnmount(() => {
           </div>
           <div>
             <label class="label">Название</label>
-            <input v-model="gTitle" class="input" placeholder="Название группы" />
+            <input ref="gTitleInput" v-model="gTitle" class="input" placeholder="Название группы" />
           </div>
         </div>
         <div class="flex justify-end gap-2 border-t border-parchment-200 p-3">
@@ -771,4 +777,11 @@ onBeforeUnmount(() => {
 .markdown-on-accent :deep(blockquote) { border-color: rgba(255,255,255,.5); color: rgba(255,255,255,.85); }
 /* эмодзи в сообщениях — крупнее текста */
 .markdown-body :deep(.chat-emoji) { font-size: 1.5em; line-height: 1; vertical-align: -0.15em; }
+
+/* тематический ведический фон переписки — тонкая лотос-мандала */
+.chat-bg {
+  background-color: #fbf6ee;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140' viewBox='0 0 140 140'><g fill='none' stroke='%23c8792e' stroke-width='0.9' opacity='0.16'><g transform='translate(70 70)'><circle r='2.6'/><circle r='25'/><circle r='33'/><path d='M0 -6C5.5 -14 5.5 -21 0 -25C-5.5 -21 -5.5 -14 0 -6Z'/><path d='M0 -6C5.5 -14 5.5 -21 0 -25C-5.5 -21 -5.5 -14 0 -6Z' transform='rotate(45)'/><path d='M0 -6C5.5 -14 5.5 -21 0 -25C-5.5 -21 -5.5 -14 0 -6Z' transform='rotate(90)'/><path d='M0 -6C5.5 -14 5.5 -21 0 -25C-5.5 -21 -5.5 -14 0 -6Z' transform='rotate(135)'/><path d='M0 -6C5.5 -14 5.5 -21 0 -25C-5.5 -21 -5.5 -14 0 -6Z' transform='rotate(180)'/><path d='M0 -6C5.5 -14 5.5 -21 0 -25C-5.5 -21 -5.5 -14 0 -6Z' transform='rotate(225)'/><path d='M0 -6C5.5 -14 5.5 -21 0 -25C-5.5 -21 -5.5 -14 0 -6Z' transform='rotate(270)'/><path d='M0 -6C5.5 -14 5.5 -21 0 -25C-5.5 -21 -5.5 -14 0 -6Z' transform='rotate(315)'/></g></g></svg>");
+  background-size: 140px 140px;
+}
 </style>

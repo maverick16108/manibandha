@@ -42,31 +42,42 @@ ENV_FILE=../backend/.env go run ./cmd/server   # берёт те же SECRET_KEY
 go test ./...
 ```
 
-## Статус портирования
+## Статус портирования — ГОТОВО ✅
 
-Готово (foundation + auth vertical slice):
-- [x] конфиг, подключение к БД, статика `/uploads`
-- [x] JWT + пароли (совместимость с Python проверена тестами)
-- [x] `POST /api/auth/login`, `/auth/phone/request`, `/auth/phone/verify` (вход+регистрация)
-- [x] `POST /auth/refresh`, `GET/PATCH /auth/me`
-- [x] capabilities: `GET /api/me/capabilities`, `GET /api/capabilities`
-- [x] `GET /api/health`
+Все модули портированы и **сверены на паритет** с Python (одна и та же локальная БД,
+одинаковые запросы, сравнение JSON байт-в-байт). Проверка маршрутов: **все 130
+эндпоинтов Python присутствуют в Go**.
 
-Осталось портировать (по модулям, каждый — свой файл в `internal/web`):
-- [ ] users (CRUD, `/me/capabilities` уже есть)
-- [ ] roles (CRUD ролей, назначение)
-- [ ] disciples (+ scope по ролям), pipeline, disciple notes/files
-- [ ] threads (вопросы/отчёты) + лайки
-- [ ] forum (секции/темы/посты/реакции)
-- [ ] chat (REST + **WebSocket** + local-first sync `/updates?since=pts`)
-- [ ] uploads (пережатие в webp + превью — портировать на Go image libs)
-- [ ] conferences (LiveKit Go SDK), recordings, bans
-- [ ] events, drafts, settings, dictionaries (cities/regions/countries/temples)
-- [ ] reports (экспорт PDF/Excel — заменить reportlab/openpyxl на Go-аналоги)
-- [ ] стартовый seed ролей/гуру (перенести из Python bootstrap)
+- [x] foundation: конфиг, БД (GORM/pgx, timestamptz→UTC), JWT+пароли (совместимость с Python — тесты)
+- [x] auth (login, phone request/verify+регистрация, refresh, me), capabilities
+- [x] users, roles (CRUD, назначение ролей)
+- [x] dictionaries (cities/regions/countries/temples)
+- [x] disciples (список+фильтры+скоуп+сортировка, CRUD, approve, notes, files) + pipeline + mentors
+- [x] threads (вопросы/отчёты/approval, реакции, nav-counts, stats)
+- [x] events (+публичный календарь), drafts, settings
+- [x] forum (разделы/темы/посты, реакции с who/mine, участники, модерация)
+- [x] chat — REST + **WebSocket** (realtime + typing) + sync `/updates?since=pts`
+- [x] uploads — пережатие в webp + превью (через `cwebp`)
+- [x] conferences + recordings + bans (LiveKit: минт токенов, Twirp RoomService/Egress, webhook)
+- [x] reports — агрегаты + экспорт xlsx (excelize) / pdf (fpdf + встроенный DejaVuSans)
 
-## Переключение на проде (позже, когда порт будет полным)
+### Что нельзя проверить локально
+- **conferences**: вызовы LiveKit (RoomService/Egress) требуют живого LiveKit-сервера.
+  Проверено: минт токена совпадает с Python (decoded JWT claims идентичны), CRUD — паритет.
+- **pdf**: бинарь не байт-в-байт с reportlab (другая библиотека), но валиден и содержит
+  тот же контент с корректной кириллицей.
 
-Собрать бинарь, поднять как systemd-сервис на другом порту, прогнать против
-staging-БД, затем переключить `upstream` в nginx с Python на Go. Python-версия
-остаётся в репозитории как откат.
+## Внешние зависимости на хосте
+- `cwebp` (libwebp-tools) — для пережатия изображений в uploads.
+- LiveKit-сервер + env `LIVEKIT_API_KEY/SECRET/URL` — для конференций (как и в Python).
+
+## Bootstrap (миграции/seed) остаётся на Python
+Схема БД ведётся Alembic (Python), поэтому миграции и разовые скрипты
+(`python -m app.seed`, `python -m app.create_admin`, `seed_roles`) остаются в Python —
+их всё равно надо запускать при развёртывании. Go-сервер — это **рантайм API**,
+работающий с уже подготовленной БД.
+
+## Переключение на проде
+Собрать бинарь (`go build ./cmd/server`), поднять systemd-сервисом на отдельном порту,
+прогнать против staging-БД (Alembic-миграции применяет Python), затем переключить
+`upstream` в nginx с Python на Go. Python-версия остаётся в репозитории как откат.

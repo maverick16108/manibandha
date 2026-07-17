@@ -580,6 +580,32 @@ func (s *Server) markChatRead(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// GET /api/chats/{id}/search?q=... — поиск по тексту сообщений внутри чата
+func (s *Server) searchChatMessages(w http.ResponseWriter, r *http.Request) {
+	id, _ := strconv.Atoi(chi.URLParam(r, "id"))
+	u := currentUser(r)
+	if _, code := s.requireMembership(u.ID, id); code != http.StatusOK {
+		httpErr(w, code, membershipMsg(code))
+		return
+	}
+	q := strings.TrimSpace(r.URL.Query().Get("q"))
+	if len([]rune(q)) < 2 {
+		writeJSON(w, http.StatusOK, []any{})
+		return
+	}
+	// экранируем спецсимволы LIKE, чтобы искать их буквально
+	esc := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(q)
+	var rows []models.ChatMessage
+	s.DB.Preload("Author").
+		Where("chat_id = ? AND deleted = ? AND body ILIKE ? ESCAPE '\\'", id, false, "%"+esc+"%").
+		Order("seq DESC").Limit(100).Find(&rows)
+	out := make([]map[string]any, 0, len(rows))
+	for i := range rows {
+		out = append(out, chatMsgOut(&rows[i], u.ID))
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
 func (s *Server) pinChat(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.Atoi(chi.URLParam(r, "id"))
 	u := currentUser(r)

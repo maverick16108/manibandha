@@ -15,7 +15,7 @@ import { usePageTitle } from '../composables/pageTitle'
 import {
   chatState, initChat, openChat, closeChat, sendMessage, sendTyping,
   editMessage, deleteMessage, retryFailed, loadOlder, loadContacts, startDirect, startGroup,
-  reactMessage, REACTION_EMOJIS, updateChat, pinChat, leaveChat, forwardMessages,
+  reactMessage, REACTION_EMOJIS, updateChat, pinChat, leaveChat, forwardMessages, loadAroundSeq,
 } from '../chat/store'
 
 usePageTitle('Чат')
@@ -774,8 +774,50 @@ async function saveGroup() {
   showGroupEdit.value = false
 }
 
+// ── поиск по сообщениям внутри чата (Ctrl+F) ──────────────────────────────
+const searchChat = reactive({ open: false, q: '', results: [], loading: false })
+const searchChatInput = ref(null)
+let searchChatTimer = null
+function openChatSearch() {
+  if (!activeId.value) return
+  searchChat.open = true
+  nextTick(() => { searchChatInput.value?.focus(); searchChatInput.value?.select?.() })
+}
+function closeChatSearch() { searchChat.open = false; searchChat.q = ''; searchChat.results = []; searchChat.loading = false }
+watch(() => searchChat.q, (q) => {
+  clearTimeout(searchChatTimer)
+  const term = (q || '').trim()
+  if (term.length < 2) { searchChat.results = []; searchChat.loading = false; return }
+  searchChat.loading = true
+  searchChatTimer = setTimeout(async () => {
+    const cid = activeId.value
+    try {
+      const { data } = await client.get(`/chats/${cid}/search`, { params: { q: term } })
+      if (activeId.value === cid && searchChat.open) searchChat.results = data
+    } catch { searchChat.results = [] } finally { searchChat.loading = false }
+  }, 300)
+})
+watch(activeId, () => { if (searchChat.open) closeChatSearch() })
+async function jumpToMessage(m) {
+  closeChatSearch()
+  if (!chatState.messages.some((x) => x.id === m.id)) {
+    try { await loadAroundSeq(m.seq) } catch { /* ignore */ }
+  }
+  await nextTick()
+  const el = document.getElementById(`msg-${m.id}`)
+  if (el) {
+    el.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    el.classList.add('msg-flash'); setTimeout(() => el.classList.remove('msg-flash'), 1600)
+  }
+}
+
 function onGlobalKey(e) {
+  if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.code === 'KeyF') {
+    if (activeId.value) { e.preventDefault(); openChatSearch() }
+    return
+  }
   if (e.key !== 'Escape') return
+  if (searchChat.open) { closeChatSearch(); return }
   if (recording.value) cancelRec()
   else if (forwardOpen.value) forwardOpen.value = false
   else if (deleteManyOpen.value) deleteManyOpen.value = false
@@ -840,6 +882,33 @@ onBeforeUnmount(() => {
     <!-- Список чатов -->
     <aside class="flex w-full shrink-0 flex-col border-r border-parchment-200" :class="activeId ? 'hidden sm:flex' : 'flex'"
            :style="isDesktop ? { width: listWidth + 'px' } : null">
+      <!-- Панель поиска по открытому чату (Ctrl+F) -->
+      <template v-if="searchChat.open">
+        <div class="flex items-center gap-2 border-b border-parchment-200 p-3">
+          <div class="relative flex-1">
+            <AppIcon name="search" :size="16" class="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-700/40" />
+            <input ref="searchChatInput" v-model="searchChat.q" class="input h-9 w-full pl-8 pr-8 text-sm" placeholder="Поиск в этом чате" />
+            <button v-if="searchChat.q" @click="searchChat.q = ''" title="Очистить"
+                    class="absolute right-2 top-1/2 -translate-y-1/2 text-ink-700/40 hover:text-ink-700"><AppIcon name="close" :size="15" /></button>
+          </div>
+          <button class="rounded-lg p-1.5 text-ink-700/60 hover:bg-parchment-100" title="Закрыть поиск" @click="closeChatSearch"><AppIcon name="close" :size="18" /></button>
+        </div>
+        <div class="border-b border-parchment-200 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-ink-700/50">Поиск в чате</div>
+        <div class="flex-1 overflow-y-auto">
+          <p v-if="searchChat.q.trim().length < 2" class="p-8 text-center text-sm text-ink-700/40">Введите минимум 2 символа</p>
+          <p v-else-if="searchChat.loading && !searchChat.results.length" class="p-4 text-sm text-ink-700/50">Идёт поиск…</p>
+          <p v-else-if="!searchChat.results.length" class="p-8 text-center text-sm text-ink-700/50">Ничего не найдено</p>
+          <button v-for="m in searchChat.results" :key="m.id" @click="jumpToMessage(m)"
+                  class="flex w-full flex-col gap-0.5 border-b border-parchment-100 px-3 py-2.5 text-left hover:bg-parchment-50">
+            <span class="flex items-center justify-between gap-2">
+              <span class="truncate text-sm font-medium text-ink-900">{{ m.author_name || 'Без имени' }}</span>
+              <span class="shrink-0 text-[11px] text-ink-700/40">{{ fmtListTime(m.created_at) }}</span>
+            </span>
+            <span class="line-clamp-2 text-sm text-ink-700/70">{{ snippet(m.body) }}</span>
+          </button>
+        </div>
+      </template>
+      <template v-else>
       <div class="flex items-center gap-2 border-b border-parchment-200 p-3">
         <div class="relative flex-1">
           <AppIcon name="search" :size="16" class="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-700/40" />
@@ -878,6 +947,7 @@ onBeforeUnmount(() => {
           </span>
         </button>
       </div>
+      </template>
     </aside>
 
     <!-- разделитель для изменения ширины списка -->
@@ -1347,6 +1417,12 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+/* подсветка сообщения при переходе из поиска */
+.msg-flash { animation: msgFlash 1.6s ease; border-radius: 0.75rem; }
+@keyframes msgFlash {
+  0%, 40% { background-color: rgba(200, 116, 42, 0.22); }
+  100% { background-color: transparent; }
+}
 .markdown-on-accent :deep(a) { color: #fff; text-decoration: underline; }
 .markdown-on-accent :deep(blockquote) { border-color: rgba(255,255,255,.5); color: rgba(255,255,255,.85); }
 /* эмодзи в сообщениях — крупнее текста */

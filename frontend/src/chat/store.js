@@ -227,6 +227,13 @@ export async function loadOlder() {
   return n;
 }
 
+// подгрузить окно сообщений вокруг seq (для перехода к результату поиска)
+export async function loadAroundSeq(seq) {
+  if (!chatState.activeChatId || !seq) return
+  await engine?.ensureChatMessages(chatState.activeChatId, Number(seq) + 1);
+  await refreshMessages();
+}
+
 export async function loadContacts() {
   try { chatState.contacts = await chatApi.contacts(); } catch { chatState.contacts = []; }
 }

@@ -26,6 +26,11 @@ func (s *Server) Router() http.Handler {
 
 	api.Get("/health", s.health)
 
+	// публичные (без токена): расписание для лендинга
+	api.Get("/events/public/upcoming", s.publicUpcoming)
+	api.Get("/events/public", s.publicList)
+	api.Get("/events/public/{id}", s.publicDetail)
+
 	// auth (публичные)
 	api.Post("/auth/login", s.login)
 	api.Post("/auth/phone/request", s.phoneRequest)
@@ -63,6 +68,27 @@ func (s *Server) Router() http.Handler {
 		pr.Patch("/threads/{id}/messages/{mid}", s.editThreadMessage)
 		pr.Delete("/threads/{id}/messages/{mid}", s.deleteThreadMessage)
 		pr.Post("/threads/{id}/messages/{mid}/react", s.reactThreadMessage)
+		// события (чтение), черновики, настройки (чтение)
+		pr.Get("/events", s.listEvents)
+		pr.Get("/events/{id}", s.getEvent)
+		pr.Get("/drafts/{scope}", s.getDraft)
+		pr.Put("/drafts/{scope}", s.saveDraft)
+		pr.Delete("/drafts/{scope}", s.deleteDraft)
+		pr.Get("/settings", s.readSettings)
+	})
+
+	// события: изменение — staff
+	api.Group(func(pr chi.Router) {
+		pr.Use(s.auth, s.staff)
+		pr.Post("/events", s.createEvent)
+		pr.Patch("/events/{id}", s.updateEvent)
+		pr.Delete("/events/{id}", s.deleteEvent)
+	})
+
+	// настройки: изменение — право settings.manage
+	api.Group(func(pr chi.Router) {
+		pr.Use(s.auth, s.requireCap("settings.manage"))
+		pr.Put("/settings", s.updateSettings)
 	})
 
 	// ученики: заметки (право disciples.note)

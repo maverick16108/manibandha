@@ -346,3 +346,28 @@ type Conference struct {
 }
 
 func (Conference) TableName() string { return "conferences" }
+
+// Event — событие календаря.
+type Event struct {
+	ID          int        `gorm:"primaryKey" json:"id"`
+	Title       string     `gorm:"column:title" json:"title"`
+	Location    *string    `gorm:"column:location" json:"location"`
+	StartsOn    time.Time  `gorm:"column:starts_on" json:"-"`
+	EndsOn      *time.Time `gorm:"column:ends_on" json:"-"`
+	Description *string    `gorm:"column:description" json:"description"`
+	CreatedAt   time.Time  `gorm:"column:created_at" json:"-"`
+	UpdatedAt   time.Time  `gorm:"column:updated_at" json:"-"`
+}
+
+func (Event) TableName() string { return "events" }
+
+// Draft — черновик автосохранения текста пользователя.
+type Draft struct {
+	ID        int       `gorm:"primaryKey" json:"id"`
+	UserID    int       `gorm:"column:user_id" json:"user_id"`
+	Scope     string    `gorm:"column:scope" json:"scope"`
+	Body      string    `gorm:"column:body" json:"body"`
+	UpdatedAt time.Time `gorm:"column:updated_at" json:"-"`
+}
+
+func (Draft) TableName() string { return "drafts" }

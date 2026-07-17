@@ -242,8 +242,16 @@ function canCopy(m) {
 function startReply(m, selText) {
   editingMsg.value = null
   const sel = (selText || '').trim()
-  replyTo.value = { id: m.id, author_name: nameOf(m), body: sel ? sel.slice(0, 200) : snippet(m.body), quote: sel ? sel.slice(0, 300) : null }
+  replyTo.value = { id: m.id, author_name: nameOf(m), body: sel ? sel.slice(0, 200) : snippet(m.body), quote: sel ? sel.slice(0, 300) : quoteText(m.body) }
   nextTick(() => inputEl.value?.focus())
+}
+// Текст цитаты для пересылаемого reply_quote: чистим медиа-разметку, но СОХРАНЯЕМ переносы строк.
+function quoteText(b) {
+  return (b || '')
+    .replace(/@\[audio\]\([^)]*\)/g, '🎤 Голосовое')
+    .replace(/@\[file\]\([^|)]*\|([^)]*)\)/g, (_m, name) => { try { return '📎 ' + decodeURIComponent(name) } catch { return '📎 файл' } })
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, '🖼 Фото')
+    .trim().slice(0, 300)
 }
 function startEdit(m) { replyTo.value = null; editingMsg.value = m; body.value = m.body; nextTick(() => { autoGrow(); inputEl.value?.focus() }) }
 function cancelEdit() { editingMsg.value = null; body.value = activeId.value ? loadDraft(activeId.value) : '' }
@@ -516,6 +524,12 @@ function avatarOf(m) { return memberById.value[m.author_id]?.avatar_url || null 
 function nameOf(m) { return m.author_name || memberById.value[m.author_id]?.full_name || '' }
 const myAvatar = computed(() => memberById.value[chatState.meId]?.avatar_url || null)
 const myName = computed(() => memberById.value[chatState.meId]?.full_name || '')
+// имя автора цитируемого сообщения (если оно ещё в загруженной ленте)
+function replyAuthorName(m) {
+  if (!m.reply_to_id) return ''
+  const q = chatState.messages.find((x) => x.id === m.reply_to_id)
+  return q ? nameOf(q) : ''
+}
 function isRunEnd(m, i) { return !sameGroup(m, chatState.messages[i + 1]) } // последний в группе — к нему аватар
 function rowJustify(m) { return (isMine(m) && !wide.value) ? 'justify-end' : 'justify-start' }
 function fmtTime(ts) { if (!ts) return ''; const d = new Date(ts); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}` }
@@ -758,18 +772,26 @@ onBeforeUnmount(() => {
           </div>
           <div :id="`msg-${m.id}`"
                class="group flex items-end gap-2" :class="rowJustify(m)">
-            <!-- аватар (в группах, у чужих сообщений) -->
+            <!-- аватар (в группах, слева от сообщения — и у чужих, и у своих) -->
             <template v-if="isGroup && !isMine(m)">
-              <img v-if="avatarOf(m) && isRunEnd(m, i)" :src="avatarOf(m)" class="photo-bw h-8 w-8 shrink-0 rounded-full object-cover" />
-              <span v-else-if="isRunEnd(m, i)" class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-sage-400 to-sage-600 text-xs font-semibold text-white">{{ initials(nameOf(m)) }}</span>
-              <span v-else class="h-8 w-8 shrink-0"></span>
+              <img v-if="avatarOf(m) && isRunEnd(m, i)" :src="avatarOf(m)" class="photo-bw h-10 w-10 shrink-0 rounded-full object-cover" />
+              <span v-else-if="isRunEnd(m, i)" class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-sage-400 to-sage-600 text-sm font-semibold text-white">{{ initials(nameOf(m)) }}</span>
+              <span v-else class="h-10 w-10 shrink-0"></span>
+            </template>
+            <template v-else-if="isGroup && isMine(m)">
+              <img v-if="myAvatar && isRunEnd(m, i)" :src="myAvatar" class="photo-bw h-10 w-10 shrink-0 rounded-full object-cover" />
+              <span v-else-if="isRunEnd(m, i)" class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-saffron-400 to-saffron-600 text-sm font-semibold text-white">{{ initials(myName) }}</span>
+              <span v-else class="h-10 w-10 shrink-0"></span>
             </template>
             <!-- ФОТО-сообщение: без «полей» пузыря (как в телеге) -->
             <div v-if="isPhoto(m)" class="relative overflow-hidden rounded-2xl shadow-sm"
                  :class="[wide ? 'max-w-[420px]' : 'max-w-[80%]', captionText(m) && (isMine(m) ? 'bg-saffron-500 text-white' : 'bg-white text-ink-900 ring-1 ring-parchment-200')]"
                  @contextmenu="onContext($event, m)">
               <div v-if="showAuthor(m, i)" class="px-3 pt-2 text-xs font-semibold text-sage-600">{{ nameOf(m) }}</div>
-              <div v-if="m.reply_preview" class="mx-3 mt-2 border-l-2 border-saffron-400 pl-2 text-xs text-ink-700/70">{{ m.reply_preview }}</div>
+              <div v-if="m.reply_preview" class="mx-3 mt-2 rounded-r-md border-l-2 border-saffron-400 bg-black/5 py-1 pl-2 pr-2 text-xs">
+                <div v-if="replyAuthorName(m)" class="font-semibold text-saffron-700">{{ replyAuthorName(m) }}</div>
+                <div class="whitespace-pre-wrap break-words text-ink-700/70">{{ m.reply_preview }}</div>
+              </div>
               <img v-for="(u, k) in photoUrls(m)" :key="k" :src="u" loading="lazy"
                    class="block max-h-[400px] w-full cursor-zoom-in object-cover" @click.stop="openLightbox(u)" />
               <div v-if="captionText(m)" class="markdown-body break-words px-3.5 pt-1.5 text-[15px]" :class="isMine(m) && 'markdown-on-accent'" v-html="renderChatBody(captionText(m))"></div>
@@ -794,7 +816,10 @@ onBeforeUnmount(() => {
                  :data-audio-label="`${nameOf(m) || 'Голосовое'} · ${fmtTime(m.created_at)}`"
                  @contextmenu="onContext($event, m)">
               <div v-if="showAuthor(m, i)" class="mb-0.5 text-xs font-semibold text-sage-600">{{ nameOf(m) }}</div>
-              <div v-if="m.reply_preview" class="mb-1 border-l-2 pl-2 text-xs opacity-80" :class="isMine(m) ? 'border-white/60' : 'border-saffron-400'">{{ m.reply_preview }}</div>
+              <div v-if="m.reply_preview" class="mb-1 rounded-r-md border-l-2 py-1 pl-2 pr-2 text-xs" :class="isMine(m) ? 'border-white/70 bg-white/10' : 'border-saffron-400 bg-saffron-500/5'">
+                <div v-if="replyAuthorName(m)" class="font-semibold" :class="isMine(m) ? 'text-white' : 'text-saffron-700'">{{ replyAuthorName(m) }}</div>
+                <div class="whitespace-pre-wrap break-words opacity-80">{{ m.reply_preview }}</div>
+              </div>
               <div v-if="m.deleted" class="italic opacity-60">сообщение удалено</div>
               <div v-else class="markdown-body break-words" :class="isMine(m) && 'markdown-on-accent'" v-html="renderChatBody(m.body)"></div>
 
@@ -820,12 +845,6 @@ onBeforeUnmount(() => {
                 </div>
               </div>
             </div>
-            <!-- аватар своих сообщений (в группах, справа) -->
-            <template v-if="isGroup && isMine(m)">
-              <img v-if="myAvatar && isRunEnd(m, i)" :src="myAvatar" class="photo-bw h-8 w-8 shrink-0 rounded-full object-cover" />
-              <span v-else-if="isRunEnd(m, i)" class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-saffron-400 to-saffron-600 text-xs font-semibold text-white">{{ initials(myName) }}</span>
-              <span v-else class="h-8 w-8 shrink-0"></span>
-            </template>
           </div>
           </template>
           </div>

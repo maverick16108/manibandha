@@ -42,9 +42,14 @@ func httpErr(w http.ResponseWriter, status int, detail string) {
 	writeJSON(w, status, map[string]string{"detail": detail})
 }
 
-// tsUTC форматирует момент в UTC с суффиксом Z (как pydantic).
+// tsUTC форматирует момент в UTC с суффиксом Z (как pydantic):
+// 6 знаков микросекунд, если они есть, иначе без дробной части.
 func tsUTC(t time.Time) string {
-	return t.UTC().Format("2006-01-02T15:04:05.999999Z07:00")
+	u := t.UTC()
+	if u.Nanosecond() == 0 {
+		return u.Format("2006-01-02T15:04:05Z07:00")
+	}
+	return u.Format("2006-01-02T15:04:05.000000Z07:00")
 }
 
 func decodeJSON(r *http.Request, dst any) error {

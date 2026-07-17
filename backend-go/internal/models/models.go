@@ -15,7 +15,12 @@ func (t Time) MarshalJSON() ([]byte, error) {
 	if t.Time.IsZero() {
 		return []byte("null"), nil
 	}
-	return []byte(`"` + t.Time.UTC().Format("2006-01-02T15:04:05.999999Z07:00") + `"`), nil
+	u := t.Time.UTC()
+	layout := "2006-01-02T15:04:05.000000Z07:00"
+	if u.Nanosecond() == 0 {
+		layout = "2006-01-02T15:04:05Z07:00"
+	}
+	return []byte(`"` + u.Format(layout) + `"`), nil
 }
 
 func (t *Time) Scan(v any) error {
@@ -261,13 +266,83 @@ type Temple struct {
 
 func (Temple) TableName() string { return "temples" }
 
-// Thread — ветка общения (нужна при регистрации: создаётся approval-ветка).
+// Thread — ветка общения (вопрос/отчёт/approval).
 type Thread struct {
-	ID         int     `gorm:"primaryKey" json:"id"`
-	Kind       string  `gorm:"column:kind" json:"kind"`
-	DiscipleID int     `gorm:"column:disciple_id" json:"disciple_id"`
-	Subject    *string `gorm:"column:subject" json:"subject"`
-	Period     *string `gorm:"column:period" json:"period"`
+	ID          int        `gorm:"primaryKey" json:"id"`
+	Kind        string     `gorm:"column:kind" json:"kind"`
+	DiscipleID  int        `gorm:"column:disciple_id" json:"disciple_id"`
+	Subject     *string    `gorm:"column:subject" json:"subject"`
+	Period      *string    `gorm:"column:period" json:"period"`
+	CreatedAt   time.Time  `gorm:"column:created_at" json:"created_at"`
+	UpdatedAt   time.Time  `gorm:"column:updated_at" json:"updated_at"`
+	StaffSeenAt *time.Time `gorm:"column:staff_seen_at" json:"-"`
+
+	Disciple *Disciple       `gorm:"foreignKey:DiscipleID" json:"-"`
+	Messages []ThreadMessage `gorm:"foreignKey:ThreadID" json:"-"`
 }
 
 func (Thread) TableName() string { return "threads" }
+
+// ThreadMessage — сообщение в ветке.
+type ThreadMessage struct {
+	ID        int        `gorm:"primaryKey" json:"id"`
+	ThreadID  int        `gorm:"column:thread_id" json:"thread_id"`
+	AuthorID  *int       `gorm:"column:author_id" json:"author_id"`
+	Body      string     `gorm:"column:body" json:"body"`
+	CreatedAt time.Time  `gorm:"column:created_at" json:"created_at"`
+	EditedAt  *time.Time `gorm:"column:edited_at" json:"-"`
+	EditCount int        `gorm:"column:edit_count" json:"edit_count"`
+	ReplyToID *int       `gorm:"column:reply_to_id" json:"reply_to_id"`
+
+	Author  *User          `gorm:"foreignKey:AuthorID" json:"-"`
+	ReplyTo *ThreadMessage `gorm:"foreignKey:ReplyToID" json:"-"`
+	Likes   []MessageLike  `gorm:"foreignKey:MessageID" json:"-"`
+}
+
+func (ThreadMessage) TableName() string { return "thread_messages" }
+
+// ThreadRead — отметка последнего прочтения ветки пользователем.
+type ThreadRead struct {
+	ID         int       `gorm:"primaryKey" json:"id"`
+	ThreadID   int       `gorm:"column:thread_id" json:"thread_id"`
+	UserID     int       `gorm:"column:user_id" json:"user_id"`
+	LastSeenAt time.Time `gorm:"column:last_seen_at" json:"last_seen_at"`
+}
+
+func (ThreadRead) TableName() string { return "thread_reads" }
+
+// MessageLike — реакция-эмодзи на сообщение ветки.
+type MessageLike struct {
+	ID        int       `gorm:"primaryKey" json:"id"`
+	MessageID int       `gorm:"column:message_id" json:"message_id"`
+	UserID    int       `gorm:"column:user_id" json:"user_id"`
+	Emoji     string    `gorm:"column:emoji" json:"emoji"`
+	CreatedAt time.Time `gorm:"column:created_at" json:"-"`
+}
+
+func (MessageLike) TableName() string { return "message_likes" }
+
+// ── минимальные модели для nav-counts (полные — в модулях forum/conferences) ──
+
+type ForumTopic struct {
+	ID        int       `gorm:"primaryKey" json:"id"`
+	UpdatedAt time.Time `gorm:"column:updated_at" json:"updated_at"`
+}
+
+func (ForumTopic) TableName() string { return "forum_topics" }
+
+type ForumTopicRead struct {
+	ID         int       `gorm:"primaryKey" json:"id"`
+	TopicID    int       `gorm:"column:topic_id" json:"topic_id"`
+	UserID     int       `gorm:"column:user_id" json:"user_id"`
+	LastSeenAt time.Time `gorm:"column:last_seen_at" json:"last_seen_at"`
+}
+
+func (ForumTopicRead) TableName() string { return "forum_topic_reads" }
+
+type Conference struct {
+	ID     int    `gorm:"primaryKey" json:"id"`
+	Status string `gorm:"column:status" json:"status"`
+}
+
+func (Conference) TableName() string { return "conferences" }

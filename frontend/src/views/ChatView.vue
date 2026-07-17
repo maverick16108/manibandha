@@ -296,27 +296,34 @@ async function uploadAndSend(files, mode = 'file') {
   } finally { uploading.value = false }
 }
 
-// диалог отправки изображений: превью + подпись + «сжать»
-const composeItems = ref([])   // [{ file, url }]
+// диалог отправки вложений (картинки + файлы): превью, подпись, «сжать»
+const composeItems = ref([])   // [{ file, url, isImage, size }]
 const composeCaption = ref('')
 const composeCompress = ref(true)
 const composeInput = ref(null)
 const composeCaptionInput = ref(null)
 const showCompose = computed(() => composeItems.value.length > 0)
-function composeAutoGrow() {
-  const el = composeCaptionInput.value
-  if (!el) return
-  el.style.height = 'auto'
-  el.style.height = Math.min(el.scrollHeight, 160) + 'px'
-}
-// автофокус на подписи при открытии диалога
+const composeImages = computed(() => composeItems.value.filter((it) => it.isImage))
+const composeFiles = computed(() => composeItems.value.filter((it) => !it.isImage))
+function plural(n) { const a = n % 10, b = n % 100; if (a === 1 && b !== 11) return 'файл'; if (a >= 2 && a <= 4 && (b < 10 || b >= 20)) return 'файла'; return 'файлов' }
+const composeTitle = computed(() => {
+  if (!composeImages.value.length) return 'Отправить как файл'
+  if (!composeFiles.value.length) return 'Отправить изображение'
+  return `Выбрано ${composeItems.value.length} ${plural(composeItems.value.length)}`
+})
+function fmtSize(bytes) { if (!bytes) return ''; if (bytes < 1024) return `${bytes} Б`; if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} КБ`; return `${(bytes / 1048576).toFixed(1)} МБ` }
+function composeAutoGrow() { const el = composeCaptionInput.value; if (!el) return; el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight, 160) + 'px' }
 watch(showCompose, (v) => { if (v) nextTick(() => { composeCaptionInput.value?.focus(); composeAutoGrow() }) })
-function addComposeFiles(files) {
-  for (const f of Array.from(files)) if ((f.type || '').startsWith('image/')) composeItems.value.push({ file: f, url: URL.createObjectURL(f) })
+function addComposeItems(files, compress) {
+  if (compress !== undefined) composeCompress.value = compress
+  for (const f of Array.from(files)) {
+    const isImage = (f.type || '').startsWith('image/')
+    composeItems.value.push({ file: f, url: isImage ? URL.createObjectURL(f) : null, isImage, size: f.size })
+  }
 }
-function removeComposeItem(i) { const it = composeItems.value[i]; if (it) URL.revokeObjectURL(it.url); composeItems.value.splice(i, 1) }
-function cancelCompose() { composeItems.value.forEach((it) => URL.revokeObjectURL(it.url)); composeItems.value = []; composeCaption.value = ''; composeCompress.value = true }
-function onComposeAdd(ev) { addComposeFiles(ev.target.files || []); if (composeInput.value) composeInput.value.value = '' }
+function removeComposeItem(it) { const i = composeItems.value.indexOf(it); if (i < 0) return; if (it.url) URL.revokeObjectURL(it.url); composeItems.value.splice(i, 1) }
+function cancelCompose() { composeItems.value.forEach((it) => it.url && URL.revokeObjectURL(it.url)); composeItems.value = []; composeCaption.value = ''; composeCompress.value = true }
+function onComposeAdd(ev) { addComposeItems(ev.target.files || []); if (composeInput.value) composeInput.value.value = '' }
 async function sendCompose() {
   const items = [...composeItems.value]; const cap = composeCaption.value.trim(); const compress = composeCompress.value
   if (!items.length) return
@@ -330,7 +337,7 @@ async function sendCompose() {
       catch (e) { showToast(e.response?.data?.detail || 'Не удалось загрузить'); continue }
       const url = data.urls?.[0]; if (!url) continue
       let bodyStr
-      if (compress) bodyStr = `![](${url})`
+      if (it.isImage && compress) bodyStr = `![](${url})`
       else { const name = (it.file.name || 'файл').replace(/[|)(]/g, '_'); bodyStr = `@[file](${url}|${encodeURIComponent(name)})` }
       if (first && cap) bodyStr += `\n${cap}`
       first = false
@@ -343,16 +350,13 @@ async function sendCompose() {
 async function onPickFile(ev) {
   const files = Array.from(ev.target.files || [])
   if (fileInput.value) fileInput.value.value = ''
-  const imgs = files.filter((f) => (f.type || '').startsWith('image/'))
-  const others = files.filter((f) => !(f.type || '').startsWith('image/'))
-  if (imgs.length) addComposeFiles(imgs)              // картинки → диалог
-  if (others.length) await uploadAndSend(others, 'file')
+  if (files.length) addComposeItems(files)   // всё → диалог
 }
-// вставка из буфера (Ctrl+V) — открыть диалог отправки изображения
+// вставка из буфера (Ctrl+V) — картинку в диалог
 async function onPaste(e) {
   const imgs = Array.from(e.clipboardData?.items || [])
     .filter((i) => i.type.startsWith('image/')).map((i) => i.getAsFile()).filter(Boolean)
-  if (imgs.length) { e.preventDefault(); addComposeFiles(imgs) }
+  if (imgs.length) { e.preventDefault(); addComposeItems(imgs) }
 }
 
 // содержимое сообщения: картинки / подпись / вложения
@@ -362,21 +366,21 @@ function photoUrls(m) {
 }
 function captionText(m) { return (m.body || '').replace(/!\[[^\]]*\]\([^)]*\)/g, '').trim() }
 function isPhoto(m) { return photoUrls(m).length > 0 }
-// drag&drop — две зоны: сверху «файлом» (без сжатия), снизу «картинкой»
+// drag&drop — если все картинки: две зоны (файлом/картинкой); иначе одна зона «файлом»
 const dragOver = ref(false)
 const hoverZone = ref(null)
-function onDragOver(e) { if (activeId.value && e.dataTransfer?.types?.includes('Files')) { e.preventDefault(); dragOver.value = true } }
+const dragAllImages = ref(false)
+function onDragOver(e) {
+  if (!activeId.value || !e.dataTransfer?.types?.includes('Files')) return
+  e.preventDefault(); dragOver.value = true
+  const items = Array.from(e.dataTransfer.items || []).filter((it) => it.kind === 'file')
+  dragAllImages.value = items.length > 0 && items.every((it) => (it.type || '').startsWith('image/'))
+}
 function onDragLeave(e) { if (!e.relatedTarget || !e.currentTarget.contains(e.relatedTarget)) { dragOver.value = false; hoverZone.value = null } }
 function onZoneDrop(e, mode) {
   e.preventDefault(); dragOver.value = false; hoverZone.value = null
   const files = Array.from(e.dataTransfer?.files || [])
-  if (!files.length) return
-  if (mode === 'file') { uploadAndSend(files, 'file'); return }
-  // зона «картинкой»: картинки → диалог, прочее → файлом
-  const imgs = files.filter((f) => (f.type || '').startsWith('image/'))
-  const others = files.filter((f) => !(f.type || '').startsWith('image/'))
-  if (imgs.length) addComposeFiles(imgs)
-  if (others.length) uploadAndSend(others, 'file')
+  if (files.length) addComposeItems(files, mode === 'picture')  // 'picture' → сжать, 'file' → без сжатия
 }
 
 // ── голосовые ────────────────────────────────────────────────────────────
@@ -838,21 +842,29 @@ onBeforeUnmount(() => {
         <p class="mt-3 text-sm">Выберите чат или начните новый</p>
       </div>
 
-      <!-- Две зоны для перетаскивания: сверху файлом (без сжатия), снизу картинкой -->
+      <!-- Перетаскивание: если все картинки — две зоны; иначе одна зона «файлы» -->
       <div v-if="dragOver && activeChat" class="absolute inset-0 z-30 flex flex-col gap-3 bg-parchment-100/70 p-4 backdrop-blur-sm">
-        <div class="flex flex-1 flex-col items-center justify-center rounded-3xl border-2 border-dashed transition-colors"
-             :class="hoverZone === 'file' ? 'border-saffron-500 bg-saffron-500/20' : 'border-saffron-300 bg-white/70'"
-             @dragover.prevent="hoverZone = 'file'" @dragleave="hoverZone = null" @drop="onZoneDrop($event, 'file')">
+        <template v-if="dragAllImages">
+          <div class="flex flex-1 flex-col items-center justify-center rounded-3xl border-2 border-dashed transition-colors"
+               :class="hoverZone === 'file' ? 'border-saffron-500 bg-saffron-500/20' : 'border-saffron-300 bg-white/70'"
+               @dragover.prevent="hoverZone = 'file'" @dragleave="hoverZone = null" @drop="onZoneDrop($event, 'file')">
+            <AppIcon name="paperclip" :size="34" class="text-saffron-600" />
+            <div class="mt-3 font-display text-2xl font-semibold text-saffron-700">Перетащите сюда</div>
+            <div class="mt-1 text-sm text-ink-700/60">чтобы отправить файлом — без сжатия</div>
+          </div>
+          <div class="flex flex-1 flex-col items-center justify-center rounded-3xl border-2 border-dashed transition-colors"
+               :class="hoverZone === 'picture' ? 'border-sage-500 bg-sage-500/20' : 'border-sage-400 bg-white/70'"
+               @dragover.prevent="hoverZone = 'picture'" @dragleave="hoverZone = null" @drop="onZoneDrop($event, 'picture')">
+            <AppIcon name="image" :size="34" class="text-sage-600" />
+            <div class="mt-3 font-display text-2xl font-semibold text-sage-600">Перетащите сюда</div>
+            <div class="mt-1 text-sm text-ink-700/60">чтобы отправить картинкой — быстро</div>
+          </div>
+        </template>
+        <div v-else class="flex flex-1 flex-col items-center justify-center rounded-3xl border-2 border-dashed border-saffron-400 bg-white/70"
+             @dragover.prevent @drop="onZoneDrop($event, 'file')">
           <AppIcon name="paperclip" :size="34" class="text-saffron-600" />
-          <div class="mt-3 font-display text-2xl font-semibold text-saffron-700">Перетащите сюда</div>
-          <div class="mt-1 text-sm text-ink-700/60">чтобы отправить файлом — без сжатия</div>
-        </div>
-        <div class="flex flex-1 flex-col items-center justify-center rounded-3xl border-2 border-dashed transition-colors"
-             :class="hoverZone === 'picture' ? 'border-sage-500 bg-sage-500/20' : 'border-sage-400 bg-white/70'"
-             @dragover.prevent="hoverZone = 'picture'" @dragleave="hoverZone = null" @drop="onZoneDrop($event, 'picture')">
-          <AppIcon name="image" :size="34" class="text-sage-600" />
-          <div class="mt-3 font-display text-2xl font-semibold text-sage-600">Перетащите сюда</div>
-          <div class="mt-1 text-sm text-ink-700/60">чтобы отправить картинкой — быстро</div>
+          <div class="mt-3 font-display text-2xl font-semibold text-saffron-700">Перетащите сюда файлы</div>
+          <div class="mt-1 text-sm text-ink-700/60">чтобы отправить без сжатия</div>
         </div>
       </div>
     </section>
@@ -890,30 +902,39 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <!-- Диалог отправки изображений -->
+    <!-- Диалог отправки вложений (картинки + файлы) -->
     <div v-if="showCompose" class="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/40 p-4" @click.self="cancelCompose">
       <div class="flex max-h-[85vh] w-full max-w-md flex-col overflow-hidden rounded-xl bg-white shadow-xl">
         <div class="flex items-center justify-between border-b border-parchment-200 px-4 py-3">
-          <h3 class="font-medium text-ink-900">Отправить изображение</h3>
+          <h3 class="font-medium text-ink-900">{{ composeTitle }}</h3>
           <button class="text-ink-700/40 hover:text-ink-900" @click="cancelCompose"><AppIcon name="close" :size="18" /></button>
         </div>
-        <div class="flex-1 overflow-y-auto p-4">
-          <div class="grid grid-cols-3 gap-2">
-            <div v-for="(it, k) in composeItems" :key="k" class="group relative aspect-square overflow-hidden rounded-lg ring-1 ring-parchment-200">
+        <div class="flex-1 space-y-3 overflow-y-auto p-4">
+          <!-- файлы -->
+          <div v-for="(it, k) in composeFiles" :key="'f' + k" class="flex items-center gap-3 rounded-lg bg-parchment-50 px-3 py-2 ring-1 ring-parchment-200">
+            <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-saffron-500/15 text-saffron-700"><AppIcon name="paperclip" :size="18" /></span>
+            <span class="min-w-0 flex-1">
+              <span class="block truncate text-sm text-ink-900">{{ it.file.name }}</span>
+              <span class="block text-xs text-ink-700/50">{{ fmtSize(it.size) }}</span>
+            </span>
+            <button class="text-ink-700/40 hover:text-red-600" title="Убрать" @click="removeComposeItem(it)"><AppIcon name="trash" :size="16" /></button>
+          </div>
+          <!-- картинки -->
+          <div v-if="composeImages.length" class="grid grid-cols-3 gap-2">
+            <div v-for="(it, k) in composeImages" :key="'i' + k" class="group relative aspect-square overflow-hidden rounded-lg ring-1 ring-parchment-200">
               <img :src="it.url" class="h-full w-full object-cover" />
-              <button class="absolute right-1 top-1 hidden rounded-full bg-ink-900/60 p-1 text-white group-hover:block" title="Убрать" @click="removeComposeItem(k)">
-                <AppIcon name="trash" :size="14" />
-              </button>
+              <button class="absolute right-1 top-1 hidden rounded-full bg-ink-900/60 p-1 text-white group-hover:block" title="Убрать" @click="removeComposeItem(it)"><AppIcon name="trash" :size="14" /></button>
             </div>
             <button class="flex aspect-square items-center justify-center rounded-lg border-2 border-dashed border-parchment-300 text-ink-700/50 hover:border-saffron-400 hover:text-saffron-600" title="Добавить" @click="composeInput.click()">
               <AppIcon name="plus" :size="24" />
             </button>
           </div>
-          <input ref="composeInput" type="file" accept="image/*" multiple class="hidden" @change="onComposeAdd" />
-          <label class="mt-4 flex items-center gap-2.5 text-sm text-ink-800">
+          <button v-else class="btn-outline w-full text-sm" @click="composeInput.click()"><AppIcon name="plus" :size="16" /> Добавить</button>
+          <input ref="composeInput" type="file" multiple class="hidden" @change="onComposeAdd" />
+          <label v-if="composeImages.length" class="flex items-center gap-2.5 text-sm text-ink-800">
             <input type="checkbox" v-model="composeCompress" class="h-4 w-4" /> Сжать изображение
           </label>
-          <div class="mt-3">
+          <div>
             <label class="label">Подпись</label>
             <textarea ref="composeCaptionInput" v-model="composeCaption" rows="1" :maxlength="MAX_LEN"
                       class="input max-h-40 resize-none overflow-y-auto" placeholder="Добавьте подпись…"
@@ -1021,13 +1042,13 @@ onBeforeUnmount(() => {
 .markdown-body :deep(.chat-file__ic) { font-size: 1.2em; }
 .markdown-body :deep(.chat-file__name) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-decoration: underline; }
 
-/* тематический ведический фон переписки — многослойная лотос-мандала (латтис) */
+/* тематический ведический фон переписки — ажурные мандалы */
 .chat-bg {
-  background-color: #fbf6ee;
+  background-color: #fbf3e6;
   background-image:
-    url('/chat-doodle.svg'),
-    linear-gradient(170deg, rgba(200,121,46,0.05) 0%, rgba(150,90,170,0.07) 100%);
-  background-size: 340px 340px, cover;
+    url('/chat-mandala.svg'),
+    linear-gradient(160deg, rgba(214,158,74,0.12) 0%, rgba(200,121,46,0.09) 100%);
+  background-size: 430px 430px, cover;
   background-repeat: repeat, no-repeat;
 }
 </style>

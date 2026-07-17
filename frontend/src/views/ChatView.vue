@@ -253,7 +253,40 @@ const selected = reactive(new Set())
 function enterSelect(m) { selectMode.value = true; if (m?.id) selected.add(m.id) }
 function toggleSelect(m) { if (!m?.id) return; selected.has(m.id) ? selected.delete(m.id) : selected.add(m.id) }
 function exitSelect() { selectMode.value = false; selected.clear() }
-function onRowClick(e, m) { if (!selectMode.value) return; e.preventDefault(); e.stopPropagation(); toggleSelect(m) }
+// выделение перетаскиванием: зажать ЛКМ на сообщении и вести — выделяется диапазон
+let dragSel = null, dragMoved = false, suppressRowClick = false
+function selDragStart(e, m, i) {
+  if (!selectMode.value || e.button !== 0) return
+  dragSel = { anchor: i, mode: selected.has(m.id) ? 'remove' : 'add', base: new Set(selected) }
+  dragMoved = false
+  window.addEventListener('mouseup', selDragEnd)
+}
+function selDragEnter(i) {
+  if (!dragSel || i === dragSel.anchor) return
+  dragMoved = true
+  applyDragRange(i)
+}
+function applyDragRange(i) {
+  const a = Math.min(dragSel.anchor, i), b = Math.max(dragSel.anchor, i)
+  selected.clear()
+  for (const id of dragSel.base) selected.add(id)
+  for (let k = a; k <= b; k++) {
+    const mm = chatState.messages[k]
+    if (!mm?.id) continue
+    if (dragSel.mode === 'add') selected.add(mm.id); else selected.delete(mm.id)
+  }
+}
+function selDragEnd() {
+  window.removeEventListener('mouseup', selDragEnd)
+  if (dragMoved) suppressRowClick = true // клик после drag не должен переключать якорь
+  dragSel = null
+}
+function onRowClick(e, m) {
+  if (!selectMode.value) return
+  e.preventDefault(); e.stopPropagation()
+  if (suppressRowClick) { suppressRowClick = false; return }
+  toggleSelect(m)
+}
 const selectedMsgs = computed(() => chatState.messages.filter((m) => selected.has(m.id)))
 
 // ── пересылка ──
@@ -998,8 +1031,9 @@ onBeforeUnmount(() => {
           </div>
           <div :id="`msg-${m.id}`"
                class="group flex items-end gap-2 rounded-xl px-1 transition-colors"
-               :class="[selectMode ? 'cursor-pointer justify-start' : rowJustify(m), selectMode && selected.has(m.id) && 'bg-saffron-500/10']"
-               @click.capture="onRowClick($event, m)">
+               :class="[selectMode ? 'cursor-pointer select-none justify-start' : rowJustify(m), selectMode && selected.has(m.id) && 'bg-saffron-500/10']"
+               @click.capture="onRowClick($event, m)"
+               @mousedown="selDragStart($event, m, i)" @mouseenter="selDragEnter(i)">
             <!-- аватар (в группах, слева от сообщения — и у чужих, и у своих) -->
             <template v-if="isGroup && !isMine(m)">
               <img v-if="avatarOf(m) && isRunEnd(m, i)" :src="thumbUrl(avatarOf(m))" @error="imgFull($event, avatarOf(m))" class="photo-bw h-10 w-10 shrink-0 rounded-full object-cover" />

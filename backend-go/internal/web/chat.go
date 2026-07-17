@@ -191,9 +191,11 @@ func (s *Server) chatOut(chat *models.Chat, userID int) map[string]any {
 	}
 }
 
+func membersOrdered(db *gorm.DB) *gorm.DB { return db.Order("id") }
+
 func (s *Server) loadChat(id int) *models.Chat {
 	var c models.Chat
-	s.DB.Preload("Members").Preload("Members.User").First(&c, id)
+	s.DB.Preload("Members", membersOrdered).Preload("Members.User").First(&c, id)
 	return &c
 }
 
@@ -202,7 +204,7 @@ func (s *Server) loadChat(id int) *models.Chat {
 func (s *Server) listChats(w http.ResponseWriter, r *http.Request) {
 	u := currentUser(r)
 	var chats []models.Chat
-	s.DB.Preload("Members").Preload("Members.User").
+	s.DB.Preload("Members", membersOrdered).Preload("Members.User").
 		Where("id IN ?", s.myChatIDs(u.ID)).Order("updated_at DESC").Find(&chats)
 	out := make([]map[string]any, 0, len(chats))
 	for i := range chats {

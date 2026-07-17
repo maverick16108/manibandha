@@ -639,6 +639,18 @@ function syncVoiceButtons() {
   })
 }
 watch(() => [player.src, player.playing, player.currentTime, player.duration], () => nextTick(syncVoiceButtons))
+// когда открывается верхняя панель плеера, она отъедает высоту сверху — не даём
+// проигрываемому голосовому «уехать» под композер: доводим его до видимой области.
+watch(() => player.visible, (v) => {
+  if (!v) return
+  nextTick(() => {
+    let btn = null
+    try { btn = document.querySelector(`.voice-msg[data-audio="${player.src}"]`) } catch { /* невалидный селектор */ }
+    const row = btn?.closest('[id^="msg-"]')
+    if (row) setTimeout(() => row.scrollIntoView({ block: 'nearest', behavior: 'smooth' }), 280)
+    else if (stickBottom.value) scrollToBottom()
+  })
+})
 
 async function onScroll() {
   if (ctx.open) closeCtx()
@@ -930,9 +942,11 @@ onBeforeUnmount(() => {
                 <div v-if="parseReactions(m).length" class="flex flex-wrap gap-1">
                   <button v-for="r in parseReactions(m)" :key="r.emoji" @click.stop="onChip(m, r.emoji)" @contextmenu.prevent.stop="openWho($event, r)"
                           title="ПКМ — кто поставил"
-                          class="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 ring-1 transition"
-                          :class="m.my_reaction === r.emoji ? (isMine(m) ? 'bg-white/25 ring-white/60' : 'bg-saffron-500/15 ring-saffron-400') : (isMine(m) ? 'bg-white/10 ring-white/25' : 'bg-parchment-100 ring-parchment-200')">
-                    <span class="text-lg leading-none">{{ r.emoji }}</span><span v-if="r.count > 1" class="text-xs font-semibold tabular-nums">{{ r.count }}</span>
+                          class="flex items-center gap-1 rounded-full px-2.5 py-1 leading-none ring-1 transition"
+                          :class="isMine(m)
+                            ? (m.my_reaction === r.emoji ? 'bg-white/25 ring-white/60' : 'bg-white/15 ring-white/20 hover:bg-white/25')
+                            : (m.my_reaction === r.emoji ? 'bg-saffron-500/25 text-saffron-800 ring-saffron-400' : 'bg-saffron-500/10 text-ink-700 ring-transparent hover:bg-saffron-500/20')">
+                    <span class="text-xl leading-none">{{ r.emoji }}</span><span v-if="r.count > 1" class="text-sm font-semibold tabular-nums">{{ r.count }}</span>
                   </button>
                 </div>
                 <span v-else></span>

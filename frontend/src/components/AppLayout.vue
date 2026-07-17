@@ -126,9 +126,9 @@ function logout() {
     >
       <!-- перетаскивание правого края для изменения ширины (десктоп, развёрнутое) -->
       <div v-if="!collapsed" class="absolute inset-y-0 right-0 z-40 hidden w-1.5 cursor-col-resize hover:bg-saffron-300/50 lg:block" @mousedown="startNavResize"></div>
-      <div class="flex h-16 shrink-0 items-center gap-2.5 border-b border-parchment-200 px-5" :class="collapsed && 'lg:justify-center lg:px-0'">
-        <img src="/lotus-mark.png" alt="" class="h-9 w-auto" :class="collapsed && 'lg:hidden'" />
-        <span class="font-display text-2xl font-semibold leading-none text-ink-900" :class="collapsed && 'lg:hidden'">Манибандха</span>
+      <div class="flex h-16 shrink-0 items-center gap-2.5 overflow-hidden border-b border-parchment-200 px-5" :class="collapsed && 'lg:justify-center lg:px-0'">
+        <img src="/lotus-mark.png" alt="" class="h-9 w-auto shrink-0" :class="collapsed && 'lg:hidden'" />
+        <span class="min-w-0 flex-1 truncate font-display text-2xl font-semibold leading-none text-ink-900" :class="collapsed && 'lg:hidden'">Манибандха</span>
         <!-- свернуть (в развёрнутом виде) -->
         <button class="ml-auto hidden rounded-lg p-1.5 text-ink-700/60 hover:bg-parchment-100 lg:block" :class="collapsed && 'lg:hidden'" title="Свернуть меню" @click="collapsed = true">
           <AppIcon name="sidebar" :size="20" />

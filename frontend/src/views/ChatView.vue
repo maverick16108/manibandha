@@ -7,6 +7,7 @@ import AppIcon from '../components/AppIcon.vue'
 import AudioBar from '../components/AudioBar.vue'
 import { renderMarkdown } from '../lib/markdown'
 import { player, playAudio, seek } from '../composables/audioPlayer'
+import { openLightbox } from '../composables/lightbox'
 import { showToast } from '../composables/toast'
 import { confirmDialog } from '../composables/confirm'
 import { usePageTitle } from '../composables/pageTitle'
@@ -255,9 +256,9 @@ function insertEmoji(e) {
   nextTick(() => { autoGrow(); el?.focus(); const p = pos + e.length; el?.setSelectionRange(p, p) })
 }
 
-// ── вложения (скрепка) ───────────────────────────────────────────────────
-// mode: 'picture' — картинки вставкой, остальное файлом; 'file' — всё файлом
-async function uploadAndSend(files, mode = 'picture') {
+// ── вложения ──────────────────────────────────────────────────────────────
+// прямая отправка файлов (без диалога): mode 'file' | 'picture'
+async function uploadAndSend(files, mode = 'file') {
   const list = Array.from(files || [])
   if (!list.length || !activeId.value) return
   uploading.value = true
@@ -278,17 +279,64 @@ async function uploadAndSend(files, mode = 'picture') {
     scrollToBottom()
   } finally { uploading.value = false }
 }
+
+// диалог отправки изображений: превью + подпись + «сжать»
+const composeItems = ref([])   // [{ file, url }]
+const composeCaption = ref('')
+const composeCompress = ref(true)
+const composeInput = ref(null)
+const showCompose = computed(() => composeItems.value.length > 0)
+function addComposeFiles(files) {
+  for (const f of Array.from(files)) if ((f.type || '').startsWith('image/')) composeItems.value.push({ file: f, url: URL.createObjectURL(f) })
+}
+function removeComposeItem(i) { const it = composeItems.value[i]; if (it) URL.revokeObjectURL(it.url); composeItems.value.splice(i, 1) }
+function cancelCompose() { composeItems.value.forEach((it) => URL.revokeObjectURL(it.url)); composeItems.value = []; composeCaption.value = ''; composeCompress.value = true }
+function onComposeAdd(ev) { addComposeFiles(ev.target.files || []); if (composeInput.value) composeInput.value.value = '' }
+async function sendCompose() {
+  const items = [...composeItems.value]; const cap = composeCaption.value.trim(); const compress = composeCompress.value
+  if (!items.length) return
+  uploading.value = true
+  try {
+    let first = true
+    for (const it of items) {
+      const fd = new FormData(); fd.append('files', it.file)
+      let data
+      try { ({ data } = await client.post('/uploads', fd, { headers: { 'Content-Type': 'multipart/form-data' } })) }
+      catch (e) { showToast(e.response?.data?.detail || 'Не удалось загрузить'); continue }
+      const url = data.urls?.[0]; if (!url) continue
+      let bodyStr
+      if (compress) bodyStr = `![](${url})`
+      else { const name = (it.file.name || 'файл').replace(/[|)(]/g, '_'); bodyStr = `@[file](${url}|${encodeURIComponent(name)})` }
+      if (first && cap) bodyStr += `\n${cap}`
+      first = false
+      await sendMessage(bodyStr)
+    }
+    scrollToBottom()
+  } finally { uploading.value = false; cancelCompose() }
+}
+
 async function onPickFile(ev) {
   const files = Array.from(ev.target.files || [])
   if (fileInput.value) fileInput.value.value = ''
-  await uploadAndSend(files, 'picture')
+  const imgs = files.filter((f) => (f.type || '').startsWith('image/'))
+  const others = files.filter((f) => !(f.type || '').startsWith('image/'))
+  if (imgs.length) addComposeFiles(imgs)              // картинки → диалог
+  if (others.length) await uploadAndSend(others, 'file')
 }
-// вставка из буфера обмена (Ctrl+V) — картинку сразу отправляем
+// вставка из буфера (Ctrl+V) — открыть диалог отправки изображения
 async function onPaste(e) {
   const imgs = Array.from(e.clipboardData?.items || [])
     .filter((i) => i.type.startsWith('image/')).map((i) => i.getAsFile()).filter(Boolean)
-  if (imgs.length) { e.preventDefault(); await uploadAndSend(imgs, 'picture') }
+  if (imgs.length) { e.preventDefault(); addComposeFiles(imgs) }
 }
+
+// содержимое сообщения: картинки / подпись / вложения
+function photoUrls(m) {
+  if (m.deleted || /@\[audio\]|@\[file\]/.test(m.body || '')) return []
+  const urls = []; (m.body || '').replace(/!\[[^\]]*\]\(([^)]+)\)/g, (_x, u) => { urls.push(u); return '' }); return urls
+}
+function captionText(m) { return (m.body || '').replace(/!\[[^\]]*\]\([^)]*\)/g, '').trim() }
+function isPhoto(m) { return photoUrls(m).length > 0 }
 // drag&drop — две зоны: сверху «файлом» (без сжатия), снизу «картинкой»
 const dragOver = ref(false)
 const hoverZone = ref(null)
@@ -297,7 +345,13 @@ function onDragLeave(e) { if (!e.relatedTarget || !e.currentTarget.contains(e.re
 function onZoneDrop(e, mode) {
   e.preventDefault(); dragOver.value = false; hoverZone.value = null
   const files = Array.from(e.dataTransfer?.files || [])
-  if (files.length) uploadAndSend(files, mode)
+  if (!files.length) return
+  if (mode === 'file') { uploadAndSend(files, 'file'); return }
+  // зона «картинкой»: картинки → диалог, прочее → файлом
+  const imgs = files.filter((f) => (f.type || '').startsWith('image/'))
+  const others = files.filter((f) => !(f.type || '').startsWith('image/'))
+  if (imgs.length) addComposeFiles(imgs)
+  if (others.length) uploadAndSend(others, 'file')
 }
 
 // ── голосовые ────────────────────────────────────────────────────────────
@@ -507,6 +561,7 @@ async function saveGroup() {
 function onGlobalKey(e) {
   if (e.key !== 'Escape') return
   if (recording.value) cancelRec()
+  else if (showCompose.value) cancelCompose()
   else if (showGroupEdit.value) showGroupEdit.value = false
   else if (showNew.value) closeNew()
   else if (showEmoji.value) showEmoji.value = false
@@ -549,6 +604,7 @@ onBeforeUnmount(() => {
   document.removeEventListener('keydown', onGlobalKey)
   document.removeEventListener('keydown', onDocType)
   resizeObs?.disconnect()
+  cancelCompose()
   if (draftTimer) clearTimeout(draftTimer)
   if (activeId.value && !editingMsg.value) saveDraft(activeId.value, body.value) // сохранить черновик при уходе
   if (recording.value) { recCanceled = true; stopRec() }
@@ -642,7 +698,32 @@ onBeforeUnmount(() => {
               <span v-else class="h-8 w-8 shrink-0"></span>
             </template>
             <span v-else-if="isGroup && isMine(m) && wide" class="h-8 w-8 shrink-0"></span>
-            <div class="relative rounded-2xl px-3.5 py-2 text-[15px] shadow-sm"
+            <!-- ФОТО-сообщение: без «полей» пузыря (как в телеге) -->
+            <div v-if="isPhoto(m)" class="relative overflow-hidden rounded-2xl shadow-sm"
+                 :class="[wide ? 'max-w-[420px]' : 'max-w-[80%]', captionText(m) && (isMine(m) ? 'bg-saffron-500 text-white' : 'bg-white text-ink-900 ring-1 ring-parchment-200')]"
+                 @contextmenu="onContext($event, m)">
+              <div v-if="showAuthor(m, i)" class="px-3 pt-2 text-xs font-semibold text-sage-600">{{ nameOf(m) }}</div>
+              <div v-if="m.reply_preview" class="mx-3 mt-2 border-l-2 border-saffron-400 pl-2 text-xs text-ink-700/70">{{ m.reply_preview }}</div>
+              <img v-for="(u, k) in photoUrls(m)" :key="k" :src="u" loading="lazy"
+                   class="block max-h-[400px] w-full cursor-zoom-in object-cover" @click.stop="openLightbox(u)" />
+              <div v-if="captionText(m)" class="markdown-body break-words px-3.5 pt-1.5 text-[15px]" :class="isMine(m) && 'markdown-on-accent'" v-html="renderChatBody(captionText(m))"></div>
+              <div v-if="parseReactions(m).length" class="flex flex-wrap gap-1 px-2.5 pb-1 pt-1.5">
+                <button v-for="r in parseReactions(m)" :key="r.emoji" @click.stop="onChip(m, r.emoji)"
+                        class="inline-flex items-center gap-0.5 rounded-full bg-black/45 px-1.5 py-0.5 text-xs text-white ring-1 ring-white/20"
+                        :class="m.my_reaction === r.emoji && 'ring-2 ring-white/70'"><span>{{ r.emoji }}</span><span class="tabular-nums">{{ r.count }}</span></button>
+              </div>
+              <div v-if="captionText(m)" class="flex items-center justify-end gap-1 px-3 pb-1.5 pt-0.5 text-[11px]" :class="isMine(m) ? 'text-white/70' : 'text-ink-700/40'">
+                <span>{{ fmtTime(m.created_at) }}</span>
+                <template v-if="statusOf(m)"><AppIcon v-if="statusOf(m) === 'pending'" name="clock" :size="12" /><AppIcon v-else-if="statusOf(m) === 'read'" name="check" :size="12" class="-mr-1" /><AppIcon v-if="statusOf(m) === 'read' || statusOf(m) === 'sent'" name="check" :size="12" /></template>
+              </div>
+              <div v-else class="absolute bottom-1.5 right-1.5 flex items-center gap-1 rounded-full bg-black/45 px-1.5 py-0.5 text-[11px] text-white">
+                <span>{{ fmtTime(m.created_at) }}</span>
+                <template v-if="statusOf(m)"><AppIcon v-if="statusOf(m) === 'pending'" name="clock" :size="12" /><AppIcon v-else-if="statusOf(m) === 'read'" name="check" :size="12" class="-mr-1" /><AppIcon v-if="statusOf(m) === 'read' || statusOf(m) === 'sent'" name="check" :size="12" /></template>
+              </div>
+            </div>
+
+            <!-- обычное сообщение -->
+            <div v-else class="relative rounded-2xl px-3.5 py-2 text-[15px] shadow-sm"
                  :class="[isMine(m) ? 'bg-saffron-500 text-white' : 'bg-white text-ink-900 ring-1 ring-parchment-200', wide ? 'max-w-[600px]' : 'max-w-[78%]']"
                  :data-audio-label="`${nameOf(m) || 'Голосовое'} · ${fmtTime(m.created_at)}`"
                  @contextmenu="onContext($event, m)">
@@ -765,6 +846,41 @@ onBeforeUnmount(() => {
       </div>
     </template>
 
+    <!-- Диалог отправки изображений -->
+    <div v-if="showCompose" class="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/40 p-4" @click.self="cancelCompose">
+      <div class="flex max-h-[85vh] w-full max-w-md flex-col overflow-hidden rounded-xl bg-white shadow-xl">
+        <div class="flex items-center justify-between border-b border-parchment-200 px-4 py-3">
+          <h3 class="font-medium text-ink-900">Отправить изображение</h3>
+          <button class="text-ink-700/40 hover:text-ink-900" @click="cancelCompose"><AppIcon name="close" :size="18" /></button>
+        </div>
+        <div class="flex-1 overflow-y-auto p-4">
+          <div class="grid grid-cols-3 gap-2">
+            <div v-for="(it, k) in composeItems" :key="k" class="group relative aspect-square overflow-hidden rounded-lg ring-1 ring-parchment-200">
+              <img :src="it.url" class="h-full w-full object-cover" />
+              <button class="absolute right-1 top-1 hidden rounded-full bg-ink-900/60 p-1 text-white group-hover:block" title="Убрать" @click="removeComposeItem(k)">
+                <AppIcon name="trash" :size="14" />
+              </button>
+            </div>
+            <button class="flex aspect-square items-center justify-center rounded-lg border-2 border-dashed border-parchment-300 text-ink-700/50 hover:border-saffron-400 hover:text-saffron-600" title="Добавить" @click="composeInput.click()">
+              <AppIcon name="plus" :size="24" />
+            </button>
+          </div>
+          <input ref="composeInput" type="file" accept="image/*" multiple class="hidden" @change="onComposeAdd" />
+          <label class="mt-4 flex items-center gap-2.5 text-sm text-ink-800">
+            <input type="checkbox" v-model="composeCompress" class="h-4 w-4" /> Сжать изображение
+          </label>
+          <div class="mt-3">
+            <label class="label">Подпись</label>
+            <textarea v-model="composeCaption" rows="2" :maxlength="MAX_LEN" class="input resize-none" placeholder="Добавьте подпись…"></textarea>
+          </div>
+        </div>
+        <div class="flex items-center justify-end gap-2 border-t border-parchment-200 p-3">
+          <button class="btn-ghost" @click="cancelCompose">Отмена</button>
+          <button class="btn-primary" :disabled="uploading || !composeItems.length" @click="sendCompose">{{ uploading ? 'Отправка…' : 'Отправить' }}</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Контекстное меню списка чатов (ПКМ) -->
     <template v-if="listCtx.open">
       <div class="fixed inset-0 z-40" @click="closeListCtx" @contextmenu.prevent="closeListCtx"></div>
@@ -863,10 +979,9 @@ onBeforeUnmount(() => {
 .chat-bg {
   background-color: #fbf6ee;
   background-image:
-    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200' viewBox='0 0 200 200'><g fill='none' stroke='%23c07f34' opacity='0.2'><g stroke-width='0.8'><circle cx='0' cy='0' r='12'/><circle cx='0' cy='0' r='19'/><circle cx='0' cy='0' r='25' stroke-dasharray='1.5 6'/><circle cx='200' cy='0' r='12'/><circle cx='200' cy='0' r='19'/><circle cx='200' cy='0' r='25' stroke-dasharray='1.5 6'/><circle cx='0' cy='200' r='12'/><circle cx='0' cy='200' r='19'/><circle cx='0' cy='200' r='25' stroke-dasharray='1.5 6'/><circle cx='200' cy='200' r='12'/><circle cx='200' cy='200' r='19'/><circle cx='200' cy='200' r='25' stroke-dasharray='1.5 6'/></g><g transform='translate(100 100)' stroke-width='0.9'><circle r='2.4' fill='%23c07f34'/><circle r='15'/><circle r='32'/><circle r='47'/><circle r='54' stroke-dasharray='1.5 7'/><path d='M0 -7C4.5 -13 4.5 -18 0 -22C-4.5 -18 -4.5 -13 0 -7Z'/><path d='M0 -7C4.5 -13 4.5 -18 0 -22C-4.5 -18 -4.5 -13 0 -7Z' transform='rotate(45)'/><path d='M0 -7C4.5 -13 4.5 -18 0 -22C-4.5 -18 -4.5 -13 0 -7Z' transform='rotate(90)'/><path d='M0 -7C4.5 -13 4.5 -18 0 -22C-4.5 -18 -4.5 -13 0 -7Z' transform='rotate(135)'/><path d='M0 -7C4.5 -13 4.5 -18 0 -22C-4.5 -18 -4.5 -13 0 -7Z' transform='rotate(180)'/><path d='M0 -7C4.5 -13 4.5 -18 0 -22C-4.5 -18 -4.5 -13 0 -7Z' transform='rotate(225)'/><path d='M0 -7C4.5 -13 4.5 -18 0 -22C-4.5 -18 -4.5 -13 0 -7Z' transform='rotate(270)'/><path d='M0 -7C4.5 -13 4.5 -18 0 -22C-4.5 -18 -4.5 -13 0 -7Z' transform='rotate(315)'/><path d='M0 -25C6.5 -32 6.5 -40 0 -46C-6.5 -40 -6.5 -32 0 -25Z'/><path d='M0 -25C6.5 -32 6.5 -40 0 -46C-6.5 -40 -6.5 -32 0 -25Z' transform='rotate(45)'/><path d='M0 -25C6.5 -32 6.5 -40 0 -46C-6.5 -40 -6.5 -32 0 -25Z' transform='rotate(90)'/><path d='M0 -25C6.5 -32 6.5 -40 0 -46C-6.5 -40 -6.5 -32 0 -25Z' transform='rotate(135)'/><path d='M0 -25C6.5 -32 6.5 -40 0 -46C-6.5 -40 -6.5 -32 0 -25Z' transform='rotate(180)'/><path d='M0 -25C6.5 -32 6.5 -40 0 -46C-6.5 -40 -6.5 -32 0 -25Z' transform='rotate(225)'/><path d='M0 -25C6.5 -32 6.5 -40 0 -46C-6.5 -40 -6.5 -32 0 -25Z' transform='rotate(270)'/><path d='M0 -25C6.5 -32 6.5 -40 0 -46C-6.5 -40 -6.5 -32 0 -25Z' transform='rotate(315)'/></g></g></svg>"),
-    radial-gradient(130% 90% at 50% -10%, rgba(200,121,46,0.10), rgba(200,121,46,0) 55%),
-    radial-gradient(100% 60% at 50% 110%, rgba(111,122,90,0.08), rgba(111,122,90,0) 60%);
-  background-size: 200px 200px, cover, cover;
-  background-repeat: repeat, no-repeat, no-repeat;
+    url('/chat-doodle.svg'),
+    linear-gradient(170deg, rgba(200,121,46,0.05) 0%, rgba(150,90,170,0.07) 100%);
+  background-size: 340px 340px, cover;
+  background-repeat: repeat, no-repeat;
 }
 </style>

@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"html"
 	"io"
@@ -112,7 +113,51 @@ func metaMap(htmlStr string) map[string]string {
 	return out
 }
 
+// YouTube отдаёт ботам consent-страницу без OG — берём мету через публичный oEmbed.
+func isYouTube(host string) bool {
+	host = strings.TrimPrefix(strings.ToLower(host), "www.")
+	return host == "youtube.com" || host == "youtu.be" || host == "m.youtube.com" || host == "music.youtube.com"
+}
+
+func fetchYouTube(raw string) (linkPreview, bool) {
+	p := linkPreview{URL: raw, SiteName: "YouTube"}
+	endpoint := "https://www.youtube.com/oembed?format=json&url=" + url.QueryEscape(raw)
+	req, err := http.NewRequest(http.MethodGet, endpoint, nil)
+	if err != nil {
+		return p, false
+	}
+	req.Header.Set("User-Agent", lpUserAgent)
+	resp, err := lpClient.Do(req)
+	if err != nil {
+		return p, false
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		return p, false
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
+	if err != nil {
+		return p, false
+	}
+	var m map[string]any
+	if json.Unmarshal(body, &m) != nil {
+		return p, false
+	}
+	p.Title, _ = m["title"].(string)
+	p.Image, _ = m["thumbnail_url"].(string)
+	p.Description, _ = m["author_name"].(string)
+	if pn, ok := m["provider_name"].(string); ok && pn != "" {
+		p.SiteName = pn
+	}
+	return p, p.Title != "" || p.Image != ""
+}
+
 func fetchPreview(raw string) (linkPreview, bool) {
+	if u, err := url.Parse(raw); err == nil && isYouTube(u.Hostname()) {
+		if p, ok := fetchYouTube(raw); ok {
+			return p, true
+		}
+	}
 	p := linkPreview{URL: raw}
 	req, err := http.NewRequest(http.MethodGet, raw, nil)
 	if err != nil {

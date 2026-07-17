@@ -1,0 +1,23 @@
+# systemd unit для Go-бэкенда Manibandha.
+# Установка:
+#   cp deploy/manibandha-go.service /etc/systemd/system/manibandha-go.service
+#   systemctl daemon-reload && systemctl enable --now manibandha-go
+[Unit]
+Description=Manibandha Go backend
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/manibandha.prema.su/backend
+# Читает те же переменные, что и Python (.env): DATABASE_URL, SECRET_KEY, LIVEKIT_*, ...
+Environment=ENV_FILE=/var/www/manibandha.prema.su/backend/.env
+Environment=PORT=8020
+ExecStart=/var/www/manibandha.prema.su/mani-go
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

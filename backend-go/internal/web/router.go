@@ -49,6 +49,10 @@ func (s *Server) Router() http.Handler {
 		pr.Get("/disciples/{id}", s.getDisciple)
 		pr.Patch("/disciples/{id}", s.updateDisciple)
 		pr.Get("/disciples/{id}/files", s.listFiles)
+		// чек-лист (pipeline): чтение/правка — доступ и права внутри
+		pr.Get("/disciples/{id}/checklist", s.listChecklist)
+		pr.Post("/disciples/{id}/checklist", s.addChecklist)
+		pr.Patch("/disciples/{id}/checklist/{itemId}", s.updateChecklist)
 	})
 
 	// ученики: заметки (право disciples.note)
@@ -77,6 +81,12 @@ func (s *Server) Router() http.Handler {
 		pr.Use(s.auth, s.staff)
 		pr.Post("/disciples", s.createDisciple)
 		pr.Delete("/disciples/{id}", s.deleteDisciple)
+		pr.Delete("/disciples/{id}/checklist/{itemId}", s.deleteChecklist)
+		// наставники (справочник кураторов)
+		pr.Get("/mentors", s.listMentorsDict)
+		pr.Post("/mentors", s.createMentor)
+		pr.Patch("/mentors/{id}", s.renameMentor)
+		pr.Delete("/mentors/{id}", s.deleteMentor)
 	})
 
 	// справочники: изменение — staff

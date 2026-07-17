@@ -62,7 +62,7 @@ watch(activeId, async (id, oldId) => {
   if (oldId && !editingMsg.value) saveDraft(oldId, body.value) // сохранить черновик прежнего чата
   replyTo.value = null; editingMsg.value = null; closeCtx()
   body.value = id ? loadDraft(id) : ''
-  if (id) { await openChat(id); scrollToBottom() }
+  if (id) { await openAndReveal(id) }
   else closeChat()
   nextTick(autoGrow)
 }, { immediate: false })
@@ -84,6 +84,17 @@ function saveDraftDebounced(id, text) { if (draftTimer) clearTimeout(draftTimer)
 
 watch(() => chatState.messages.length, () => nextTick(scrollToBottom))
 function scrollToBottom() { nextTick(() => { const el = scroller.value; if (el) el.scrollTop = el.scrollHeight }) }
+
+// Открытие чата без «прыжка»: держим ленту скрытой, пока не встали в самый низ,
+// затем показываем — фон и сообщения появляются вместе.
+const listReady = ref(false)
+async function openAndReveal(id) {
+  listReady.value = false
+  await openChat(id)
+  await nextTick()
+  let el = scroller.value; if (el) el.scrollTop = el.scrollHeight
+  requestAnimationFrame(() => { el = scroller.value; if (el) el.scrollTop = el.scrollHeight; listReady.value = true })
+}
 
 // ── список чатов ─────────────────────────────────────────────────────────
 const search = ref('')
@@ -632,7 +643,7 @@ onMounted(async () => {
   }
   if (!auth.isPending && auth.user) {
     await initChat({ meId: auth.user.id, getToken: () => auth.token })
-    if (activeId.value) { await openChat(activeId.value); scrollToBottom() }
+    if (activeId.value) { await openAndReveal(activeId.value) }
     else maybeAutoOpen()
   }
 })
@@ -721,7 +732,7 @@ onBeforeUnmount(() => {
 
         <div ref="scroller" class="chat-bg flex flex-1 flex-col overflow-y-auto p-4"
              @scroll="onScroll" @click="onScrollerClick" @mousedown="onScrollerDown" @touchstart="onScrollerDown">
-          <div class="mt-auto space-y-1">
+          <div class="mt-auto space-y-1 transition-opacity duration-150" :class="listReady ? 'opacity-100' : 'opacity-0'">
           <template v-for="(m, i) in chatState.messages" :key="m.client_uuid">
           <div v-if="m.client_uuid === firstUnreadKey" class="my-2 flex items-center gap-2 px-2 text-xs text-ink-700/50">
             <span class="h-px flex-1 bg-parchment-300"></span><span>Непрочитанные</span><span class="h-px flex-1 bg-parchment-300"></span>
@@ -1057,9 +1068,9 @@ onBeforeUnmount(() => {
 
 /* тематический ведический фон переписки — ажурные мандалы */
 .chat-bg {
-  background-color: #f5e7d1;
-  background-image: url('../assets/chat-veda.svg');
-  background-size: 480px 680px;
+  background-color: #f8e9d5;
+  background-image: url('../assets/chat-veda-bg.webp');
+  background-size: 460px auto;
   background-repeat: repeat;
 }
 </style>

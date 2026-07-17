@@ -24,6 +24,12 @@ type Config struct {
 	SMSCEnabled    bool
 	SMSCodeTTLSec  int
 	Port           string
+
+	LiveKitAPIKey    string
+	LiveKitAPISecret string
+	LiveKitURL       string
+	LiveKitAPIURL    string
+	RecordingsDir    string
 }
 
 func env(k, def string) string {
@@ -68,6 +74,12 @@ func Load() *Config {
 		SMSCEnabled:    envBool("SMSC_ENABLED", false),
 		SMSCodeTTLSec:  envInt("SMS_CODE_TTL_SECONDS", 300),
 		Port:           env("PORT", "8010"),
+
+		LiveKitAPIKey:    env("LIVEKIT_API_KEY", ""),
+		LiveKitAPISecret: env("LIVEKIT_API_SECRET", ""),
+		LiveKitURL:       env("LIVEKIT_URL", ""),
+		LiveKitAPIURL:    env("LIVEKIT_API_URL", "http://127.0.0.1:7880"),
+		RecordingsDir:    env("RECORDINGS_DIR", "/opt/livekit/recordings"),
 	}
 	for _, o := range strings.Split(env("BACKEND_CORS_ORIGINS", "http://localhost:5173"), ",") {
 		if s := strings.TrimSpace(o); s != "" {

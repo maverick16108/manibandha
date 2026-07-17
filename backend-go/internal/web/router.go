@@ -211,6 +211,38 @@ func (s *Server) Router() http.Handler {
 		pr.Post("/chats/{id}/messages/{mid}/react", s.reactChatMessage)
 	})
 
+	// конференции: публичные (без токена)
+	api.Get("/conferences/by-code/{code}", s.resolveCode)
+	api.Post("/conferences/guest/{room}", s.guestJoin)
+	api.Post("/conferences/livekit-webhook", s.livekitWebhook)
+	api.Get("/conferences/recordings/{id}/file", s.recordingFile) // авторизация по ?token= внутри
+
+	// конференции: право conference.host
+	api.Group(func(pr chi.Router) {
+		pr.Use(s.auth, s.requireCap("conference.host"))
+		pr.Post("/conferences", s.createConference)
+		pr.Get("/conferences/moderators", s.listModerators)
+	})
+
+	// конференции: право conference.view
+	api.Group(func(pr chi.Router) {
+		pr.Use(s.auth, s.requireCap("conference.view"))
+		pr.Get("/conferences", s.listConferences)
+		pr.Get("/conferences/recordings", s.listRecordings)
+		pr.Patch("/conferences/recordings/{id}", s.updateRecording)
+		pr.Delete("/conferences/recordings/{id}", s.deleteRecording)
+		pr.Patch("/conferences/{id}", s.updateConference)
+		pr.Delete("/conferences/{id}", s.deleteConference)
+		pr.Post("/conferences/{id}/join", s.joinConference)
+		pr.Post("/conferences/{id}/permit", s.moderatePermit)
+		pr.Get("/conferences/{id}/bans", s.listBans)
+		pr.Post("/conferences/{id}/kick", s.kickParticipant)
+		pr.Delete("/conferences/{id}/bans/{identity}", s.unbanParticipant)
+		pr.Get("/conferences/{id}/record", s.recordStatus)
+		pr.Post("/conferences/{id}/record/start", s.recordStart)
+		pr.Post("/conferences/{id}/record/stop", s.recordStop)
+	})
+
 	// WebSocket (аутентификация по ?token=... внутри)
 	api.Get("/ws/chat", s.wsChat)
 	api.Get("/ws/threads/{id}", s.wsThread)

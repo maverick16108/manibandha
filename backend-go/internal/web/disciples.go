@@ -1,7 +1,6 @@
 package web
 
 import (
-	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -546,5 +545,3 @@ func (s *Server) deleteDiscipleFile(w http.ResponseWriter, r *http.Request) {
 	s.DB.Delete(&models.DiscipleFile{}, fileID)
 	w.WriteHeader(http.StatusNoContent)
 }
-
-func randHex() string { return fmt.Sprintf("%x", randomInt(1<<31)) + fmt.Sprintf("%x", randomInt(1<<31)) }

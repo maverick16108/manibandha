@@ -395,11 +395,56 @@ type ForumTopicRead struct {
 func (ForumTopicRead) TableName() string { return "forum_topic_reads" }
 
 type Conference struct {
-	ID     int    `gorm:"primaryKey" json:"id"`
-	Status string `gorm:"column:status" json:"status"`
+	ID            int        `gorm:"primaryKey" json:"id"`
+	Title         string     `gorm:"column:title" json:"title"`
+	Description   *string    `gorm:"column:description" json:"description"`
+	Mode          string     `gorm:"column:mode" json:"mode"`
+	MicAllowed    bool       `gorm:"column:mic_allowed" json:"mic_allowed"`
+	CamAllowed    bool       `gorm:"column:cam_allowed" json:"cam_allowed"`
+	ScreenAllowed bool       `gorm:"column:screen_allowed" json:"screen_allowed"`
+	GuestsAllowed bool       `gorm:"column:guests_allowed" json:"guests_allowed"`
+	AutoRecord    bool       `gorm:"column:auto_record" json:"auto_record"`
+	Room          string     `gorm:"column:room" json:"room"`
+	Code          *string    `gorm:"column:code" json:"code"`
+	Status        string     `gorm:"column:status" json:"status"`
+	HostID        *int       `gorm:"column:host_id" json:"host_id"`
+	ScheduledAt   *time.Time `gorm:"column:scheduled_at" json:"-"`
+	StartedAt     *time.Time `gorm:"column:started_at" json:"-"`
+	EndedAt       *time.Time `gorm:"column:ended_at" json:"-"`
+	CreatedAt     time.Time  `gorm:"column:created_at" json:"-"`
+
+	Host *User `gorm:"foreignKey:HostID" json:"-"`
 }
 
 func (Conference) TableName() string { return "conferences" }
+
+type ConferenceBan struct {
+	ID           int       `gorm:"primaryKey" json:"id"`
+	ConferenceID int       `gorm:"column:conference_id" json:"conference_id"`
+	Identity     string    `gorm:"column:identity" json:"identity"`
+	Name         *string   `gorm:"column:name" json:"name"`
+	CreatedAt    time.Time `gorm:"column:created_at" json:"-"`
+}
+
+func (ConferenceBan) TableName() string { return "conference_bans" }
+
+type ConferenceRecording struct {
+	ID           int        `gorm:"primaryKey" json:"id"`
+	ConferenceID int        `gorm:"column:conference_id" json:"conference_id"`
+	EgressID     *string    `gorm:"column:egress_id" json:"egress_id"`
+	Filename     *string    `gorm:"column:filename" json:"filename"`
+	Title        *string    `gorm:"column:title" json:"title"`
+	Description  *string    `gorm:"column:description" json:"description"`
+	Status       string     `gorm:"column:status" json:"status"`
+	DurationMs   int64      `gorm:"column:duration_ms" json:"duration_ms"`
+	SizeBytes    int64      `gorm:"column:size_bytes" json:"size_bytes"`
+	StartedAt    time.Time  `gorm:"column:started_at" json:"-"`
+	EndedAt      *time.Time `gorm:"column:ended_at" json:"-"`
+
+	Conference *Conference `gorm:"foreignKey:ConferenceID" json:"-"`
+}
+
+func (ConferenceRecording) TableName() string { return "conference_recordings" }
 
 // Event — событие календаря.
 type Event struct {

@@ -1,9 +1,12 @@
 <script setup>
-import { reactive, ref, computed } from 'vue'
+import { reactive, ref, computed, onMounted } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { usePageTitle } from '../composables/pageTitle'
-import { ROLE_LABELS, formatPhone } from '../lib/format'
+import { ROLE_LABELS, formatPhone, MARITAL_LABELS } from '../lib/format'
+import client from '../api/client'
 import PhotoUpload from '../components/PhotoUpload.vue'
+import AppSelect from '../components/AppSelect.vue'
+import PhoneInput from '../components/PhoneInput.vue'
 import AppIcon from '../components/AppIcon.vue'
 
 usePageTitle('Профиль')
@@ -13,8 +16,13 @@ const form = reactive({
   full_name: auth.user?.full_name || '',
   avatar_url: auth.user?.avatar_url || '',
 })
+// поля из анкеты ученика (семейное положение + контакты)
+const disc = reactive({ marital_status: '', phone: '', email: '', messenger: '' })
+const hasDisciple = ref(false)
 const saving = ref(false)
 const saved = ref(false)
+
+const maritalOptions = [{ value: '', label: '—' }, ...Object.entries(MARITAL_LABELS).map(([value, label]) => ({ value, label }))]
 
 // контакт: для телефонных аккаунтов — телефон, синтетический email @phone.local не показываем
 const contact = computed(() => {
@@ -24,11 +32,32 @@ const contact = computed(() => {
   return u.email || (u.phone ? formatPhone(u.phone) : '')
 })
 
+onMounted(async () => {
+  const did = auth.user?.disciple_id
+  if (!did) return
+  try {
+    const { data } = await client.get(`/disciples/${did}`)
+    disc.marital_status = data.marital_status || ''
+    disc.phone = data.phone || ''
+    disc.email = data.email || ''
+    disc.messenger = data.messenger || ''
+    hasDisciple.value = true
+  } catch { /* нет доступа к анкете — просто не показываем блок */ }
+})
+
 async function save() {
   saving.value = true
   saved.value = false
   try {
     await auth.updateProfile({ full_name: form.full_name, avatar_url: form.avatar_url })
+    if (hasDisciple.value && auth.user?.disciple_id) {
+      await client.patch(`/disciples/${auth.user.disciple_id}`, {
+        marital_status: disc.marital_status || null,
+        phone: disc.phone || null,
+        email: disc.email || null,
+        messenger: disc.messenger || null,
+      })
+    }
     saved.value = true
   } finally {
     saving.value = false
@@ -59,6 +88,27 @@ async function save() {
           <label class="label">Имя</label>
           <input v-model="form.full_name" class="input" placeholder="Ваше имя" />
         </div>
+
+        <template v-if="hasDisciple">
+          <div>
+            <label class="label">Семейное положение</label>
+            <AppSelect v-model="disc.marital_status" :options="maritalOptions" placeholder="—" />
+          </div>
+          <div class="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label class="label">Телефон</label>
+              <PhoneInput v-model="disc.phone" />
+            </div>
+            <div>
+              <label class="label">Email</label>
+              <input v-model="disc.email" class="input" placeholder="you@example.com" />
+            </div>
+          </div>
+          <div>
+            <label class="label">Мессенджер</label>
+            <input v-model="disc.messenger" class="input" placeholder="Telegram / WhatsApp" />
+          </div>
+        </template>
       </div>
 
       <div class="mt-6 flex items-center gap-3">

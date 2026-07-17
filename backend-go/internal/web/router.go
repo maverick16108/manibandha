@@ -44,6 +44,39 @@ func (s *Server) Router() http.Handler {
 		pr.Get("/regions", s.listRegions)
 		pr.Get("/countries", s.listCountries)
 		pr.Get("/temples", s.listTemples)
+		// ученики: доступ по скоупу проверяется внутри
+		pr.Get("/disciples", s.listDisciples)
+		pr.Get("/disciples/{id}", s.getDisciple)
+		pr.Patch("/disciples/{id}", s.updateDisciple)
+		pr.Get("/disciples/{id}/files", s.listFiles)
+	})
+
+	// ученики: заметки (право disciples.note)
+	api.Group(func(pr chi.Router) {
+		pr.Use(s.auth, s.requireCap("disciples.note"))
+		pr.Get("/disciples/{id}/notes", s.listNotes)
+		pr.Post("/disciples/{id}/notes", s.addNote)
+		pr.Delete("/disciples/{id}/notes/{noteId}", s.deleteNote)
+	})
+
+	// ученики: файлы (право disciples.edit)
+	api.Group(func(pr chi.Router) {
+		pr.Use(s.auth, s.requireCap("disciples.edit"))
+		pr.Post("/disciples/{id}/files", s.uploadDiscipleFile)
+		pr.Delete("/disciples/{id}/files/{fileId}", s.deleteDiscipleFile)
+	})
+
+	// ученики: апрув (право disciples.approve)
+	api.Group(func(pr chi.Router) {
+		pr.Use(s.auth, s.requireCap("disciples.approve"))
+		pr.Post("/disciples/{id}/approve", s.approveDisciple)
+	})
+
+	// ученики: создание/удаление (staff)
+	api.Group(func(pr chi.Router) {
+		pr.Use(s.auth, s.staff)
+		pr.Post("/disciples", s.createDisciple)
+		pr.Delete("/disciples/{id}", s.deleteDisciple)
 	})
 
 	// справочники: изменение — staff

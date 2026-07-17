@@ -15,6 +15,8 @@ func Connect(dsn string) (*gorm.DB, error) {
 	if strings.HasPrefix(dsn, "postgresql://") {
 		dsn = strings.Replace(dsn, "postgresql://", "postgres://", 1)
 	}
+	// Примечание: timestamptz сериализуется в UTC на уровне Go (models.Time / tsUTC),
+	// т.к. session timezone через DSN здесь не применяется надёжно.
 	return gorm.Open(postgres.Open(dsn), &gorm.Config{
 		Logger:                 logger.Default.LogMode(logger.Warn),
 		SkipDefaultTransaction: true,

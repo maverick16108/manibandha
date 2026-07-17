@@ -42,6 +42,11 @@ func httpErr(w http.ResponseWriter, status int, detail string) {
 	writeJSON(w, status, map[string]string{"detail": detail})
 }
 
+// tsUTC форматирует момент в UTC с суффиксом Z (как pydantic).
+func tsUTC(t time.Time) string {
+	return t.UTC().Format("2006-01-02T15:04:05.999999Z07:00")
+}
+
 func decodeJSON(r *http.Request, dst any) error {
 	defer r.Body.Close()
 	return json.NewDecoder(io.LimitReader(r.Body, 8<<20)).Decode(dst)

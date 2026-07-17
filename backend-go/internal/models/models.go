@@ -4,8 +4,34 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"errors"
+	"strings"
 	"time"
 )
+
+// Time — time.Time, который сериализуется в UTC с суффиксом Z (как pydantic в Python).
+type Time struct{ time.Time }
+
+func (t Time) MarshalJSON() ([]byte, error) {
+	if t.Time.IsZero() {
+		return []byte("null"), nil
+	}
+	return []byte(`"` + t.Time.UTC().Format("2006-01-02T15:04:05.999999Z07:00") + `"`), nil
+}
+
+func (t *Time) Scan(v any) error {
+	if v == nil {
+		t.Time = time.Time{}
+		return nil
+	}
+	tt, ok := v.(time.Time)
+	if !ok {
+		return errors.New("Time: unsupported scan type")
+	}
+	t.Time = tt
+	return nil
+}
+
+func (t Time) Value() (driver.Value, error) { return t.Time, nil }
 
 // StringList — JSON-массив строк в колонке (roles.capabilities).
 type StringList []string
@@ -51,32 +77,110 @@ type User struct {
 	FullName       string    `gorm:"column:full_name" json:"full_name"`
 	Role           string    `gorm:"column:role" json:"role"`
 	IsActive       bool      `gorm:"column:is_active" json:"is_active"`
-	AvatarURL      *string   `gorm:"column:avatar_url" json:"avatar_url"`
-	DiscipleID     *int      `gorm:"column:disciple_id" json:"disciple_id"`
-	CreatedAt      time.Time `gorm:"column:created_at" json:"created_at"`
+	AvatarURL      *string `gorm:"column:avatar_url" json:"avatar_url"`
+	DiscipleID     *int    `gorm:"column:disciple_id" json:"disciple_id"`
+	CreatedAt      Time    `gorm:"column:created_at" json:"created_at"`
 }
 
 func (User) TableName() string { return "users" }
 
-// Disciple — таблица disciples (минимальный набор колонок NOT NULL без server default,
-// чтобы корректно создавать анкету при регистрации).
+// Disciple — таблица disciples (полный набор колонок из app/models/disciple.py).
 type Disciple struct {
-	ID                 int     `gorm:"primaryKey" json:"id"`
-	SpiritualName      *string `gorm:"column:spiritual_name" json:"spiritual_name"`
-	MaterialName       string  `gorm:"column:material_name" json:"material_name"`
-	PhotoURL           *string `gorm:"column:photo_url" json:"photo_url"`
-	Phone              *string `gorm:"column:phone" json:"phone"`
-	Email              *string `gorm:"column:email" json:"email"`
-	Messenger          *string `gorm:"column:messenger" json:"messenger"`
-	MaritalStatus      *string `gorm:"column:marital_status" json:"marital_status"`
-	InitiationStatus   string  `gorm:"column:initiation_status" json:"initiation_status"`
-	IsMentor           bool    `gorm:"column:is_mentor" json:"is_mentor"`
-	ReadyForPranama    bool    `gorm:"column:ready_for_pranama" json:"ready_for_pranama"`
-	ReadyForInitiation bool    `gorm:"column:ready_for_initiation" json:"ready_for_initiation"`
-	IsApproved         bool    `gorm:"column:is_approved" json:"is_approved"`
+	ID                 int        `gorm:"primaryKey" json:"id"`
+	SpiritualName      *string    `gorm:"column:spiritual_name" json:"spiritual_name"`
+	MaterialName       string     `gorm:"column:material_name" json:"material_name"`
+	PhotoURL           *string    `gorm:"column:photo_url" json:"photo_url"`
+	Phone              *string    `gorm:"column:phone" json:"phone"`
+	Email              *string    `gorm:"column:email" json:"email"`
+	Messenger          *string    `gorm:"column:messenger" json:"messenger"`
+	Country            *string    `gorm:"column:country" json:"country"`
+	Region             *string    `gorm:"column:region" json:"region"`
+	City               *string    `gorm:"column:city" json:"city"`
+	TempleID           *int       `gorm:"column:temple_id" json:"temple_id"`
+	Gender             *string    `gorm:"column:gender" json:"gender"`
+	MaritalStatus      *string    `gorm:"column:marital_status" json:"marital_status"`
+	DateOfBirth        *time.Time `gorm:"column:date_of_birth" json:"-"`
+	InitiationStatus   string     `gorm:"column:initiation_status" json:"initiation_status"`
+	PranamaDate        *time.Time `gorm:"column:pranama_date" json:"-"`
+	HarinamaDate       *time.Time `gorm:"column:harinama_date" json:"-"`
+	HarinamaName       *string    `gorm:"column:harinama_name" json:"harinama_name"`
+	BrahmanDate        *time.Time `gorm:"column:brahman_date" json:"-"`
+	Seva               *string    `gorm:"column:seva" json:"seva"`
+	CurrentActivity    *string    `gorm:"column:current_activity" json:"current_activity"`
+	IsMentor           bool       `gorm:"column:is_mentor" json:"is_mentor"`
+	MentorID           *int       `gorm:"column:mentor_id" json:"mentor_id"`
+	MentorName         *string    `gorm:"column:mentor_name" json:"mentor_name"`
+	RecommendedBy      *string    `gorm:"column:recommended_by" json:"recommended_by"`
+	ApplicationDate    *time.Time `gorm:"column:application_date" json:"-"`
+	ReadyForPranama    bool       `gorm:"column:ready_for_pranama" json:"ready_for_pranama"`
+	ReadyForInitiation bool       `gorm:"column:ready_for_initiation" json:"ready_for_initiation"`
+	IsApproved         bool       `gorm:"column:is_approved" json:"is_approved"`
+	Notes              *string    `gorm:"column:notes" json:"notes"`
+	CreatedAt          time.Time  `gorm:"column:created_at" json:"created_at"`
+	UpdatedAt          time.Time  `gorm:"column:updated_at" json:"updated_at"`
+
+	Temple    *Temple         `gorm:"foreignKey:TempleID" json:"temple"`
+	Mentor    *Disciple       `gorm:"foreignKey:MentorID" json:"-"`
+	Checklist []ChecklistItem `gorm:"foreignKey:DiscipleID" json:"checklist"`
 }
 
 func (Disciple) TableName() string { return "disciples" }
+
+// Name — духовное имя или мирское (property name в Python).
+func (d *Disciple) Name() string {
+	if d.SpiritualName != nil && *d.SpiritualName != "" {
+		return *d.SpiritualName
+	}
+	return d.MaterialName
+}
+
+// ProfileFilled — заполнены обязательные поля анкеты.
+func (d *Disciple) ProfileFilled() bool {
+	return strings.TrimSpace(d.MaterialName) != "" &&
+		d.Country != nil && *d.Country != "" &&
+		d.City != nil && *d.City != "" &&
+		d.DateOfBirth != nil && d.MaritalStatus != nil && *d.MaritalStatus != ""
+}
+
+// ChecklistItem — пункт чек-листа подготовки к инициации.
+type ChecklistItem struct {
+	ID         int       `gorm:"primaryKey" json:"id"`
+	DiscipleID int       `gorm:"column:disciple_id" json:"disciple_id"`
+	Title      string    `gorm:"column:title" json:"title"`
+	IsDone     bool      `gorm:"column:is_done" json:"is_done"`
+	Note       *string   `gorm:"column:note" json:"note"`
+	Target     string    `gorm:"column:target" json:"target"`
+	CreatedAt  time.Time `gorm:"column:created_at" json:"-"`
+}
+
+func (ChecklistItem) TableName() string { return "checklist_items" }
+
+// DiscipleNote — заметка куратора об ученике.
+type DiscipleNote struct {
+	ID         int       `gorm:"primaryKey" json:"id"`
+	DiscipleID int       `gorm:"column:disciple_id" json:"disciple_id"`
+	AuthorID   *int      `gorm:"column:author_id" json:"author_id"`
+	Text       string    `gorm:"column:text" json:"text"`
+	CreatedAt  time.Time `gorm:"column:created_at" json:"created_at"`
+	Author     *User     `gorm:"foreignKey:AuthorID" json:"-"`
+}
+
+func (DiscipleNote) TableName() string { return "disciple_notes" }
+
+// DiscipleFile — файл, прикреплённый к анкете.
+type DiscipleFile struct {
+	ID          int       `gorm:"primaryKey" json:"id"`
+	DiscipleID  int       `gorm:"column:disciple_id" json:"disciple_id"`
+	UploadedBy  *int      `gorm:"column:uploaded_by" json:"uploaded_by"`
+	Name        string    `gorm:"column:name" json:"name"`
+	URL         string    `gorm:"column:url" json:"url"`
+	Size        *int      `gorm:"column:size" json:"size"`
+	ContentType *string   `gorm:"column:content_type" json:"content_type"`
+	CreatedAt   time.Time `gorm:"column:created_at" json:"created_at"`
+	Uploader    *User     `gorm:"foreignKey:UploadedBy" json:"-"`
+}
+
+func (DiscipleFile) TableName() string { return "disciple_files" }
 
 // Role — таблица roles (динамические роли с набором прав).
 type Role struct {

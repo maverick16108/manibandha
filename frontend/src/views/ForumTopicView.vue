@@ -8,6 +8,7 @@ import AppSkeleton from '../components/AppSkeleton.vue'
 import MarkdownEditor from '../components/MarkdownEditor.vue'
 import EventsFastScroll from '../components/EventsFastScroll.vue'
 import { renderMarkdown } from '../lib/markdown'
+import { thumbUrl, imgFull } from '../lib/format'
 import { extractImageUrls, preloadImages } from '../lib/preload'
 import { usePageTitle } from '../composables/pageTitle'
 import { backTarget } from '../composables/backTarget'
@@ -252,7 +253,7 @@ onBeforeUnmount(() => {
         <article v-for="p in posts" :id="`post-${p.id}`" :key="p.id" data-post :data-post-author="p.author_name || 'Аноним'" class="card scroll-mt-20 p-4 sm:p-5" @contextmenu.prevent="openPicker($event, p)">
           <div class="mb-2 flex items-center gap-3">
             <button class="shrink-0" title="Профиль" @click="openCard(p.author_id)">
-              <img v-if="p.author_avatar" :src="p.author_avatar" class="photo-bw h-9 w-9 rounded-full object-cover ring-2 ring-transparent transition hover:ring-saffron-400" />
+              <img v-if="p.author_avatar" :src="thumbUrl(p.author_avatar)" @error="imgFull($event, p.author_avatar)" class="photo-bw h-9 w-9 rounded-full object-cover ring-2 ring-transparent transition hover:ring-saffron-400" />
               <span v-else class="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-saffron-400 to-saffron-600 text-sm font-semibold text-white ring-2 ring-transparent transition hover:ring-saffron-400">{{ initials(p.author_name) }}</span>
             </button>
             <div class="min-w-0 flex-1">
@@ -302,7 +303,7 @@ onBeforeUnmount(() => {
         <div class="fixed inset-0 z-40" @click="closeWho" @contextmenu.prevent="closeWho"></div>
         <div class="fixed z-50 max-h-64 w-60 overflow-y-auto rounded-xl border border-parchment-200 bg-white p-1.5 shadow-xl" :style="whoStyle">
           <div v-for="(w, wi) in whoMenu.list" :key="wi" class="flex items-center gap-2 rounded-lg px-2 py-1.5">
-            <img v-if="w.avatar" :src="w.avatar" class="photo-bw h-7 w-7 shrink-0 rounded-full object-cover" />
+            <img v-if="w.avatar" :src="thumbUrl(w.avatar)" @error="imgFull($event, w.avatar)" class="photo-bw h-7 w-7 shrink-0 rounded-full object-cover" />
             <span v-else class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-saffron-400 to-saffron-600 text-xs font-semibold text-white">{{ initials(w.name) }}</span>
             <span class="truncate text-sm text-ink-800">{{ w.name || 'Участник' }}</span>
           </div>
@@ -345,7 +346,7 @@ onBeforeUnmount(() => {
           <div class="py-8 text-ink-700/50">Загрузка…</div>
         </template>
         <template v-else>
-          <img v-if="card.photo" :src="card.photo" class="photo-bw mx-auto h-28 w-28 rounded-xl object-cover" />
+          <img v-if="card.photo" :src="thumbUrl(card.photo)" @error="imgFull($event, card.photo)" class="photo-bw mx-auto h-28 w-28 rounded-xl object-cover" />
           <div v-else class="mx-auto flex h-28 w-28 items-center justify-center rounded-xl bg-gradient-to-br from-saffron-400 to-saffron-600 text-4xl font-semibold text-white">{{ initials(card.name) }}</div>
           <h3 class="mt-4 font-display text-2xl font-semibold text-ink-900">{{ card.name || 'Участник' }}</h3>
           <p v-if="placeLine(card)" class="mt-1 flex items-center justify-center gap-1 text-sm text-ink-700/70"><AppIcon name="pin" :size="14" class="text-saffron-600" /> {{ placeLine(card) }}</p>

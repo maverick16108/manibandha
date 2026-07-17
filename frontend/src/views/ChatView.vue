@@ -6,6 +6,7 @@ import client from '../api/client'
 import AppIcon from '../components/AppIcon.vue'
 import AudioBar from '../components/AudioBar.vue'
 import { renderMarkdown } from '../lib/markdown'
+import { thumbUrl } from '../lib/format'
 import { player, playAudio, seek } from '../composables/audioPlayer'
 import { openLightbox } from '../composables/lightbox'
 import { showToast } from '../composables/toast'
@@ -169,6 +170,8 @@ async function listLeave() {
 }
 
 // ── реакции ──────────────────────────────────────────────────────────────
+// превью-аватар: если .thumb.webp не сгенерён (старая загрузка) — падаем на оригинал
+function imgFull(e, full) { const el = e.target; if (el.dataset.f || !full) return; el.dataset.f = '1'; el.src = full }
 function parseReactions(m) { try { return JSON.parse(m.reactions || '[]') } catch { return [] } }
 async function onChip(m, emoji) { if (m.id) await reactMessage(m.id, emoji) }
 
@@ -186,10 +189,14 @@ function closeWho() { whoMenu.open = false; whoMenu.list = [] }
 // ── контекстное меню (ПКМ) ─────────────────────────────────────────────
 const ctx = reactive({ open: false, x: 0, y: 0, m: null, selText: '' })
 function closeCtx() { ctx.open = false; ctx.m = null }
-const ctxStyle = computed(() => ({
-  left: Math.min(ctx.x, (typeof window !== 'undefined' ? window.innerWidth : 9999) - 220) + 'px',
-  top: Math.min(ctx.y, (typeof window !== 'undefined' ? window.innerHeight : 9999) - 220) + 'px',
-}))
+const ctxStyle = computed(() => {
+  const vw = typeof window !== 'undefined' ? window.innerWidth : 9999
+  const vh = typeof window !== 'undefined' ? window.innerHeight : 9999
+  return {
+    left: Math.max(8, Math.min(ctx.x, vw - 220)) + 'px',
+    top: Math.max(8, Math.min(ctx.y, vh - 340)) + 'px', // меню высокое (6 пунктов + реакции) — не даём уйти за низ
+  }
+})
 function onContext(e, m) {
   if (m.deleted) return
   e.preventDefault()
@@ -207,7 +214,7 @@ function ctxReply() { startReply(ctx.m, ctx.selText); closeCtx() }
 async function ctxReact(emoji) { const m = ctx.m; closeCtx(); if (m?.id) await reactMessage(m.id, emoji) }
 function ctxCopy() {
   const m = ctx.m
-  const text = ctx.selText || cleanBody(m.body)
+  const text = ctx.selText || cleanBody(contentBody(m))
   closeCtx()
   if (!text) return
   navigator.clipboard?.writeText(text).then(() => showToast('Скопировано')).catch(() => {})
@@ -265,9 +272,9 @@ async function doForward(chatId) {
   showToast('Переслано')
   if (chatId === activeId.value) scrollToBottom()
 }
-function ctxForward() { const m = ctx.m; closeCtx(); if (m) openForward([m.body]) }
+function ctxForward() { const m = ctx.m; closeCtx(); if (m) openForward([fwdWrap(m)]) }
 function ctxSelect() { const m = ctx.m; closeCtx(); enterSelect(m) }
-function forwardSelected() { openForward(selectedMsgs.value.map((m) => m.body)) }
+function forwardSelected() { openForward(selectedMsgs.value.map(fwdWrap)) }
 
 // ── удаление нескольких ──
 const deleteManyOpen = ref(false)
@@ -293,7 +300,7 @@ function canCopy(m) {
 function startReply(m, selText) {
   editingMsg.value = null
   const sel = (selText || '').trim()
-  replyTo.value = { id: m.id, author_name: nameOf(m), body: sel ? sel.slice(0, 200) : snippet(m.body), quote: sel ? sel.slice(0, 300) : quoteText(m.body) }
+  replyTo.value = { id: m.id, author_name: nameOf(m), body: sel ? sel.slice(0, 200) : snippet(contentBody(m)), quote: sel ? sel.slice(0, 300) : quoteText(contentBody(m)) }
   nextTick(() => inputEl.value?.focus())
 }
 // Текст цитаты для пересылаемого reply_quote: чистим медиа-разметку, но СОХРАНЯЕМ переносы строк.
@@ -308,6 +315,7 @@ function startEdit(m) { replyTo.value = null; editingMsg.value = m; body.value =
 function cancelEdit() { editingMsg.value = null; body.value = activeId.value ? loadDraft(activeId.value) : '' }
 function snippet(b) {
   return (b || '')
+    .replace(FWD_RE, '')
     .replace(/@\[audio\]\([^)]*\)/g, '🎤 Голосовое')
     .replace(/@\[file\]\([^|)]*\|([^)]*)\)/g, (_m, name) => { try { return '📎 ' + decodeURIComponent(name) } catch { return '📎 файл' } })
     .replace(/!\[[^\]]*\]\([^)]*\)/g, '🖼 Фото')
@@ -449,12 +457,23 @@ async function onPaste(e) {
   if (imgs.length) { e.preventDefault(); addComposeItems(imgs) }
 }
 
+// пересылка: маркер «@[fwd](имя)» в начале тела — кто исходный автор
+const FWD_RE = /^@\[fwd\]\(([^)]*)\)\n?/
+function fwdName(m) { const mm = (m?.body || '').match(FWD_RE); if (!mm) return ''; try { return decodeURIComponent(mm[1]) } catch { return mm[1] } }
+function contentBody(m) { return (m?.body || '').replace(FWD_RE, '') }
+function fwdWrap(m) {
+  const b = m.body || ''
+  if (FWD_RE.test(b)) return b            // уже переслано — сохраняем исходного автора
+  return `@[fwd](${encodeURIComponent(nameOf(m))})\n${b}`
+}
+
 // содержимое сообщения: картинки / подпись / вложения
 function photoUrls(m) {
-  if (m.deleted || /@\[audio\]|@\[file\]/.test(m.body || '')) return []
-  const urls = []; (m.body || '').replace(/!\[[^\]]*\]\(([^)]+)\)/g, (_x, u) => { urls.push(u); return '' }); return urls
+  const b = contentBody(m)
+  if (m.deleted || /@\[audio\]|@\[file\]/.test(b)) return []
+  const urls = []; b.replace(/!\[[^\]]*\]\(([^)]+)\)/g, (_x, u) => { urls.push(u); return '' }); return urls
 }
-function captionText(m) { return (m.body || '').replace(/!\[[^\]]*\]\([^)]*\)/g, '').trim() }
+function captionText(m) { return contentBody(m).replace(/!\[[^\]]*\]\([^)]*\)/g, '').trim() }
 function isPhoto(m) { return photoUrls(m).length > 0 }
 // drag&drop — если все картинки: две зоны (файлом/картинкой); иначе одна зона «файлом»
 const dragOver = ref(false)
@@ -764,7 +783,7 @@ onBeforeUnmount(() => {
         <button v-for="c in filteredChats" :key="c.id"
                 class="flex w-full items-center gap-3 border-b border-parchment-100 px-3 py-2.5 text-left hover:bg-parchment-50"
                 :class="c.id === activeId && 'bg-saffron-500/10'" @click="selectChat(c)" @contextmenu="onListContext($event, c)">
-          <img v-if="c.avatar_url" :src="c.avatar_url" class="photo-bw h-11 w-11 shrink-0 rounded-full object-cover" />
+          <img v-if="c.avatar_url" :src="thumbUrl(c.avatar_url)" @error="imgFull($event, c.avatar_url)" class="photo-bw h-11 w-11 shrink-0 rounded-full object-cover" />
           <span v-else class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-base font-semibold text-white"
                 :class="c.type === 'group' ? 'bg-gradient-to-br from-sage-400 to-sage-600' : 'bg-gradient-to-br from-saffron-400 to-saffron-600'">{{ initials(c.title) }}</span>
           <span class="min-w-0 flex-1">
@@ -802,17 +821,17 @@ onBeforeUnmount(() => {
         <header v-if="selectMode" class="flex items-center gap-2 border-b border-parchment-200 px-4 py-2.5">
           <button class="rounded-lg p-1.5 text-ink-700/60 hover:bg-parchment-100" title="Отмена" @click="exitSelect"><AppIcon name="close" :size="18" /></button>
           <div class="flex-1 truncate font-medium text-ink-900">Выбрано: {{ selected.size }}</div>
-          <button class="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-saffron-700 hover:bg-parchment-100 disabled:opacity-40" :disabled="!selected.size" @click="forwardSelected">
-            <AppIcon name="forward" :size="16" /> Переслать <span v-if="selected.size" class="tabular-nums">{{ selected.size }}</span>
+          <button class="flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium text-saffron-700 hover:bg-parchment-100 disabled:opacity-40" :disabled="!selected.size" @click="forwardSelected">
+            <AppIcon name="reply" :size="22" class="-scale-x-100" /> Переслать <span v-if="selected.size" class="tabular-nums">{{ selected.size }}</span>
           </button>
-          <button class="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-40" :disabled="!selected.size" @click="askDeleteSelected">
-            <AppIcon name="trash" :size="16" /> Удалить <span v-if="selected.size" class="tabular-nums">{{ selected.size }}</span>
+          <button class="flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-40" :disabled="!selected.size" @click="askDeleteSelected">
+            <AppIcon name="trash" :size="22" /> Удалить <span v-if="selected.size" class="tabular-nums">{{ selected.size }}</span>
           </button>
         </header>
         <header v-else class="flex items-center gap-3 border-b border-parchment-200 px-4 py-2.5">
           <button class="rounded-lg p-1.5 text-ink-700/60 hover:bg-parchment-100 sm:hidden" @click="backToList"><AppIcon name="chevron" :size="18" class="rotate-90" /></button>
           <div class="flex min-w-0 flex-1 items-center gap-3" :class="isGroup && 'cursor-pointer'" @click="isGroup && openGroupEdit()">
-            <img v-if="activeChat.avatar_url" :src="activeChat.avatar_url" class="photo-bw h-9 w-9 shrink-0 rounded-full object-cover" />
+            <img v-if="activeChat.avatar_url" :src="thumbUrl(activeChat.avatar_url)" @error="imgFull($event, activeChat.avatar_url)" class="photo-bw h-9 w-9 shrink-0 rounded-full object-cover" />
             <span v-else class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-semibold text-white"
                   :class="activeChat.type === 'group' ? 'bg-gradient-to-br from-sage-400 to-sage-600' : 'bg-gradient-to-br from-saffron-400 to-saffron-600'">{{ initials(activeChat.title) }}</span>
             <div class="min-w-0 flex-1">
@@ -837,16 +856,16 @@ onBeforeUnmount(() => {
           </div>
           <div :id="`msg-${m.id}`"
                class="group flex items-end gap-2 rounded-xl px-1 transition-colors"
-               :class="[selectMode ? 'cursor-pointer justify-start' : rowJustify(m), selectMode && selected.has(m.id) && 'bg-saffron-500/10']"
+               :class="[selectMode ? 'w-full max-w-[720px] cursor-pointer justify-start' : rowJustify(m), selectMode && selected.has(m.id) && 'bg-saffron-500/10']"
                @click.capture="onRowClick($event, m)">
             <!-- аватар (в группах, слева от сообщения — и у чужих, и у своих) -->
             <template v-if="isGroup && !isMine(m)">
-              <img v-if="avatarOf(m) && isRunEnd(m, i)" :src="avatarOf(m)" class="photo-bw h-10 w-10 shrink-0 rounded-full object-cover" />
+              <img v-if="avatarOf(m) && isRunEnd(m, i)" :src="thumbUrl(avatarOf(m))" @error="imgFull($event, avatarOf(m))" class="photo-bw h-10 w-10 shrink-0 rounded-full object-cover" />
               <span v-else-if="isRunEnd(m, i)" class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-sage-400 to-sage-600 text-sm font-semibold text-white">{{ initials(nameOf(m)) }}</span>
               <span v-else class="h-10 w-10 shrink-0"></span>
             </template>
             <template v-else-if="isGroup && isMine(m)">
-              <img v-if="myAvatar && isRunEnd(m, i)" :src="myAvatar" class="photo-bw h-10 w-10 shrink-0 rounded-full object-cover" />
+              <img v-if="myAvatar && isRunEnd(m, i)" :src="thumbUrl(myAvatar)" @error="imgFull($event, myAvatar)" class="photo-bw h-10 w-10 shrink-0 rounded-full object-cover" />
               <span v-else-if="isRunEnd(m, i)" class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-saffron-400 to-saffron-600 text-sm font-semibold text-white">{{ initials(myName) }}</span>
               <span v-else class="h-10 w-10 shrink-0"></span>
             </template>
@@ -855,6 +874,9 @@ onBeforeUnmount(() => {
                  :class="[wide ? 'max-w-[420px]' : 'max-w-[80%]', captionText(m) && (isMine(m) ? 'bg-saffron-500 text-white' : 'bg-white text-ink-900 ring-1 ring-parchment-200')]"
                  @contextmenu="onContext($event, m)">
               <div v-if="showAuthor(m, i)" class="px-3 pt-2 text-xs font-semibold text-sage-600">{{ nameOf(m) }}</div>
+              <div v-if="fwdName(m)" class="flex items-center gap-1 px-3 pt-2 text-xs font-semibold" :class="captionText(m) && isMine(m) ? 'text-white/90' : 'text-saffron-700'">
+                <AppIcon name="reply" :size="12" class="-scale-x-100" /> Переслано от {{ fwdName(m) }}
+              </div>
               <div v-if="m.reply_preview" class="mx-3 mt-2 rounded-r-md border-l-2 border-saffron-400 bg-black/5 py-1 pl-2 pr-2 text-xs">
                 <div v-if="replyAuthorName(m)" class="font-semibold text-saffron-700">{{ replyAuthorName(m) }}</div>
                 <div class="whitespace-pre-wrap break-words text-ink-700/70">{{ m.reply_preview }}</div>
@@ -883,12 +905,15 @@ onBeforeUnmount(() => {
                  :data-audio-label="`${nameOf(m) || 'Голосовое'} · ${fmtTime(m.created_at)}`"
                  @contextmenu="onContext($event, m)">
               <div v-if="showAuthor(m, i)" class="mb-0.5 text-xs font-semibold text-sage-600">{{ nameOf(m) }}</div>
+              <div v-if="fwdName(m)" class="mb-1 flex items-center gap-1 text-xs font-semibold" :class="isMine(m) ? 'text-white/90' : 'text-saffron-700'">
+                <AppIcon name="reply" :size="12" class="-scale-x-100" /> Переслано от {{ fwdName(m) }}
+              </div>
               <div v-if="m.reply_preview" class="mb-1 rounded-r-md border-l-2 py-1 pl-2 pr-2 text-xs" :class="isMine(m) ? 'border-white/70 bg-white/10' : 'border-saffron-400 bg-saffron-500/5'">
                 <div v-if="replyAuthorName(m)" class="font-semibold" :class="isMine(m) ? 'text-white' : 'text-saffron-700'">{{ replyAuthorName(m) }}</div>
                 <div class="whitespace-pre-wrap break-words opacity-80">{{ m.reply_preview }}</div>
               </div>
               <div v-if="m.deleted" class="italic opacity-60">сообщение удалено</div>
-              <div v-else class="markdown-body break-words" :class="isMine(m) && 'markdown-on-accent'" v-html="renderChatBody(m.body)"></div>
+              <div v-else class="markdown-body break-words" :class="isMine(m) && 'markdown-on-accent'" v-html="renderChatBody(contentBody(m))"></div>
 
               <div class="mt-1 flex items-end justify-between gap-2">
                 <div v-if="parseReactions(m).length" class="flex flex-wrap gap-1">
@@ -1017,7 +1042,7 @@ onBeforeUnmount(() => {
         <button class="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-ink-700 hover:bg-parchment-100" @click="ctxReply"><AppIcon name="reply" :size="15" /> Ответить</button>
         <button v-if="canCopy(ctx.m) || ctx.selText" class="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-ink-700 hover:bg-parchment-100" @click="ctxCopy"><AppIcon name="copy" :size="15" /> Копировать</button>
         <button v-if="canEdit(ctx.m)" class="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-ink-700 hover:bg-parchment-100" @click="ctxEdit"><AppIcon name="edit" :size="15" /> Изменить</button>
-        <button v-if="ctx.m && !ctx.m.deleted" class="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-ink-700 hover:bg-parchment-100" @click="ctxForward"><AppIcon name="forward" :size="15" /> Переслать</button>
+        <button v-if="ctx.m && !ctx.m.deleted" class="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-ink-700 hover:bg-parchment-100" @click="ctxForward"><AppIcon name="reply" :size="15" class="-scale-x-100" /> Переслать</button>
         <button v-if="canDelete(ctx.m)" class="flex w-full items-center gap-2.5 border-t border-parchment-100 px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50" @click="ctxDelete"><AppIcon name="trash" :size="15" /> Удалить</button>
         <button v-if="ctx.m && !ctx.m.deleted" class="flex w-full items-center gap-2.5 border-t border-parchment-100 px-3 py-2 text-left text-sm text-ink-700 hover:bg-parchment-100" @click="ctxSelect"><AppIcon name="check" :size="15" /> Выделить</button>
       </div>
@@ -1028,7 +1053,7 @@ onBeforeUnmount(() => {
       <div class="fixed inset-0 z-40" @click="closeWho" @contextmenu.prevent="closeWho"></div>
       <div class="fixed z-50 max-h-[280px] w-60 overflow-y-auto rounded-xl border border-parchment-200 bg-white p-1.5 shadow-xl" :style="whoStyle">
         <div v-for="(u, k) in whoMenu.list" :key="k" class="flex items-center gap-2 rounded-lg px-2 py-1.5">
-          <img v-if="u.avatar" :src="u.avatar" class="photo-bw h-7 w-7 shrink-0 rounded-full object-cover" />
+          <img v-if="u.avatar" :src="thumbUrl(u.avatar)" @error="imgFull($event, u.avatar)" class="photo-bw h-7 w-7 shrink-0 rounded-full object-cover" />
           <span v-else class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-sage-400 to-sage-600 text-xs font-semibold text-white">{{ initials(u.name) }}</span>
           <span class="truncate text-sm text-ink-800">{{ u.name || '—' }}</span>
         </div>
@@ -1084,7 +1109,7 @@ onBeforeUnmount(() => {
         </div>
         <div class="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
           <button v-for="c in forwardList" :key="c.id" class="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left hover:bg-parchment-100" @click="doForward(c.id)">
-            <img v-if="c.avatar_url" :src="c.avatar_url" class="photo-bw h-10 w-10 shrink-0 rounded-full object-cover" />
+            <img v-if="c.avatar_url" :src="thumbUrl(c.avatar_url)" @error="imgFull($event, c.avatar_url)" class="photo-bw h-10 w-10 shrink-0 rounded-full object-cover" />
             <span v-else class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold text-white" :class="c.type === 'group' ? 'bg-gradient-to-br from-sage-400 to-sage-600' : 'bg-gradient-to-br from-saffron-400 to-saffron-600'">{{ initials(c.title) }}</span>
             <span class="min-w-0 flex-1 truncate font-medium text-ink-900">{{ c.title }}</span>
           </button>
@@ -1172,7 +1197,7 @@ onBeforeUnmount(() => {
           <button v-for="u in filteredContacts" :key="u.id"
                   class="flex w-full items-center gap-3 border-b border-parchment-100 px-4 py-2.5 text-left hover:bg-parchment-50"
                   @click="newTab === 'direct' ? pickDirect(u) : toggleMember(u)">
-            <img v-if="u.avatar_url" :src="u.avatar_url" class="photo-bw h-9 w-9 shrink-0 rounded-full object-cover" />
+            <img v-if="u.avatar_url" :src="thumbUrl(u.avatar_url)" @error="imgFull($event, u.avatar_url)" class="photo-bw h-9 w-9 shrink-0 rounded-full object-cover" />
             <span v-else class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-saffron-400 to-saffron-600 text-sm font-semibold text-white">{{ initials(u.full_name) }}</span>
             <span class="min-w-0 flex-1 truncate text-ink-900">{{ u.full_name }}</span>
             <AppIcon v-if="newTab === 'group' && groupMembers.includes(u.id)" name="check" :size="18" class="text-saffron-600" />

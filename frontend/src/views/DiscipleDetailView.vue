@@ -7,7 +7,7 @@ import { confirmDialog } from '../composables/confirm'
 import AppSelect from '../components/AppSelect.vue'
 import AppSkeleton from '../components/AppSkeleton.vue'
 import AppIcon from '../components/AppIcon.vue'
-import { STATUS_LABELS, STATUS_ORDER, STATUS_BADGE, MARITAL_LABELS, GENDER_LABELS, formatDate, formatPhone, phoneList } from '../lib/format'
+import { STATUS_LABELS, STATUS_ORDER, STATUS_BADGE, MARITAL_LABELS, GENDER_LABELS, formatDate, formatPhone, phoneList, thumbUrl, imgFull } from '../lib/format'
 import { usePageTitle } from '../composables/pageTitle'
 import { openLightbox } from '../composables/lightbox'
 
@@ -162,7 +162,7 @@ onMounted(async () => {
     <!-- Header -->
     <div class="card mb-6 p-6">
       <div class="flex flex-wrap items-start gap-6">
-        <img v-if="d.photo_url" :src="d.photo_url" class="photo-bw h-28 w-28 cursor-zoom-in rounded-xl object-cover" @click="openLightbox(d.photo_url)" />
+        <img v-if="d.photo_url" :src="thumbUrl(d.photo_url)" @error="imgFull($event, d.photo_url)" class="photo-bw h-28 w-28 cursor-zoom-in rounded-xl object-cover" @click="openLightbox(d.photo_url)" />
         <div v-else class="flex h-28 w-28 items-center justify-center rounded-xl bg-parchment-200 text-4xl text-ink-700">
           {{ (d.spiritual_name || d.material_name || '?')[0] }}
         </div>

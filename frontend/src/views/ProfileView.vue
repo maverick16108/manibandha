@@ -2,7 +2,7 @@
 import { reactive, ref, computed, onMounted } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { usePageTitle } from '../composables/pageTitle'
-import { ROLE_LABELS, formatPhone, MARITAL_LABELS } from '../lib/format'
+import { ROLE_LABELS, formatPhone, MARITAL_LABELS, thumbUrl, imgFull } from '../lib/format'
 import client from '../api/client'
 import PhotoUpload from '../components/PhotoUpload.vue'
 import AppSelect from '../components/AppSelect.vue'
@@ -69,7 +69,7 @@ async function save() {
   <div class="mx-auto max-w-2xl">
     <div class="card p-6">
       <div class="flex items-center gap-4">
-        <img v-if="form.avatar_url" :src="form.avatar_url" class="photo-bw h-20 w-20 rounded-full object-cover" />
+        <img v-if="form.avatar_url" :src="thumbUrl(form.avatar_url)" @error="imgFull($event, form.avatar_url)" class="photo-bw h-20 w-20 rounded-full object-cover" />
         <span v-else class="flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-saffron-400 to-saffron-600 text-2xl font-semibold text-white">
           {{ (auth.user?.full_name || '?').trim()[0] }}
         </span>

@@ -21,6 +21,17 @@ export const GENDER_LABELS = {
   female: 'Женский',
 }
 
+// Лёгкое превью загруженного изображения (генерится на бэке: /uploads/<hex>.thumb.webp).
+// Для старых загрузок превью может не быть — используйте @error-фолбэк на оригинал.
+export function thumbUrl(url) {
+  if (!url || typeof url !== 'string') return url
+  const m = url.match(/^(\/uploads\/[^.]+)\.(jpe?g|png|webp|gif)$/i)
+  return m ? `${m[1]}.thumb.webp` : url
+}
+
+// @error-обработчик для превью: если .thumb.webp нет (старая загрузка) — грузим оригинал
+export function imgFull(e, full) { const el = e.target; if (el.dataset.f || !full) return; el.dataset.f = '1'; el.src = full }
+
 export const MARITAL_LABELS = {
   single: 'Не женат / не замужем',
   married: 'В браке',

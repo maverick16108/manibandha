@@ -217,7 +217,7 @@ function ctxCopy() {
   const text = ctx.selText || cleanBody(contentBody(m))
   closeCtx()
   if (!text) return
-  navigator.clipboard?.writeText(text).then(() => showToast('Скопировано')).catch(() => {})
+  navigator.clipboard?.writeText(text).catch(() => {})
 }
 function ctxEdit() { startEdit(ctx.m); closeCtx() }
 function ctxDelete() { const m = ctx.m; closeCtx(); askDelete(m) }

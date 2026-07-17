@@ -415,6 +415,69 @@ type Event struct {
 
 func (Event) TableName() string { return "events" }
 
+// ── Мессенджер ──────────────────────────────────────────────────────────────
+
+type Chat struct {
+	ID        int       `gorm:"primaryKey" json:"id"`
+	Type      string    `gorm:"column:type" json:"type"`
+	Title     *string   `gorm:"column:title" json:"title"`
+	PhotoURL  *string   `gorm:"column:photo_url" json:"photo_url"`
+	CreatedBy *int      `gorm:"column:created_by" json:"created_by"`
+	CreatedAt time.Time `gorm:"column:created_at" json:"created_at"`
+	UpdatedAt time.Time `gorm:"column:updated_at" json:"updated_at"`
+
+	Members []ChatMember `gorm:"foreignKey:ChatID" json:"-"`
+}
+
+func (Chat) TableName() string { return "chats" }
+
+type ChatMember struct {
+	ID          int       `gorm:"primaryKey" json:"id"`
+	ChatID      int       `gorm:"column:chat_id" json:"chat_id"`
+	UserID      int       `gorm:"column:user_id" json:"user_id"`
+	Role        string    `gorm:"column:role" json:"role"`
+	Pinned      bool      `gorm:"column:pinned" json:"pinned"`
+	LastReadSeq int64     `gorm:"column:last_read_seq" json:"last_read_seq"`
+	JoinedAt    time.Time `gorm:"column:joined_at" json:"-"`
+
+	User *User `gorm:"foreignKey:UserID" json:"-"`
+}
+
+func (ChatMember) TableName() string { return "chat_members" }
+
+type ChatMessage struct {
+	ID         int        `gorm:"primaryKey" json:"id"`
+	ChatID     int        `gorm:"column:chat_id" json:"chat_id"`
+	Seq        int64      `gorm:"column:seq" json:"seq"`
+	ClientUUID *string    `gorm:"column:client_uuid" json:"client_uuid"`
+	AuthorID   *int       `gorm:"column:author_id" json:"author_id"`
+	Body       string     `gorm:"column:body" json:"body"`
+	ReplyToID  *int       `gorm:"column:reply_to_id" json:"reply_to_id"`
+	ReplyQuote *string    `gorm:"column:reply_quote" json:"reply_quote"`
+	CreatedAt  time.Time  `gorm:"column:created_at" json:"created_at"`
+	EditedAt   *time.Time `gorm:"column:edited_at" json:"-"`
+	EditCount  int        `gorm:"column:edit_count" json:"edit_count"`
+	Deleted    bool       `gorm:"column:deleted" json:"deleted"`
+
+	Author    *User                 `gorm:"foreignKey:AuthorID" json:"-"`
+	ReplyTo   *ChatMessage          `gorm:"foreignKey:ReplyToID" json:"-"`
+	Reactions []ChatMessageReaction `gorm:"foreignKey:MessageID" json:"-"`
+}
+
+func (ChatMessage) TableName() string { return "chat_messages" }
+
+type ChatMessageReaction struct {
+	ID        int       `gorm:"primaryKey" json:"id"`
+	MessageID int       `gorm:"column:message_id" json:"message_id"`
+	UserID    int       `gorm:"column:user_id" json:"user_id"`
+	Emoji     string    `gorm:"column:emoji" json:"emoji"`
+	CreatedAt time.Time `gorm:"column:created_at" json:"-"`
+
+	User *User `gorm:"foreignKey:UserID" json:"-"`
+}
+
+func (ChatMessageReaction) TableName() string { return "chat_message_reactions" }
+
 // Draft — черновик автосохранения текста пользователя.
 type Draft struct {
 	ID        int       `gorm:"primaryKey" json:"id"`

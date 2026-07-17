@@ -192,6 +192,29 @@ func (s *Server) Router() http.Handler {
 		pr.Put("/users/{id}/roles", s.setUserRoles)
 	})
 
+	// мессенджер (доступ: авторизация + не-pending)
+	api.Group(func(pr chi.Router) {
+		pr.Use(s.auth, s.chatGate)
+		pr.Get("/chats", s.listChats)
+		pr.Get("/chats/contacts", s.listContacts)
+		pr.Get("/chats/updates", s.getUpdates)
+		pr.Post("/chats", s.createChat)
+		pr.Get("/chats/{id}", s.getChat)
+		pr.Patch("/chats/{id}", s.updateChatHandler)
+		pr.Get("/chats/{id}/messages", s.listMessages)
+		pr.Post("/chats/{id}/messages", s.sendMessage)
+		pr.Patch("/chats/{id}/messages/{mid}", s.editChatMessage)
+		pr.Delete("/chats/{id}/messages/{mid}", s.deleteChatMessage)
+		pr.Post("/chats/{id}/read", s.markChatRead)
+		pr.Post("/chats/{id}/pin", s.pinChat)
+		pr.Delete("/chats/{id}/leave", s.leaveChat)
+		pr.Post("/chats/{id}/messages/{mid}/react", s.reactChatMessage)
+	})
+
+	// WebSocket (аутентификация по ?token=... внутри)
+	api.Get("/ws/chat", s.wsChat)
+	api.Get("/ws/threads/{id}", s.wsThread)
+
 	r.Mount(s.Cfg.APIPrefix, api)
 
 	// статика загруженных файлов (в проде обычно раздаёт nginx)

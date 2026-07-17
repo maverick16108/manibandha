@@ -499,6 +499,7 @@ func (s *Server) editThreadMessage(w http.ResponseWriter, r *http.Request) {
 	})
 	var full models.ThreadMessage
 	s.DB.Preload("Author").Preload("Likes").Preload("ReplyTo").Preload("ReplyTo.Author").First(&full, msg.ID)
+	s.broadcastThread(id, map[string]any{"type": "edit", "message": map[string]any{"id": msg.ID, "body": body, "edit_count": msg.EditCount + 1}})
 	writeJSON(w, http.StatusOK, s.msgOut(&full, u.ID))
 }
 
@@ -513,6 +514,7 @@ func (s *Server) deleteThreadMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.DB.Delete(&models.ThreadMessage{}, msg.ID)
+	s.broadcastThread(id, map[string]any{"type": "delete", "message_id": msg.ID})
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -550,5 +552,6 @@ func (s *Server) reactThreadMessage(w http.ResponseWriter, r *http.Request) {
 	}
 	var full models.ThreadMessage
 	s.DB.Preload("Likes").First(&full, mid)
+	s.broadcastThread(id, map[string]any{"type": "react", "message_id": mid, "reactions": reactionsOf(&full, u.ID)})
 	writeJSON(w, http.StatusOK, map[string]any{"reactions": reactionsOf(&full, u.ID)})
 }

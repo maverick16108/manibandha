@@ -324,12 +324,66 @@ func (MessageLike) TableName() string { return "message_likes" }
 
 // ── минимальные модели для nav-counts (полные — в модулях forum/conferences) ──
 
+type ForumSection struct {
+	ID          int       `gorm:"primaryKey" json:"id"`
+	Title       string    `gorm:"column:title" json:"title"`
+	Description *string   `gorm:"column:description" json:"description"`
+	Color       string    `gorm:"column:color" json:"color"`
+	CoverURL    *string   `gorm:"column:cover_url" json:"cover_url"`
+	AuthorID    *int      `gorm:"column:author_id" json:"author_id"`
+	CreatedAt   time.Time `gorm:"column:created_at" json:"created_at"`
+	UpdatedAt   time.Time `gorm:"column:updated_at" json:"-"`
+
+	Author *User        `gorm:"foreignKey:AuthorID" json:"-"`
+	Topics []ForumTopic `gorm:"foreignKey:SectionID" json:"-"`
+}
+
+func (ForumSection) TableName() string { return "forum_sections" }
+
 type ForumTopic struct {
 	ID        int       `gorm:"primaryKey" json:"id"`
+	SectionID *int      `gorm:"column:section_id" json:"section_id"`
+	Title     string    `gorm:"column:title" json:"title"`
+	AuthorID  *int      `gorm:"column:author_id" json:"author_id"`
+	Pinned    bool      `gorm:"column:pinned" json:"pinned"`
+	Views     int       `gorm:"column:views" json:"views"`
+	CoverURL  *string   `gorm:"column:cover_url" json:"cover_url"`
+	CreatedAt time.Time `gorm:"column:created_at" json:"created_at"`
 	UpdatedAt time.Time `gorm:"column:updated_at" json:"updated_at"`
+
+	Author  *User         `gorm:"foreignKey:AuthorID" json:"-"`
+	Section *ForumSection `gorm:"foreignKey:SectionID" json:"-"`
+	Posts   []ForumPost   `gorm:"foreignKey:TopicID" json:"-"`
 }
 
 func (ForumTopic) TableName() string { return "forum_topics" }
+
+type ForumPost struct {
+	ID        int        `gorm:"primaryKey" json:"id"`
+	TopicID   int        `gorm:"column:topic_id" json:"topic_id"`
+	AuthorID  *int       `gorm:"column:author_id" json:"author_id"`
+	Body      string     `gorm:"column:body" json:"body"`
+	CreatedAt time.Time  `gorm:"column:created_at" json:"created_at"`
+	EditedAt  *time.Time `gorm:"column:edited_at" json:"-"`
+	EditCount int        `gorm:"column:edit_count" json:"edit_count"`
+
+	Author *User           `gorm:"foreignKey:AuthorID" json:"-"`
+	Likes  []ForumPostLike `gorm:"foreignKey:PostID" json:"-"`
+}
+
+func (ForumPost) TableName() string { return "forum_posts" }
+
+type ForumPostLike struct {
+	ID        int       `gorm:"primaryKey" json:"id"`
+	PostID    int       `gorm:"column:post_id" json:"post_id"`
+	UserID    int       `gorm:"column:user_id" json:"user_id"`
+	Emoji     string    `gorm:"column:emoji" json:"emoji"`
+	CreatedAt time.Time `gorm:"column:created_at" json:"-"`
+
+	User *User `gorm:"foreignKey:UserID" json:"-"`
+}
+
+func (ForumPostLike) TableName() string { return "forum_post_likes" }
 
 type ForumTopicRead struct {
 	ID         int       `gorm:"primaryKey" json:"id"`

@@ -91,6 +91,29 @@ func (s *Server) Router() http.Handler {
 		pr.Put("/settings", s.updateSettings)
 	})
 
+	// форум: чтение — право forum.view
+	api.Group(func(pr chi.Router) {
+		pr.Use(s.auth, s.requireCap("forum.view"))
+		pr.Get("/forum/users/{id}", s.forumUserCard)
+		pr.Get("/forum/sections", s.listSections)
+		pr.Get("/forum/topics", s.listTopics)
+		pr.Get("/forum/topics/{id}", s.getTopic)
+		pr.Post("/forum/posts/{id}/like", s.toggleLike)
+	})
+
+	// форум: запись — право forum.post
+	api.Group(func(pr chi.Router) {
+		pr.Use(s.auth, s.requireCap("forum.post"))
+		pr.Post("/forum/sections", s.createSection)
+		pr.Patch("/forum/sections/{id}", s.updateSection)
+		pr.Delete("/forum/sections/{id}", s.deleteSection)
+		pr.Post("/forum/topics", s.createTopic)
+		pr.Post("/forum/topics/{id}/posts", s.addForumPost)
+		pr.Delete("/forum/topics/{id}", s.deleteTopic)
+		pr.Patch("/forum/posts/{id}", s.editForumPost)
+		pr.Delete("/forum/posts/{id}", s.deleteForumPost)
+	})
+
 	// ученики: заметки (право disciples.note)
 	api.Group(func(pr chi.Router) {
 		pr.Use(s.auth, s.requireCap("disciples.note"))

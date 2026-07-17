@@ -93,3 +93,4 @@ class ChatMessageReaction(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     message = relationship("ChatMessage", back_populates="reactions")
+    user = relationship("User")

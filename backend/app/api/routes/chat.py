@@ -73,10 +73,20 @@ def _snippet(body: str) -> str:
 
 
 def _reactions_agg(m: ChatMessage) -> list[dict]:
-    from collections import Counter
-    counts = Counter(r.emoji for r in m.reactions)
-    ordered = sorted(counts.items(), key=lambda kv: (-kv[1], REACTIONS.index(kv[0]) if kv[0] in REACTIONS else 99))
-    return [{"emoji": e, "count": c} for e, c in ordered]
+    groups: dict[str, list] = {}
+    order: list[str] = []
+    for r in m.reactions:
+        if r.emoji not in groups:
+            groups[r.emoji] = []
+            order.append(r.emoji)
+        groups[r.emoji].append(r)
+    order.sort(key=lambda e: (-len(groups[e]), REACTIONS.index(e) if e in REACTIONS else 99))
+    return [{
+        "emoji": e,
+        "count": len(groups[e]),
+        "who": [{"name": x.user.full_name if x.user else None,
+                 "avatar": x.user.avatar_url if x.user else None} for x in groups[e]],
+    } for e in order]
 
 
 def _my_reaction(m: ChatMessage, user_id: int | None) -> str | None:

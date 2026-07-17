@@ -28,6 +28,21 @@ const body = ref('')
 const replyTo = ref(null)
 const editingMsg = ref(null)
 const scroller = ref(null)
+const listWrap = ref(null)
+const stickBottom = ref(true)          // держимся ли у нижнего края (иначе не дёргаем при подгрузке)
+let listObs = null
+// Пока пользователь у нижнего края — прижимаем ленту к низу при любом росте высоты
+// (догрузка картинок/файлов и т.п.), чтобы не было «прыжка» после открытия чата.
+watch(listWrap, (el) => {
+  if (listObs) { listObs.disconnect(); listObs = null }
+  if (el && typeof ResizeObserver !== 'undefined') {
+    listObs = new ResizeObserver(() => {
+      if (!stickBottom.value) return
+      const s = scroller.value; if (s) s.scrollTop = s.scrollHeight
+    })
+    listObs.observe(el)
+  }
+})
 const inputEl = ref(null)
 const fileInput = ref(null)
 const showNew = ref(false)
@@ -62,7 +77,7 @@ watch(activeId, async (id, oldId) => {
   if (oldId && !editingMsg.value) saveDraft(oldId, body.value) // сохранить черновик прежнего чата
   replyTo.value = null; editingMsg.value = null; closeCtx()
   body.value = id ? loadDraft(id) : ''
-  if (id) { await openChat(id); scrollToBottom() }
+  if (id) { stickBottom.value = true; await openChat(id); scrollToBottom() }
   else closeChat()
   nextTick(autoGrow)
 }, { immediate: false })
@@ -157,6 +172,17 @@ async function listLeave() {
 function parseReactions(m) { try { return JSON.parse(m.reactions || '[]') } catch { return [] } }
 async function onChip(m, emoji) { if (m.id) await reactMessage(m.id, emoji) }
 
+// кто поставил реакцию (ПКМ по чипу) — как на форуме
+const whoMenu = reactive({ open: false, x: 0, y: 0, list: [] })
+const whoStyle = computed(() => {
+  const w = 240, h = 300
+  const x = Math.min(whoMenu.x, window.innerWidth - w - 8)
+  const y = Math.min(whoMenu.y, window.innerHeight - h - 8)
+  return { left: Math.max(8, x) + 'px', top: Math.max(8, y) + 'px' }
+})
+function openWho(e, r) { whoMenu.open = true; whoMenu.list = r.who || []; whoMenu.x = e.clientX; whoMenu.y = e.clientY }
+function closeWho() { whoMenu.open = false; whoMenu.list = [] }
+
 // ── контекстное меню (ПКМ) ─────────────────────────────────────────────
 const ctx = reactive({ open: false, x: 0, y: 0, m: null, selText: '' })
 function closeCtx() { ctx.open = false; ctx.m = null }
@@ -234,7 +260,8 @@ function autoGrow() {
   const el = inputEl.value
   if (!el) return
   el.style.height = 'auto'
-  el.style.height = Math.min(el.scrollHeight, 160) + 'px'
+  const border = el.offsetHeight - el.clientHeight // рамка (box-sizing: border-box) — иначе поле «худеет» на 2px
+  el.style.height = Math.min(el.scrollHeight + border, 160) + 'px'
 }
 function onInput() {
   if (body.value.length > MAX_LEN) body.value = body.value.slice(0, MAX_LEN)
@@ -316,7 +343,7 @@ const composeTitle = computed(() => {
   return `Выбрано ${composeItems.value.length} ${plural(composeItems.value.length)}`
 })
 function fmtSize(bytes) { if (!bytes) return ''; if (bytes < 1024) return `${bytes} Б`; if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} КБ`; return `${(bytes / 1048576).toFixed(1)} МБ` }
-function composeAutoGrow() { const el = composeCaptionInput.value; if (!el) return; el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight, 160) + 'px' }
+function composeAutoGrow() { const el = composeCaptionInput.value; if (!el) return; el.style.height = 'auto'; const b = el.offsetHeight - el.clientHeight; el.style.height = Math.min(el.scrollHeight + b, 160) + 'px' }
 watch(showCompose, (v) => { if (v) nextTick(() => { composeCaptionInput.value?.focus(); composeAutoGrow() }) })
 function addComposeItems(files, compress) {
   if (compress !== undefined) composeCompress.value = compress
@@ -534,7 +561,9 @@ watch(() => [player.src, player.playing, player.currentTime, player.duration], (
 async function onScroll() {
   if (ctx.open) closeCtx()
   const el = scroller.value
-  if (el && el.scrollTop < 40) { const prevH = el.scrollHeight; const n = await loadOlder(); if (n) nextTick(() => { el.scrollTop = el.scrollHeight - prevH }) }
+  if (!el) return
+  stickBottom.value = (el.scrollHeight - el.scrollTop - el.clientHeight) < 60
+  if (el.scrollTop < 40) { const prevH = el.scrollHeight; const n = await loadOlder(); if (n) nextTick(() => { el.scrollTop = el.scrollHeight - prevH }) }
 }
 
 // ── создание чата ──────────────────────────────────────────────────────
@@ -632,7 +661,7 @@ onMounted(async () => {
   }
   if (!auth.isPending && auth.user) {
     await initChat({ meId: auth.user.id, getToken: () => auth.token })
-    if (activeId.value) { await openChat(activeId.value); scrollToBottom() }
+    if (activeId.value) { stickBottom.value = true; await openChat(activeId.value); scrollToBottom() }
     else maybeAutoOpen()
   }
 })
@@ -640,6 +669,7 @@ onBeforeUnmount(() => {
   document.removeEventListener('keydown', onGlobalKey)
   document.removeEventListener('keydown', onDocType)
   resizeObs?.disconnect()
+  listObs?.disconnect()
   cancelCompose()
   if (draftTimer) clearTimeout(draftTimer)
   if (activeId.value && !editingMsg.value) saveDraft(activeId.value, body.value) // сохранить черновик при уходе
@@ -721,7 +751,7 @@ onBeforeUnmount(() => {
 
         <div ref="scroller" class="chat-bg flex flex-1 flex-col overflow-y-auto p-4"
              @scroll="onScroll" @click="onScrollerClick" @mousedown="onScrollerDown" @touchstart="onScrollerDown">
-          <div class="mt-auto space-y-1">
+          <div ref="listWrap" class="mt-auto space-y-1">
           <template v-for="(m, i) in chatState.messages" :key="m.client_uuid">
           <div v-if="m.client_uuid === firstUnreadKey" class="my-2 flex items-center gap-2 px-2 text-xs text-ink-700/50">
             <span class="h-px flex-1 bg-parchment-300"></span><span>Непрочитанные</span><span class="h-px flex-1 bg-parchment-300"></span>
@@ -744,9 +774,9 @@ onBeforeUnmount(() => {
                    class="block max-h-[400px] w-full cursor-zoom-in object-cover" @click.stop="openLightbox(u)" />
               <div v-if="captionText(m)" class="markdown-body break-words px-3.5 pt-1.5 text-[15px]" :class="isMine(m) && 'markdown-on-accent'" v-html="renderChatBody(captionText(m))"></div>
               <div v-if="parseReactions(m).length" class="flex flex-wrap gap-1 px-2.5 pb-1 pt-1.5">
-                <button v-for="r in parseReactions(m)" :key="r.emoji" @click.stop="onChip(m, r.emoji)"
-                        class="inline-flex items-center gap-0.5 rounded-full bg-black/45 px-1.5 py-0.5 text-xs text-white ring-1 ring-white/20"
-                        :class="m.my_reaction === r.emoji && 'ring-2 ring-white/70'"><span>{{ r.emoji }}</span><span class="tabular-nums">{{ r.count }}</span></button>
+                <button v-for="r in parseReactions(m)" :key="r.emoji" @click.stop="onChip(m, r.emoji)" @contextmenu.prevent.stop="openWho($event, r)" title="ПКМ — кто поставил"
+                        class="inline-flex items-center gap-1 rounded-full bg-black/45 px-1.5 py-0.5 text-white ring-1 ring-white/20"
+                        :class="m.my_reaction === r.emoji && 'ring-2 ring-white/70'"><span class="text-lg leading-none">{{ r.emoji }}</span><span v-if="r.count > 1" class="text-xs font-semibold tabular-nums">{{ r.count }}</span></button>
               </div>
               <div v-if="captionText(m)" class="flex items-center justify-end gap-1 px-3 pb-1.5 pt-0.5 text-[11px]" :class="isMine(m) ? 'text-white/70' : 'text-ink-700/40'">
                 <span>{{ fmtTime(m.created_at) }}</span>
@@ -768,23 +798,26 @@ onBeforeUnmount(() => {
               <div v-if="m.deleted" class="italic opacity-60">сообщение удалено</div>
               <div v-else class="markdown-body break-words" :class="isMine(m) && 'markdown-on-accent'" v-html="renderChatBody(m.body)"></div>
 
-              <div v-if="parseReactions(m).length" class="mt-1 flex flex-wrap gap-1">
-                <button v-for="r in parseReactions(m)" :key="r.emoji" @click.stop="onChip(m, r.emoji)"
-                        class="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-xs ring-1 transition"
-                        :class="m.my_reaction === r.emoji ? (isMine(m) ? 'bg-white/25 ring-white/60' : 'bg-saffron-500/15 ring-saffron-400') : (isMine(m) ? 'bg-white/10 ring-white/25' : 'bg-parchment-100 ring-parchment-200')">
-                  <span>{{ r.emoji }}</span><span class="tabular-nums">{{ r.count }}</span>
-                </button>
-              </div>
-
-              <div class="mt-0.5 flex items-center justify-end gap-1 text-[11px]" :class="isMine(m) ? 'text-white/70' : 'text-ink-700/40'">
-                <span v-if="m.edit_count">изм. · </span>
-                <span>{{ fmtTime(m.created_at) }}</span>
-                <template v-if="statusOf(m)">
-                  <AppIcon v-if="statusOf(m) === 'pending'" name="clock" :size="12" />
-                  <button v-else-if="statusOf(m) === 'failed'" class="text-red-200" title="Не отправлено — повторить" @click.stop="retryFailed"><AppIcon name="close" :size="12" /></button>
-                  <AppIcon v-else-if="statusOf(m) === 'read'" name="check" :size="12" class="-mr-1" />
-                  <AppIcon v-if="statusOf(m) === 'read' || statusOf(m) === 'sent'" name="check" :size="12" />
-                </template>
+              <div class="mt-1 flex items-end justify-between gap-2">
+                <div v-if="parseReactions(m).length" class="flex flex-wrap gap-1">
+                  <button v-for="r in parseReactions(m)" :key="r.emoji" @click.stop="onChip(m, r.emoji)" @contextmenu.prevent.stop="openWho($event, r)"
+                          title="ПКМ — кто поставил"
+                          class="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 ring-1 transition"
+                          :class="m.my_reaction === r.emoji ? (isMine(m) ? 'bg-white/25 ring-white/60' : 'bg-saffron-500/15 ring-saffron-400') : (isMine(m) ? 'bg-white/10 ring-white/25' : 'bg-parchment-100 ring-parchment-200')">
+                    <span class="text-lg leading-none">{{ r.emoji }}</span><span v-if="r.count > 1" class="text-xs font-semibold tabular-nums">{{ r.count }}</span>
+                  </button>
+                </div>
+                <span v-else></span>
+                <div class="flex shrink-0 items-center gap-1 text-[11px]" :class="isMine(m) ? 'text-white/70' : 'text-ink-700/40'">
+                  <span v-if="m.edit_count">изм. · </span>
+                  <span>{{ fmtTime(m.created_at) }}</span>
+                  <template v-if="statusOf(m)">
+                    <AppIcon v-if="statusOf(m) === 'pending'" name="clock" :size="12" />
+                    <button v-else-if="statusOf(m) === 'failed'" class="text-red-200" title="Не отправлено — повторить" @click.stop="retryFailed"><AppIcon name="close" :size="12" /></button>
+                    <AppIcon v-else-if="statusOf(m) === 'read'" name="check" :size="12" class="-mr-1" />
+                    <AppIcon v-if="statusOf(m) === 'read' || statusOf(m) === 'sent'" name="check" :size="12" />
+                  </template>
+                </div>
               </div>
             </div>
             <!-- аватар своих сообщений (в группах, справа) -->
@@ -894,6 +927,19 @@ onBeforeUnmount(() => {
         <button v-if="canCopy(ctx.m) || ctx.selText" class="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-ink-700 hover:bg-parchment-100" @click="ctxCopy"><AppIcon name="copy" :size="15" /> Копировать</button>
         <button v-if="canEdit(ctx.m)" class="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-ink-700 hover:bg-parchment-100" @click="ctxEdit"><AppIcon name="edit" :size="15" /> Изменить</button>
         <button v-if="canDelete(ctx.m)" class="flex w-full items-center gap-2.5 border-t border-parchment-100 px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50" @click="ctxDelete"><AppIcon name="trash" :size="15" /> Удалить</button>
+      </div>
+    </template>
+
+    <!-- Кто поставил реакцию (ПКМ по чипу) -->
+    <template v-if="whoMenu.open">
+      <div class="fixed inset-0 z-40" @click="closeWho" @contextmenu.prevent="closeWho"></div>
+      <div class="fixed z-50 max-h-[280px] w-60 overflow-y-auto rounded-xl border border-parchment-200 bg-white p-1.5 shadow-xl" :style="whoStyle">
+        <div v-for="(u, k) in whoMenu.list" :key="k" class="flex items-center gap-2 rounded-lg px-2 py-1.5">
+          <img v-if="u.avatar" :src="u.avatar" class="photo-bw h-7 w-7 shrink-0 rounded-full object-cover" />
+          <span v-else class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-sage-400 to-sage-600 text-xs font-semibold text-white">{{ initials(u.name) }}</span>
+          <span class="truncate text-sm text-ink-800">{{ u.name || '—' }}</span>
+        </div>
+        <div v-if="!whoMenu.list.length" class="px-2 py-1.5 text-sm text-ink-700/50">Пока никого</div>
       </div>
     </template>
 

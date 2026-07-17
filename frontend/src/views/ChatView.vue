@@ -269,8 +269,8 @@ async function doForward(chatId) {
   forwardOpen.value = false
   await forwardMessages(chatId, bodies)
   exitSelect()
-  showToast('Переслано')
   if (chatId === activeId.value) scrollToBottom()
+  else router.replace({ name: 'chat', params: { id: chatId } }) // открыть чат, куда переслали
 }
 function ctxForward() { const m = ctx.m; closeCtx(); if (m) openForward([fwdWrap(m)]) }
 function ctxSelect() { const m = ctx.m; closeCtx(); enterSelect(m) }
@@ -856,7 +856,7 @@ onBeforeUnmount(() => {
           </div>
           <div :id="`msg-${m.id}`"
                class="group flex items-end gap-2 rounded-xl px-1 transition-colors"
-               :class="[selectMode ? 'w-full max-w-[720px] cursor-pointer justify-start' : rowJustify(m), selectMode && selected.has(m.id) && 'bg-saffron-500/10']"
+               :class="[selectMode ? 'cursor-pointer justify-start' : rowJustify(m), selectMode && selected.has(m.id) && 'bg-saffron-500/10']"
                @click.capture="onRowClick($event, m)">
             <!-- аватар (в группах, слева от сообщения — и у чужих, и у своих) -->
             <template v-if="isGroup && !isMine(m)">
@@ -937,7 +937,7 @@ onBeforeUnmount(() => {
                 </div>
               </div>
             </div>
-            <div v-if="selectMode" class="ml-auto flex shrink-0 items-center self-center pl-1">
+            <div v-if="selectMode" class="flex shrink-0 items-center self-center pl-1">
               <span class="flex h-6 w-6 items-center justify-center rounded-full border-2 transition" :class="selected.has(m.id) ? 'border-saffron-500 bg-saffron-500 text-white' : 'border-parchment-400 bg-white/80'">
                 <AppIcon v-if="selected.has(m.id)" name="check" :size="14" />
               </span>

@@ -263,6 +263,11 @@ export class ChatEngine {
     await this.db.run('UPDATE messages SET deleted=1, body=\'\' WHERE chat_id=? AND id=?', [chatId, messageId], ['messages']);
   }
 
+  // «удалить для себя» — скрываем локально, на сервер не ходим
+  async hideMessage(chatId, messageId) {
+    await this.db.run('UPDATE messages SET hidden=1 WHERE chat_id=? AND id=?', [chatId, messageId], ['messages']);
+  }
+
   async react(chatId, messageId, emoji) {
     const res = await this.api.react(chatId, messageId, emoji);  // { reactions, my_reaction }
     await this.db.run('UPDATE messages SET reactions=?, my_reaction=? WHERE chat_id=? AND id=?',

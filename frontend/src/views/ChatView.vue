@@ -173,7 +173,8 @@ function onContext(e, m) {
 }
 const EDIT_WINDOW = 24 * 3600_000
 function canEdit(m) { return isMine(m) && m.id && !m.deleted && !isVoice(m) && (Date.now() - new Date(m.created_at).getTime()) <= EDIT_WINDOW }
-function canDelete(m) { return isMine(m) && m.id && !m.deleted }
+// в группе удалять можно только своё (для всех); в личном — любое (чужое скрывается у себя)
+function canDelete(m) { return m.id && !m.deleted && (isMine(m) || activeChat.value?.type === 'direct') }
 function isVoice(m) { return /@\[audio\]\(/.test(m.body || '') }
 
 function ctxReply() { startReply(ctx.m, ctx.selText); closeCtx() }
@@ -186,7 +187,22 @@ function ctxCopy() {
   navigator.clipboard?.writeText(text).then(() => showToast('Скопировано')).catch(() => {})
 }
 function ctxEdit() { startEdit(ctx.m); closeCtx() }
-async function ctxDelete() { const m = ctx.m; closeCtx(); if (m?.id) await deleteMessage(m.id) }
+function ctxDelete() { const m = ctx.m; closeCtx(); askDelete(m) }
+// диалог удаления
+const deleteTarget = ref(null)
+const deleteForAll = ref(true)
+const peerName = computed(() => {
+  const peer = (chatState.members || []).find((x) => x.user_id !== chatState.meId)
+  return peer?.full_name || 'собеседника'
+})
+function askDelete(m) { if (!m?.id) return; deleteTarget.value = m; deleteForAll.value = isMine(m) }
+async function confirmDelete() {
+  const m = deleteTarget.value; deleteTarget.value = null
+  if (!m?.id) return
+  const isDir = activeChat.value?.type === 'direct'
+  const everyone = !isDir ? true : (isMine(m) ? deleteForAll.value : false)
+  await deleteMessage(m.id, everyone)
+}
 function cleanBody(b) {
   return (b || '').replace(/@\[audio\]\([^)]*\)/g, '🎤 Голосовое сообщение').replace(/!\[[^\]]*\]\([^)]*\)/g, '').trim()
 }
@@ -285,7 +301,16 @@ const composeItems = ref([])   // [{ file, url }]
 const composeCaption = ref('')
 const composeCompress = ref(true)
 const composeInput = ref(null)
+const composeCaptionInput = ref(null)
 const showCompose = computed(() => composeItems.value.length > 0)
+function composeAutoGrow() {
+  const el = composeCaptionInput.value
+  if (!el) return
+  el.style.height = 'auto'
+  el.style.height = Math.min(el.scrollHeight, 160) + 'px'
+}
+// автофокус на подписи при открытии диалога
+watch(showCompose, (v) => { if (v) nextTick(() => { composeCaptionInput.value?.focus(); composeAutoGrow() }) })
 function addComposeFiles(files) {
   for (const f of Array.from(files)) if ((f.type || '').startsWith('image/')) composeItems.value.push({ file: f, url: URL.createObjectURL(f) })
 }
@@ -561,6 +586,7 @@ async function saveGroup() {
 function onGlobalKey(e) {
   if (e.key !== 'Escape') return
   if (recording.value) cancelRec()
+  else if (deleteTarget.value) deleteTarget.value = null
   else if (showCompose.value) cancelCompose()
   else if (showGroupEdit.value) showGroupEdit.value = false
   else if (showNew.value) closeNew()
@@ -846,6 +872,24 @@ onBeforeUnmount(() => {
       </div>
     </template>
 
+    <!-- Диалог удаления сообщения -->
+    <div v-if="deleteTarget" class="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/40 p-4" @click.self="deleteTarget = null">
+      <div class="w-full max-w-sm overflow-hidden rounded-xl bg-white shadow-xl">
+        <div class="p-5">
+          <h3 class="font-medium text-ink-900">Удалить это сообщение?</h3>
+          <label v-if="activeChat?.type === 'direct' && isMine(deleteTarget)" class="mt-4 flex items-center gap-2.5 text-sm text-ink-800">
+            <input type="checkbox" v-model="deleteForAll" class="h-4 w-4" /> Также удалить для {{ peerName }}
+          </label>
+          <p v-else-if="activeChat?.type === 'group'" class="mt-3 text-sm text-ink-700/70">Сообщение будет удалено для всех в этом чате.</p>
+          <p v-else class="mt-3 text-sm text-ink-700/70">Сообщение будет скрыто только у вас.</p>
+        </div>
+        <div class="flex justify-end gap-2 border-t border-parchment-200 p-3">
+          <button class="btn-ghost" @click="deleteTarget = null">Отмена</button>
+          <button class="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700" @click="confirmDelete">Удалить</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Диалог отправки изображений -->
     <div v-if="showCompose" class="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/40 p-4" @click.self="cancelCompose">
       <div class="flex max-h-[85vh] w-full max-w-md flex-col overflow-hidden rounded-xl bg-white shadow-xl">
@@ -871,7 +915,9 @@ onBeforeUnmount(() => {
           </label>
           <div class="mt-3">
             <label class="label">Подпись</label>
-            <textarea v-model="composeCaption" rows="2" :maxlength="MAX_LEN" class="input resize-none" placeholder="Добавьте подпись…"></textarea>
+            <textarea ref="composeCaptionInput" v-model="composeCaption" rows="1" :maxlength="MAX_LEN"
+                      class="input max-h-40 resize-none overflow-y-auto" placeholder="Добавьте подпись…"
+                      @input="composeAutoGrow"></textarea>
           </div>
         </div>
         <div class="flex items-center justify-end gap-2 border-t border-parchment-200 p-3">

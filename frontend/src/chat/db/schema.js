@@ -43,6 +43,7 @@ CREATE TABLE IF NOT EXISTS messages (
   edited_at    TEXT,
   edit_count   INTEGER DEFAULT 0,
   deleted      INTEGER DEFAULT 0,
+  hidden       INTEGER DEFAULT 0,         -- скрыто только у меня («удалить для себя»)
   reactions    TEXT,                      -- JSON-агрегат [{emoji,count}]
   my_reaction  TEXT,                      -- эмодзи текущего пользователя
   status       TEXT DEFAULT 'sent',       -- pending | sent | failed
@@ -69,4 +70,5 @@ export const MIGRATIONS = [
   'ALTER TABLE messages ADD COLUMN my_reaction TEXT',
   'ALTER TABLE outbox ADD COLUMN reply_quote TEXT',
   'ALTER TABLE chats ADD COLUMN pinned INTEGER DEFAULT 0',
+  'ALTER TABLE messages ADD COLUMN hidden INTEGER DEFAULT 0',
 ];

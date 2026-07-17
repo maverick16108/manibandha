@@ -99,7 +99,7 @@ async function refreshChats() {
     const members = mem.filter((m) => m.chat_id === c.id);
     const peer = c.type === 'direct' ? members.find((m) => m.user_id !== chatState.meId) : null;
     const last = await db.get(
-      'SELECT body,author_id,author_name,created_at,seq,deleted,status FROM messages WHERE chat_id=? ORDER BY (seq IS NULL), seq DESC, local_ts DESC LIMIT 1',
+      'SELECT body,author_id,author_name,created_at,seq,deleted,status FROM messages WHERE chat_id=? AND deleted=0 AND (hidden IS NULL OR hidden=0) ORDER BY (seq IS NULL), seq DESC, local_ts DESC LIMIT 1',
       [c.id],
     );
     total += c.unread || 0;
@@ -122,7 +122,7 @@ async function refreshChats() {
 async function refreshMessages() {
   if (!db || !chatState.activeChatId) return;
   chatState.messages = await db.all(
-    'SELECT * FROM messages WHERE chat_id=? ORDER BY (seq IS NULL), seq ASC, local_ts ASC',
+    'SELECT * FROM messages WHERE chat_id=? AND deleted=0 AND (hidden IS NULL OR hidden=0) ORDER BY (seq IS NULL), seq ASC, local_ts ASC',
     [chatState.activeChatId],
   );
   chatState.members = await db.all('SELECT * FROM members WHERE chat_id=?', [chatState.activeChatId]);
@@ -181,8 +181,9 @@ export async function editMessage(messageId, body) {
   await engine?.editMessage(chatState.activeChatId, messageId, body);
 }
 
-export async function deleteMessage(messageId) {
-  await engine?.deleteMessage(chatState.activeChatId, messageId);
+export async function deleteMessage(messageId, forEveryone) {
+  if (forEveryone) await engine?.deleteMessage(chatState.activeChatId, messageId);
+  else await engine?.hideMessage(chatState.activeChatId, messageId);
 }
 
 export const REACTION_EMOJIS = ['❤️', '👍', '🙏', '🔥', '😂', '🎉'];

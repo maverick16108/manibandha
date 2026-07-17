@@ -38,13 +38,33 @@ func (s *Server) Router() http.Handler {
 		pr.Get("/auth/me", s.me)
 		pr.Patch("/auth/me", s.patchMe)
 		pr.Get("/me/capabilities", s.myCapabilities)
+		pr.Get("/users/mentors", s.listMentors)
 	})
 
-	// только с правом roles.manage
+	// staff (гуру/секретарь): управление пользователями
 	api.Group(func(pr chi.Router) {
-		pr.Use(s.auth)
-		pr.Use(s.requireCap("roles.manage"))
+		pr.Use(s.auth, s.staff)
+		pr.Get("/users", s.listUsers)
+		pr.Post("/users", s.createUser)
+		pr.Patch("/users/{id}", s.updateUser)
+		pr.Delete("/users/{id}", s.deleteUser)
+	})
+
+	// право roles.manage: справочник прав и CRUD ролей
+	api.Group(func(pr chi.Router) {
+		pr.Use(s.auth, s.requireCap("roles.manage"))
 		pr.Get("/capabilities", s.listCapabilities)
+		pr.Get("/roles", s.listRoles)
+		pr.Post("/roles", s.createRole)
+		pr.Put("/roles/{id}", s.updateRole)
+		pr.Delete("/roles/{id}", s.deleteRole)
+	})
+
+	// право users.manage: роли пользователя
+	api.Group(func(pr chi.Router) {
+		pr.Use(s.auth, s.requireCap("users.manage"))
+		pr.Get("/users/{id}/roles", s.getUserRoles)
+		pr.Put("/users/{id}/roles", s.setUserRoles)
 	})
 
 	r.Mount(s.Cfg.APIPrefix, api)

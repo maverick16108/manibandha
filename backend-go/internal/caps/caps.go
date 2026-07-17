@@ -55,6 +55,8 @@ func init() {
 
 func AllCaps() []string { return append([]string(nil), allCaps...) }
 
+func IsCap(key string) bool { return capSet[key] }
+
 // Grouped — каталог для редактора ролей, сгруппированный по фичам (сохраняет порядок).
 func Grouped() []map[string]any {
 	var order []string

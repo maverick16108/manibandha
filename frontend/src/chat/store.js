@@ -77,6 +77,7 @@ export function teardownChat() {
   try { db?.close(); } catch { /* ignore */ }
   if (safetyTimer) clearInterval(safetyTimer);
   if (typingTimer) clearInterval(typingTimer);
+  if (refreshChatsTimer) { clearTimeout(refreshChatsTimer); refreshChatsTimer = null; }
   db = engine = socket = unsub = safetyTimer = typingTimer = null;
   chatState.ready = false;
   chatState.chats = [];
@@ -85,9 +86,18 @@ export function teardownChat() {
   chatState.totalUnread = 0;
 }
 
+// refreshChats дорогой (N+1 запрос «последнее сообщение» по каждому чату) — при
+// быстрой отправке он дёргается на каждое сообщение и даёт «залипания». Коалесцируем:
+// активный чат обновляем мгновенно (refreshMessages), а список — раз в ~120мс.
+let refreshChatsTimer = null;
+function scheduleRefreshChats() {
+  if (refreshChatsTimer) clearTimeout(refreshChatsTimer);
+  refreshChatsTimer = setTimeout(() => { refreshChatsTimer = null; refreshChats(); }, 120);
+}
+
 async function onDbChange(tables) {
   const t = tables || [];
-  if (t.includes('chats') || t.includes('members')) await refreshChats();
+  if (t.includes('chats') || t.includes('members')) scheduleRefreshChats();
   // событие «прочитано» меняет только members → обновляем участников активного чата,
   // иначе peerReadSeq остаётся устаревшим и вторая галочка (прочитано) не появляется
   if (t.includes('members') && chatState.activeChatId) {
@@ -95,7 +105,7 @@ async function onDbChange(tables) {
   }
   if (t.includes('messages')) {
     if (chatState.activeChatId) await refreshMessages();
-    await refreshChats(); // превью/порядок в списке
+    scheduleRefreshChats(); // превью/порядок в списке — коалесцированно
   }
 }
 

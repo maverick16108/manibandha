@@ -39,6 +39,28 @@ func (s *Server) Router() http.Handler {
 		pr.Patch("/auth/me", s.patchMe)
 		pr.Get("/me/capabilities", s.myCapabilities)
 		pr.Get("/users/mentors", s.listMentors)
+		// справочники: чтение — любому авторизованному
+		pr.Get("/cities", s.listCities)
+		pr.Get("/regions", s.listRegions)
+		pr.Get("/countries", s.listCountries)
+		pr.Get("/temples", s.listTemples)
+	})
+
+	// справочники: изменение — staff
+	api.Group(func(pr chi.Router) {
+		pr.Use(s.auth, s.staff)
+		pr.Post("/cities", s.createCity)
+		pr.Patch("/cities/{id}", s.updateCity)
+		pr.Delete("/cities/{id}", s.deleteCity)
+		pr.Post("/regions", s.createRegion)
+		pr.Patch("/regions/{id}", s.updateRegion)
+		pr.Delete("/regions/{id}", s.deleteRegion)
+		pr.Post("/countries", s.createCountry)
+		pr.Patch("/countries/{id}", s.updateCountry)
+		pr.Delete("/countries/{id}", s.deleteCountry)
+		pr.Post("/temples", s.createTemple)
+		pr.Patch("/temples/{id}", s.updateTemple)
+		pr.Delete("/temples/{id}", s.deleteTemple)
 	})
 
 	// staff (гуру/секретарь): управление пользователями

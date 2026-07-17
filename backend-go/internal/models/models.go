@@ -121,6 +121,42 @@ type AppSetting struct {
 
 func (AppSetting) TableName() string { return "app_settings" }
 
+// ── справочники ──────────────────────────────────────────────────────────
+
+type City struct {
+	ID      int     `gorm:"primaryKey" json:"id"`
+	Name    string  `gorm:"column:name" json:"name"`
+	Country *string `gorm:"column:country" json:"country"`
+	Region  *string `gorm:"column:region" json:"region"`
+}
+
+func (City) TableName() string { return "cities" }
+
+type Region struct {
+	ID   int    `gorm:"primaryKey" json:"id"`
+	Name string `gorm:"column:name" json:"name"`
+}
+
+func (Region) TableName() string { return "regions" }
+
+type Country struct {
+	ID   int    `gorm:"primaryKey" json:"id"`
+	Name string `gorm:"column:name" json:"name"`
+}
+
+func (Country) TableName() string { return "countries" }
+
+type Temple struct {
+	ID            int     `gorm:"primaryKey" json:"id"`
+	Name          string  `gorm:"column:name" json:"name"`
+	City          *string `gorm:"column:city" json:"city"`
+	Country       *string `gorm:"column:country" json:"country"`
+	PresidentName *string `gorm:"column:president_name" json:"president_name"`
+	Notes         *string `gorm:"column:notes" json:"notes"`
+}
+
+func (Temple) TableName() string { return "temples" }
+
 // Thread — ветка общения (нужна при регистрации: создаётся approval-ветка).
 type Thread struct {
 	ID         int     `gorm:"primaryKey" json:"id"`

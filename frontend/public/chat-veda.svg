@@ -1,1 +1,122 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300" viewBox="0 0 300 300"><defs><g id="wheel"><circle r="6"/><circle r="1.4"/><path d="M0 -6V6M-6 0H6M-4.2 -4.2 4.2 4.2M-4.2 4.2 4.2 -4.2"/></g><g id="lotus"><path d="M0 2C-2 -4 -6 -5 -8 -2M0 2C-1 -5 -3 -7 -4.5 -6.5M0 2V-8M0 2C1 -5 3 -7 4.5 -6.5M0 2C2 -4 6 -5 8 -2"/><path d="M-6 2Q0 5 6 2"/></g><g id="diya"><path d="M-6 1Q0 7 6 1Q3 3 0 3Q-3 3 -6 1Z"/><path d="M0 1Q2.5 -2 0 -7Q-2.5 -2 0 1"/></g><g id="leaf"><path d="M0 8V-9"/><path d="M0 -2Q4 -4 5 -8M0 -2Q-4 -4 -5 -8M0 2Q3.5 0 4.5 -3M0 2Q-3.5 0 -4.5 -3M0 5Q3 4 4 1.5M0 5Q-3 4 -4 1.5"/></g><g id="conch"><path d="M4 6Q10 1 6 -4Q1 -8 -3 -4Q-6 -1 -3 2Q-1 4 1 2Q2.5 0.5 0.8 -0.8"/><circle cx="4.5" cy="4.5" r="1"/></g><g id="flute"><path d="M-10 7 9 -7"/><circle cx="-3" cy="1.4" r="0.8"/><circle cx="0" cy="-0.6" r="0.8"/><circle cx="3" cy="-2.6" r="0.8"/><path d="M9 -7 12 -9M9 -7 11 -4"/></g><g id="feather"><path d="M-7 9Q-1 0 5 -8"/><ellipse cx="6" cy="-9" rx="3" ry="4.5" transform="rotate(30 6 -9)"/><circle cx="6" cy="-9" r="1.6"/></g><g id="temple"><path d="M0 -12L-4 -6H4Z"/><path d="M-4 -6V-2H4V-6"/><path d="M-6 -2H6V8H-6Z"/><path d="M-6 8H6"/><path d="M-2 8V3H2V8"/><path d="M0 -12V-14"/></g><g id="flower"><circle cx="0" cy="-4" r="2"/><circle cx="3.8" cy="-1.2" r="2"/><circle cx="2.4" cy="3.2" r="2"/><circle cx="-2.4" cy="3.2" r="2"/><circle cx="-3.8" cy="-1.2" r="2"/><circle r="1.2"/></g><g id="quatre"><circle cx="0" cy="-2.5" r="1.5"/><circle cx="2.5" cy="0" r="1.5"/><circle cx="0" cy="2.5" r="1.5"/><circle cx="-2.5" cy="0" r="1.5"/></g><g id="dot"><circle r="1.4"/></g></defs><g fill="none" stroke="#bd8a3e" stroke-width="0.9" stroke-linecap="round" stroke-linejoin="round" opacity="0.55"><use href="#wheel" transform="translate(40 34)"/><text x="150" y="30" font-size="14" font-family="Georgia,serif" text-anchor="middle" stroke="none" fill="#bd8a3e">&#2384;</text><use href="#quatre" transform="translate(232 30)"/><use href="#flower" transform="translate(285 34)"/><use href="#conch" transform="translate(72 86)"/><use href="#leaf" transform="translate(150 80) rotate(10)"/><use href="#feather" transform="translate(232 80)"/><use href="#dot" transform="translate(285 90)"/><use href="#diya" transform="translate(30 150)"/><use href="#flute" transform="translate(110 150)"/><use href="#lotus" transform="translate(192 150)"/><use href="#wheel" transform="translate(270 150)"/><use href="#leaf" transform="translate(44 220) rotate(-12)"/><use href="#temple" transform="translate(150 214)"/><text x="232" y="220" font-size="12" font-family="Georgia,serif" text-anchor="middle" stroke="none" fill="#bd8a3e">&#2384;</text><use href="#flower" transform="translate(288 214)"/><use href="#dot" transform="translate(100 120)"/><use href="#dot" transform="translate(200 120)"/><use href="#quatre" transform="translate(150 270)"/><use href="#dot" transform="translate(60 270)"/><use href="#conch" transform="translate(232 272)"/><use href="#lotus" transform="translate(300 90) scale(0.9)"/><use href="#dot" transform="translate(0 120)"/></g></svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="360" height="480" viewBox="0 0 360 480">
+<defs>
+<g id="wheel">
+  <circle r="8.4" stroke-dasharray="0.1 2.55"/>
+  <circle r="4.6"/>
+  <circle r="1"/>
+  <path d="M0 -4.6V-1.7M0 4.6V1.7M-4.6 0H-1.7M4.6 0H1.7M-3.25 -3.25 -1.2 -1.2M3.25 3.25 1.2 1.2M-3.25 3.25 -1.2 1.2M3.25 -3.25 1.2 -1.2"/>
+</g>
+<g id="conch">
+  <path d="M-6.5 5.5Q-8 -2 -2.5 -6.5Q4 -10 7.5 -3.5Q9.6 1 5 4.4Q1 6.8 -6.5 5.5Z"/>
+  <path d="M2.4 4Q6.4 3 6.4 -1.2Q6.4 -4.4 3 -4.4Q0.2 -4.4 0.8 -1.4Q1.2 0.8 3.2 -0.2"/>
+  <path d="M-6.5 5.5Q-9 6.6 -10.5 5.6"/>
+</g>
+<g id="flute">
+  <g transform="rotate(-37)">
+    <rect x="-12" y="-1.7" width="24" height="3.4" rx="1.7"/>
+    <circle cx="-4.5" r="0.7"/><circle cx="-0.5" r="0.7"/><circle cx="3.5" r="0.7"/>
+    <path d="M12 -1.5Q15.5 -3 14.2 0Q15.5 3 12 1.5"/>
+    <path d="M13.4 1.4 16.6 4.6M13.4 1.4 15 5"/>
+  </g>
+</g>
+<g id="feather">
+  <path d="M-7.5 9.5Q-2.5 1.5 3.5 -6"/>
+  <path d="M3.5 -6Q1 -12.5 5.6 -13.6Q11 -12.4 9 -6.2Q7 -2 3.5 -6Z"/>
+  <circle cx="6.1" cy="-9" r="1.9"/>
+  <path d="M6.1 -9 6.1 -13.6"/>
+</g>
+<g id="lotus">
+  <path d="M0 3.5V-9.5"/>
+  <path d="M0 3.5Q-2.4 -3 -4.4 -6.4"/>
+  <path d="M0 3.5Q2.4 -3 4.4 -6.4"/>
+  <path d="M0 3.5Q-5.4 -2 -8.6 -3.2Q-9.6 1.2 -6.2 3.4"/>
+  <path d="M0 3.5Q5.4 -2 8.6 -3.2Q9.6 1.2 6.2 3.4"/>
+  <path d="M-6.2 3.4Q0 6.6 6.2 3.4"/>
+</g>
+<g id="temple">
+  <path d="M0 -15.5V-13.5"/>
+  <path d="M0 -14.6 3.4 -13.4 0 -12.2"/>
+  <path d="M0 -12.2L-4.2 -5H4.2Z"/>
+  <path d="M-4.2 -5H4.2V-1.8H-4.2Z"/>
+  <path d="M-6.2 -1.8H6.2V9.2H-6.2Z"/>
+  <path d="M-2.2 9.2V3.4Q0 0.2 2.2 3.4V9.2"/>
+  <path d="M-7 9.2H7"/>
+</g>
+<g id="leaf">
+  <path d="M0 9.5V-9.5"/>
+  <path d="M0 3.4Q3.2 2 4.8 -1.8Q1.2 -1.4 0 2.4"/>
+  <path d="M0 3.4Q-3.2 2 -4.8 -1.8Q-1.2 -1.4 0 2.4"/>
+  <path d="M0 -1.2Q3.2 -2.6 4.8 -6.4Q1.2 -6 0 -2.2"/>
+  <path d="M0 -1.2Q-3.2 -2.6 -4.8 -6.4Q-1.2 -6 0 -2.2"/>
+  <path d="M0 -5.6Q2.2 -6.8 3.2 -9.8Q0.6 -9.4 0 -6.8"/>
+</g>
+<g id="diya">
+  <path d="M-6.4 0.5Q0 6.5 6.4 0.5Q3.2 2.5 0 2.5Q-3.2 2.5 -6.4 0.5Z"/>
+  <path d="M6.4 0.5Q9.4 -0.4 8.2 1.6"/>
+  <path d="M6.6 0.6Q9 -3 6.8 -7.4Q4.6 -3.4 6 -0.6"/>
+</g>
+<g id="quatre">
+  <path d="M0 0Q-1.7 -1.7 0 -3.6Q1.7 -1.7 0 0"/>
+  <path d="M0 0Q1.7 -1.7 3.6 0Q1.7 1.7 0 0"/>
+  <path d="M0 0Q1.7 1.7 0 3.6Q-1.7 1.7 0 0"/>
+  <path d="M0 0Q-1.7 1.7 -3.6 0Q-1.7 -1.7 0 0"/>
+</g>
+<g id="ring"><circle r="2.5"/></g>
+<g id="dot"><circle r="1.15" fill="#c49a5b" stroke="none"/></g>
+</defs>
+<g fill="none" stroke="#c49a5b" stroke-width="0.95" stroke-linecap="round" stroke-linejoin="round" opacity="0.7">
+  <!-- row 1 -->
+  <use href="#wheel" transform="translate(46 40)"/>
+  <text x="140" y="46" font-size="17" font-family="Georgia,'Noto Serif',serif" text-anchor="middle" stroke="none" fill="#c49a5b">&#2384;</text>
+  <use href="#quatre" transform="translate(230 38)"/>
+  <use href="#feather" transform="translate(320 44)"/>
+  <use href="#ring" transform="translate(96 30)"/>
+  <use href="#dot" transform="translate(288 34)"/>
+  <use href="#dot" transform="translate(184 66)"/>
+  <!-- row 2 -->
+  <use href="#conch" transform="translate(48 116)"/>
+  <use href="#leaf" transform="translate(138 112) rotate(9)"/>
+  <use href="#flute" transform="translate(230 116)"/>
+  <use href="#lotus" transform="translate(320 118)"/>
+  <use href="#dot" transform="translate(96 96)"/>
+  <use href="#ring" transform="translate(286 128)"/>
+  <use href="#dot" transform="translate(12 150)"/>
+  <!-- row 3 -->
+  <use href="#diya" transform="translate(46 192)"/>
+  <text x="140" y="198" font-size="14" font-family="Georgia,'Noto Serif',serif" text-anchor="middle" stroke="none" fill="#c49a5b">&#2384;</text>
+  <use href="#temple" transform="translate(232 190)"/>
+  <use href="#wheel" transform="translate(320 194)"/>
+  <use href="#quatre" transform="translate(96 178)"/>
+  <use href="#dot" transform="translate(186 176)"/>
+  <use href="#dot" transform="translate(280 222)"/>
+  <!-- row 4 -->
+  <use href="#lotus" transform="translate(48 264)"/>
+  <use href="#wheel" transform="translate(140 266)"/>
+  <use href="#leaf" transform="translate(232 262) rotate(-11)"/>
+  <use href="#conch" transform="translate(320 266)"/>
+  <use href="#ring" transform="translate(96 250)"/>
+  <use href="#dot" transform="translate(188 250)"/>
+  <use href="#dot" transform="translate(10 292)"/>
+  <!-- row 5 -->
+  <use href="#leaf" transform="translate(46 338) rotate(8)"/>
+  <use href="#temple" transform="translate(140 336)"/>
+  <text x="232" y="344" font-size="16" font-family="Georgia,'Noto Serif',serif" text-anchor="middle" stroke="none" fill="#c49a5b">&#2384;</text>
+  <use href="#feather" transform="translate(320 340)"/>
+  <use href="#dot" transform="translate(96 322)"/>
+  <use href="#ring" transform="translate(286 322)"/>
+  <use href="#dot" transform="translate(186 366)"/>
+  <!-- row 6 -->
+  <use href="#conch" transform="translate(48 412)"/>
+  <use href="#lotus" transform="translate(140 414)"/>
+  <use href="#quatre" transform="translate(232 410)"/>
+  <use href="#wheel" transform="translate(320 414)"/>
+  <use href="#ring" transform="translate(96 398)"/>
+  <use href="#dot" transform="translate(188 398)"/>
+  <use href="#dot" transform="translate(284 440)"/>
+  <!-- row 7 (edge, sparse) -->
+  <text x="140" y="466" font-size="14" font-family="Georgia,'Noto Serif',serif" text-anchor="middle" stroke="none" fill="#c49a5b">&#2384;</text>
+  <use href="#diya" transform="translate(46 462)"/>
+  <use href="#leaf" transform="translate(232 462) rotate(-7)"/>
+  <use href="#dot" transform="translate(320 462)"/>
+</g>
+</svg>

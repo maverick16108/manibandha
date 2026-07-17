@@ -283,12 +283,10 @@ function askDeleteSelected() { if (!selected.size) return; deleteManyForAll.valu
 async function confirmDeleteSelected() {
   const msgs = selectedMsgs.value.slice()
   deleteManyOpen.value = false
+  exitSelect() // снять выделение и убрать из UI сразу
   const isDir = activeChat.value?.type === 'direct'
-  for (const m of msgs) {
-    const everyone = !isDir ? isMine(m) : (isMine(m) ? deleteManyForAll.value : false)
-    await deleteMessage(m.id, everyone)
-  }
-  exitSelect()
+  // удаляем все одним пакетом (параллельно) — быстро и надёжно
+  await Promise.all(msgs.map((m) => deleteMessage(m.id, !isDir ? isMine(m) : (isMine(m) ? deleteManyForAll.value : false))))
 }
 // копировать можно только когда есть текст (голосовое/фото — нечего копировать)
 function canCopy(m) {
@@ -851,8 +849,10 @@ onBeforeUnmount(() => {
              @scroll="onScroll" @click="onScrollerClick" @mousedown="onScrollerDown" @touchstart="onScrollerDown">
           <div ref="listWrap" class="mt-auto space-y-1">
           <template v-for="(m, i) in chatState.messages" :key="m.client_uuid">
-          <div v-if="m.client_uuid === firstUnreadKey" class="my-2 flex items-center gap-2 px-2 text-xs text-ink-700/50">
-            <span class="h-px flex-1 bg-parchment-300"></span><span>Непрочитанные</span><span class="h-px flex-1 bg-parchment-300"></span>
+          <div v-if="m.client_uuid === firstUnreadKey" class="my-3 flex items-center gap-2 px-2">
+            <span class="h-px flex-1 bg-saffron-400/60"></span>
+            <span class="rounded-full bg-saffron-500 px-3 py-0.5 text-xs font-semibold text-white shadow-sm">Непрочитанные</span>
+            <span class="h-px flex-1 bg-saffron-400/60"></span>
           </div>
           <div :id="`msg-${m.id}`"
                class="group flex items-end gap-2 rounded-xl px-1 transition-colors"
@@ -884,18 +884,29 @@ onBeforeUnmount(() => {
               <img v-for="(u, k) in photoUrls(m)" :key="k" :src="u" loading="lazy"
                    class="block max-h-[400px] w-full cursor-zoom-in object-cover" @click.stop="openLightbox(u)" />
               <div v-if="captionText(m)" class="markdown-body break-words px-3.5 pt-1.5 text-[15px]" :class="isMine(m) && 'markdown-on-accent'" v-html="renderChatBody(captionText(m))"></div>
-              <div v-if="parseReactions(m).length" class="flex flex-wrap gap-1 px-2.5 pb-1 pt-1.5">
-                <button v-for="r in parseReactions(m)" :key="r.emoji" @click.stop="onChip(m, r.emoji)" @contextmenu.prevent.stop="openWho($event, r)" title="ПКМ — кто поставил"
-                        class="inline-flex items-center gap-1 rounded-full bg-black/45 px-1.5 py-0.5 text-white ring-1 ring-white/20"
-                        :class="m.my_reaction === r.emoji && 'ring-2 ring-white/70'"><span class="text-lg leading-none">{{ r.emoji }}</span><span v-if="r.count > 1" class="text-xs font-semibold tabular-nums">{{ r.count }}</span></button>
+              <!-- реакции + время в одной строке (с подписью) -->
+              <div v-if="captionText(m)" class="flex items-end justify-between gap-2 px-2.5 pb-1.5 pt-1">
+                <div class="flex flex-wrap gap-1">
+                  <button v-for="r in parseReactions(m)" :key="r.emoji" @click.stop="onChip(m, r.emoji)" @contextmenu.prevent.stop="openWho($event, r)" title="ПКМ — кто поставил"
+                          class="inline-flex items-center gap-1 rounded-full bg-black/45 px-1.5 py-0.5 text-white ring-1 ring-white/20"
+                          :class="m.my_reaction === r.emoji && 'ring-2 ring-white/70'"><span class="text-lg leading-none">{{ r.emoji }}</span><span v-if="r.count > 1" class="text-xs font-semibold tabular-nums">{{ r.count }}</span></button>
+                </div>
+                <div class="flex shrink-0 items-center gap-1 pb-0.5 text-[11px]" :class="isMine(m) ? 'text-white/70' : 'text-ink-700/40'">
+                  <span>{{ fmtTime(m.created_at) }}</span>
+                  <template v-if="statusOf(m)"><AppIcon v-if="statusOf(m) === 'pending'" name="clock" :size="12" /><AppIcon v-else-if="statusOf(m) === 'read'" name="check" :size="12" class="-mr-2" /><AppIcon v-if="statusOf(m) === 'read' || statusOf(m) === 'sent'" name="check" :size="12" /></template>
+                </div>
               </div>
-              <div v-if="captionText(m)" class="flex items-center justify-end gap-1 px-3 pb-1.5 pt-0.5 text-[11px]" :class="isMine(m) ? 'text-white/70' : 'text-ink-700/40'">
-                <span>{{ fmtTime(m.created_at) }}</span>
-                <template v-if="statusOf(m)"><AppIcon v-if="statusOf(m) === 'pending'" name="clock" :size="12" /><AppIcon v-else-if="statusOf(m) === 'read'" name="check" :size="12" class="-mr-1" /><AppIcon v-if="statusOf(m) === 'read' || statusOf(m) === 'sent'" name="check" :size="12" /></template>
-              </div>
-              <div v-else class="absolute bottom-1.5 right-1.5 flex items-center gap-1 rounded-full bg-black/45 px-1.5 py-0.5 text-[11px] text-white">
-                <span>{{ fmtTime(m.created_at) }}</span>
-                <template v-if="statusOf(m)"><AppIcon v-if="statusOf(m) === 'pending'" name="clock" :size="12" /><AppIcon v-else-if="statusOf(m) === 'read'" name="check" :size="12" class="-mr-1" /><AppIcon v-if="statusOf(m) === 'read' || statusOf(m) === 'sent'" name="check" :size="12" /></template>
+              <!-- без подписи: реакции слева + время справа, одной линией оверлеем на фото -->
+              <div v-else class="pointer-events-none absolute inset-x-1.5 bottom-1.5 flex items-center justify-between gap-2">
+                <div class="pointer-events-auto flex flex-wrap gap-1">
+                  <button v-for="r in parseReactions(m)" :key="r.emoji" @click.stop="onChip(m, r.emoji)" @contextmenu.prevent.stop="openWho($event, r)" title="ПКМ — кто поставил"
+                          class="inline-flex items-center gap-1 rounded-full bg-black/45 px-1.5 py-0.5 text-white ring-1 ring-white/20"
+                          :class="m.my_reaction === r.emoji && 'ring-2 ring-white/70'"><span class="text-lg leading-none">{{ r.emoji }}</span><span v-if="r.count > 1" class="text-xs font-semibold tabular-nums">{{ r.count }}</span></button>
+                </div>
+                <div class="pointer-events-auto ml-auto flex shrink-0 items-center gap-1 rounded-full bg-black/45 px-1.5 py-0.5 text-[11px] text-white">
+                  <span>{{ fmtTime(m.created_at) }}</span>
+                  <template v-if="statusOf(m)"><AppIcon v-if="statusOf(m) === 'pending'" name="clock" :size="12" /><AppIcon v-else-if="statusOf(m) === 'read'" name="check" :size="12" class="-mr-2" /><AppIcon v-if="statusOf(m) === 'read' || statusOf(m) === 'sent'" name="check" :size="12" /></template>
+                </div>
               </div>
             </div>
 
@@ -931,7 +942,7 @@ onBeforeUnmount(() => {
                   <template v-if="statusOf(m)">
                     <AppIcon v-if="statusOf(m) === 'pending'" name="clock" :size="12" />
                     <button v-else-if="statusOf(m) === 'failed'" class="text-red-200" title="Не отправлено — повторить" @click.stop="retryFailed"><AppIcon name="close" :size="12" /></button>
-                    <AppIcon v-else-if="statusOf(m) === 'read'" name="check" :size="12" class="-mr-1" />
+                    <AppIcon v-else-if="statusOf(m) === 'read'" name="check" :size="12" class="-mr-2" />
                     <AppIcon v-if="statusOf(m) === 'read' || statusOf(m) === 'sent'" name="check" :size="12" />
                   </template>
                 </div>

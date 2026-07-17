@@ -135,6 +135,9 @@ export async function openChat(chatId) {
     const row = await db.get('SELECT my_last_read_seq FROM chats WHERE id=?', [chatState.activeChatId]);
     chatState.unreadBeforeSeq = row ? (row.my_last_read_seq || 0) : 0;
   } catch { chatState.unreadBeforeSeq = 0; }
+  // сразу гасим бейдж непрочитанного в списке (оптимистично, до синка)
+  const c = chatState.chats.find((x) => x.id === chatState.activeChatId);
+  if (c) c.unread = 0;
   await refreshMessages();
   await engine?.ensureChatMessages(chatState.activeChatId);
   await markReadNow();

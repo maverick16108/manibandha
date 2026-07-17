@@ -487,6 +487,8 @@ const isGroup = computed(() => activeChat.value?.type === 'group')
 const memberById = computed(() => { const map = {}; for (const x of chatState.members || []) map[x.user_id] = x; return map })
 function avatarOf(m) { return memberById.value[m.author_id]?.avatar_url || null }
 function nameOf(m) { return m.author_name || memberById.value[m.author_id]?.full_name || '' }
+const myAvatar = computed(() => memberById.value[chatState.meId]?.avatar_url || null)
+const myName = computed(() => memberById.value[chatState.meId]?.full_name || '')
 function isRunEnd(m, i) { return !sameGroup(m, chatState.messages[i + 1]) } // последний в группе — к нему аватар
 function rowJustify(m) { return (isMine(m) && !wide.value) ? 'justify-end' : 'justify-start' }
 function fmtTime(ts) { if (!ts) return ''; const d = new Date(ts); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}` }
@@ -731,7 +733,6 @@ onBeforeUnmount(() => {
               <span v-else-if="isRunEnd(m, i)" class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-sage-400 to-sage-600 text-xs font-semibold text-white">{{ initials(nameOf(m)) }}</span>
               <span v-else class="h-8 w-8 shrink-0"></span>
             </template>
-            <span v-else-if="isGroup && isMine(m) && wide" class="h-8 w-8 shrink-0"></span>
             <!-- ФОТО-сообщение: без «полей» пузыря (как в телеге) -->
             <div v-if="isPhoto(m)" class="relative overflow-hidden rounded-2xl shadow-sm"
                  :class="[wide ? 'max-w-[420px]' : 'max-w-[80%]', captionText(m) && (isMine(m) ? 'bg-saffron-500 text-white' : 'bg-white text-ink-900 ring-1 ring-parchment-200')]"
@@ -785,6 +786,12 @@ onBeforeUnmount(() => {
                 </template>
               </div>
             </div>
+            <!-- аватар своих сообщений (в группах, справа) -->
+            <template v-if="isGroup && isMine(m)">
+              <img v-if="myAvatar && isRunEnd(m, i)" :src="myAvatar" class="photo-bw h-8 w-8 shrink-0 rounded-full object-cover" />
+              <span v-else-if="isRunEnd(m, i)" class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-saffron-400 to-saffron-600 text-xs font-semibold text-white">{{ initials(myName) }}</span>
+              <span v-else class="h-8 w-8 shrink-0"></span>
+            </template>
           </div>
           </template>
         </div>

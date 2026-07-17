@@ -81,6 +81,8 @@ function navActive(item) {
   if (item.name === 'chat-home') return route.name === 'chat-home' || route.name === 'chat'
   return false
 }
+// на странице чата верхнюю панель кабинета убираем — чат сам во весь экран
+const chatRoute = computed(() => route.name === 'chat-home' || route.name === 'chat')
 
 // бейджи непросмотренного в меню
 function badgeFor(name) {
@@ -205,7 +207,7 @@ function logout() {
     <!-- Main -->
     <div :class="[showSidebar && collapsed && 'lg:pl-16', navResizing && '!transition-none']"
          :style="isDesktop && showSidebar && !collapsed ? { paddingLeft: navWidth + 'px' } : null">
-      <header class="sticky top-0 z-10 flex h-16 items-center gap-3 border-b border-parchment-200 bg-parchment-50/90 px-4 backdrop-blur sm:px-6">
+      <header v-if="!chatRoute" class="sticky top-0 z-10 flex h-16 items-center gap-3 border-b border-parchment-200 bg-parchment-50/90 px-4 backdrop-blur sm:px-6">
         <button v-if="showSidebar" class="-ml-1 shrink-0 rounded-lg p-2 text-ink-800 hover:bg-parchment-200 lg:hidden" @click="sidebarOpen = true">
           <AppIcon name="menu" :size="28" :stroke="2" />
         </button>

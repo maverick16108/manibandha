@@ -222,7 +222,11 @@ function startReply(m, selText) {
 function startEdit(m) { replyTo.value = null; editingMsg.value = m; body.value = m.body; nextTick(() => { autoGrow(); inputEl.value?.focus() }) }
 function cancelEdit() { editingMsg.value = null; body.value = activeId.value ? loadDraft(activeId.value) : '' }
 function snippet(b) {
-  return (b || '').replace(/@\[audio\]\([^)]*\)/g, '🎤 Голосовое').replace(/!\[[^\]]*\]\([^)]*\)/g, '🖼 Фото').replace(/\s+/g, ' ').trim().slice(0, 80)
+  return (b || '')
+    .replace(/@\[audio\]\([^)]*\)/g, '🎤 Голосовое')
+    .replace(/@\[file\]\([^|)]*\|([^)]*)\)/g, (_m, name) => { try { return '📎 ' + decodeURIComponent(name) } catch { return '📎 файл' } })
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, '🖼 Фото')
+    .replace(/\s+/g, ' ').trim().slice(0, 80)
 }
 
 // ── композер: авто-рост, лимит, отправка ───────────────────────────────
@@ -643,7 +647,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="-m-4 flex h-[calc(100vh-4rem)] overflow-hidden bg-white sm:-m-6 lg:-m-8">
+  <div class="-m-4 flex h-screen overflow-hidden bg-white sm:-m-6 lg:-m-8">
     <!-- Список чатов -->
     <aside class="flex w-full shrink-0 flex-col border-r border-parchment-200" :class="activeId ? 'hidden sm:flex' : 'flex'"
            :style="isDesktop ? { width: listWidth + 'px' } : null">

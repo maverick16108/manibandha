@@ -215,6 +215,7 @@ func (s *Server) Router() http.Handler {
 		pr.Post("/chats/{id}/pin", s.pinChat)
 		pr.Delete("/chats/{id}/leave", s.leaveChat)
 		pr.Post("/chats/{id}/messages/{mid}/react", s.reactChatMessage)
+		pr.Get("/link-preview", s.linkPreview) // OG-превью ссылок в сообщениях
 	})
 
 	// конференции: публичные (без токена)

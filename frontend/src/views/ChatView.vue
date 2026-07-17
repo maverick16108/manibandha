@@ -499,6 +499,32 @@ function photoUrls(m) {
 }
 function captionText(m) { return contentBody(m).replace(/!\[[^\]]*\]\([^)]*\)/g, '').trim() }
 function isPhoto(m) { return photoUrls(m).length > 0 }
+
+// ── превью ссылок (OG-карточки) ───────────────────────────────────────────
+// url → объект превью | false (нет/в процессе). Ключ `url in linkPreviews` — «уже запрашивали».
+const linkPreviews = reactive({})
+const URL_IN_TEXT = /https?:\/\/[^\s<]+/i
+function firstLink(m) {
+  if (!m || m.deleted || isVoice(m) || isPhoto(m) || /@\[file\]/.test(m.body || '')) return null
+  const mm = contentBody(m).match(URL_IN_TEXT)
+  return mm ? mm[0].replace(/[)\].,!?:;»"']+$/, '') : null
+}
+function linkCard(m) {
+  const u = firstLink(m)
+  const p = u ? linkPreviews[u] : null
+  return (p && (p.title || p.image || p.description)) ? p : null
+}
+async function fetchPreview(u) {
+  if (u in linkPreviews) return
+  linkPreviews[u] = false // «в процессе» — не дёргаем повторно
+  try {
+    const { data } = await client.get('/link-preview', { params: { url: u } })
+    linkPreviews[u] = (data && (data.title || data.image || data.description)) ? data : false
+  } catch { linkPreviews[u] = false }
+}
+watch(() => chatState.messages, (msgs) => {
+  for (const m of msgs || []) { const u = firstLink(m); if (u && !(u in linkPreviews)) fetchPreview(u) }
+}, { immediate: true })
 // drag&drop — если все картинки: две зоны (файлом/картинкой); иначе одна зона «файлом»
 const dragOver = ref(false)
 const hoverZone = ref(null)
@@ -971,6 +997,19 @@ onBeforeUnmount(() => {
               </div>
               <div v-if="m.deleted" class="italic opacity-60">сообщение удалено</div>
               <div v-else class="markdown-body break-words" :class="isMine(m) && 'markdown-on-accent'" v-html="renderChatBody(contentBody(m))"></div>
+
+              <!-- OG-превью ссылки -->
+              <a v-if="linkCard(m)" :href="firstLink(m)" target="_blank" rel="noopener noreferrer"
+                 class="mt-1.5 block overflow-hidden rounded-lg border-l-[3px] no-underline"
+                 :class="isMine(m) ? 'border-white/70 bg-white/10' : 'border-saffron-400 bg-saffron-500/5'">
+                <img v-if="linkCard(m).image" :src="linkCard(m).image" loading="lazy"
+                     class="max-h-52 w-full object-cover" @error="$event.target.style.display='none'" />
+                <div class="px-2.5 py-1.5">
+                  <div v-if="linkCard(m).site_name" class="text-[11px] font-semibold uppercase tracking-wide" :class="isMine(m) ? 'text-white/70' : 'text-saffron-700'">{{ linkCard(m).site_name }}</div>
+                  <div v-if="linkCard(m).title" class="line-clamp-2 text-sm font-semibold leading-snug" :class="isMine(m) ? 'text-white' : 'text-ink-900'">{{ linkCard(m).title }}</div>
+                  <div v-if="linkCard(m).description" class="mt-0.5 line-clamp-2 text-xs leading-snug" :class="isMine(m) ? 'text-white/80' : 'text-ink-700/70'">{{ linkCard(m).description }}</div>
+                </div>
+              </a>
 
               <div class="mt-1 flex items-end justify-between gap-2">
                 <div v-if="parseReactions(m).length" class="flex flex-wrap gap-1">

@@ -1,0 +1,13 @@
+# build output
+/server
+/bin/
+*.exe
+
+# env
+.env
+
+# uploads (local dev)
+/uploads/
+
+# go
+/vendor/

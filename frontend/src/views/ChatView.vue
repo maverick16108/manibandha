@@ -1048,9 +1048,9 @@ onBeforeUnmount(() => {
 
 /* тематический ведический фон переписки — ажурные мандалы */
 .chat-bg {
-  background-color: #f6e8d3;
+  background-color: #f5e7d1;
   background-image: url('/chat-veda.svg');
-  background-size: 360px 480px;
+  background-size: 480px 680px;
   background-repeat: repeat;
 }
 </style>

@@ -173,6 +173,14 @@ export async function updateChat(chatId, payload) {
   await engine?.updateChat(chatId, payload);
 }
 
+// Переслать сообщения (их тело) в другой чат — по очереди, с сохранением порядка.
+export async function forwardMessages(targetChatId, bodies) {
+  if (!targetChatId || !engine) return;
+  for (const b of bodies) {
+    if (b && b.trim()) await engine.send(targetChatId, b);
+  }
+}
+
 export function sendTyping() {
   if (chatState.activeChatId) socket?.sendTyping(chatState.activeChatId);
 }

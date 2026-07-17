@@ -14,7 +14,7 @@ import { usePageTitle } from '../composables/pageTitle'
 import {
   chatState, initChat, openChat, closeChat, sendMessage, sendTyping,
   editMessage, deleteMessage, retryFailed, loadOlder, loadContacts, startDirect, startGroup,
-  reactMessage, REACTION_EMOJIS, updateChat, pinChat, leaveChat,
+  reactMessage, REACTION_EMOJIS, updateChat, pinChat, leaveChat, forwardMessages,
 } from '../chat/store'
 
 usePageTitle('Чат')
@@ -231,6 +231,57 @@ async function confirmDelete() {
 }
 function cleanBody(b) {
   return (b || '').replace(/@\[audio\]\([^)]*\)/g, '🎤 Голосовое сообщение').replace(/!\[[^\]]*\]\([^)]*\)/g, '').trim()
+}
+
+// ── выделение нескольких сообщений (переслать / удалить) ───────────────────
+const selectMode = ref(false)
+const selected = reactive(new Set())
+function enterSelect(m) { selectMode.value = true; if (m?.id) selected.add(m.id) }
+function toggleSelect(m) { if (!m?.id) return; selected.has(m.id) ? selected.delete(m.id) : selected.add(m.id) }
+function exitSelect() { selectMode.value = false; selected.clear() }
+function onRowClick(e, m) { if (!selectMode.value) return; e.preventDefault(); e.stopPropagation(); toggleSelect(m) }
+const selectedMsgs = computed(() => chatState.messages.filter((m) => selected.has(m.id)))
+
+// ── пересылка ──
+const forwardOpen = ref(false)
+const forwardBodies = ref([])
+const forwardSearch = ref('')
+const forwardSearchInput = ref(null)
+const forwardList = computed(() => {
+  const q = forwardSearch.value.trim().toLowerCase()
+  return (chatState.chats || []).filter((c) => !q || (c.title || '').toLowerCase().includes(q))
+})
+function openForward(bodies) {
+  forwardBodies.value = (bodies || []).filter((b) => b && b.trim())
+  if (!forwardBodies.value.length) return
+  forwardSearch.value = ''; forwardOpen.value = true
+  nextTick(() => forwardSearchInput.value?.focus())
+}
+async function doForward(chatId) {
+  const bodies = forwardBodies.value
+  forwardOpen.value = false
+  await forwardMessages(chatId, bodies)
+  exitSelect()
+  showToast('Переслано')
+  if (chatId === activeId.value) scrollToBottom()
+}
+function ctxForward() { const m = ctx.m; closeCtx(); if (m) openForward([m.body]) }
+function ctxSelect() { const m = ctx.m; closeCtx(); enterSelect(m) }
+function forwardSelected() { openForward(selectedMsgs.value.map((m) => m.body)) }
+
+// ── удаление нескольких ──
+const deleteManyOpen = ref(false)
+const deleteManyForAll = ref(true)
+function askDeleteSelected() { if (!selected.size) return; deleteManyForAll.value = true; deleteManyOpen.value = true }
+async function confirmDeleteSelected() {
+  const msgs = selectedMsgs.value.slice()
+  deleteManyOpen.value = false
+  const isDir = activeChat.value?.type === 'direct'
+  for (const m of msgs) {
+    const everyone = !isDir ? isMine(m) : (isMine(m) ? deleteManyForAll.value : false)
+    await deleteMessage(m.id, everyone)
+  }
+  exitSelect()
 }
 // копировать можно только когда есть текст (голосовое/фото — нечего копировать)
 function canCopy(m) {
@@ -639,6 +690,9 @@ async function saveGroup() {
 function onGlobalKey(e) {
   if (e.key !== 'Escape') return
   if (recording.value) cancelRec()
+  else if (forwardOpen.value) forwardOpen.value = false
+  else if (deleteManyOpen.value) deleteManyOpen.value = false
+  else if (selectMode.value) exitSelect()
   else if (deleteTarget.value) deleteTarget.value = null
   else if (showCompose.value) cancelCompose()
   else if (showGroupEdit.value) showGroupEdit.value = false
@@ -700,7 +754,7 @@ onBeforeUnmount(() => {
       <div class="flex items-center gap-2 border-b border-parchment-200 p-3">
         <div class="relative flex-1">
           <AppIcon name="search" :size="16" class="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-700/40" />
-          <input v-model="search" class="input h-9 w-full pl-8 text-sm" placeholder="Поиск" />
+          <input v-model="search" class="input h-9 w-full pl-8 text-sm" placeholder="Поиск" @keydown.esc.prevent.stop />
         </div>
         <button class="btn-primary h-9 shrink-0 px-3" title="Новый чат" @click="openNew"><AppIcon name="plus" :size="18" /></button>
       </div>
@@ -744,7 +798,18 @@ onBeforeUnmount(() => {
     <section ref="convEl" class="relative flex min-w-0 flex-1 flex-col" :class="activeId ? 'flex' : 'hidden sm:flex'"
              @dragover="onDragOver" @dragleave="onDragLeave">
       <template v-if="activeChat">
-        <header class="flex items-center gap-3 border-b border-parchment-200 px-4 py-2.5">
+        <!-- Панель выделения нескольких сообщений -->
+        <header v-if="selectMode" class="flex items-center gap-2 border-b border-parchment-200 px-4 py-2.5">
+          <button class="rounded-lg p-1.5 text-ink-700/60 hover:bg-parchment-100" title="Отмена" @click="exitSelect"><AppIcon name="close" :size="18" /></button>
+          <div class="flex-1 truncate font-medium text-ink-900">Выбрано: {{ selected.size }}</div>
+          <button class="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-saffron-700 hover:bg-parchment-100 disabled:opacity-40" :disabled="!selected.size" @click="forwardSelected">
+            <AppIcon name="forward" :size="16" /> Переслать <span v-if="selected.size" class="tabular-nums">{{ selected.size }}</span>
+          </button>
+          <button class="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-40" :disabled="!selected.size" @click="askDeleteSelected">
+            <AppIcon name="trash" :size="16" /> Удалить <span v-if="selected.size" class="tabular-nums">{{ selected.size }}</span>
+          </button>
+        </header>
+        <header v-else class="flex items-center gap-3 border-b border-parchment-200 px-4 py-2.5">
           <button class="rounded-lg p-1.5 text-ink-700/60 hover:bg-parchment-100 sm:hidden" @click="backToList"><AppIcon name="chevron" :size="18" class="rotate-90" /></button>
           <div class="flex min-w-0 flex-1 items-center gap-3" :class="isGroup && 'cursor-pointer'" @click="isGroup && openGroupEdit()">
             <img v-if="activeChat.avatar_url" :src="activeChat.avatar_url" class="photo-bw h-9 w-9 shrink-0 rounded-full object-cover" />
@@ -771,7 +836,9 @@ onBeforeUnmount(() => {
             <span class="h-px flex-1 bg-parchment-300"></span><span>Непрочитанные</span><span class="h-px flex-1 bg-parchment-300"></span>
           </div>
           <div :id="`msg-${m.id}`"
-               class="group flex items-end gap-2" :class="rowJustify(m)">
+               class="group flex items-end gap-2 rounded-xl px-1 transition-colors"
+               :class="[selectMode ? 'cursor-pointer justify-start' : rowJustify(m), selectMode && selected.has(m.id) && 'bg-saffron-500/10']"
+               @click.capture="onRowClick($event, m)">
             <!-- аватар (в группах, слева от сообщения — и у чужих, и у своих) -->
             <template v-if="isGroup && !isMine(m)">
               <img v-if="avatarOf(m) && isRunEnd(m, i)" :src="avatarOf(m)" class="photo-bw h-10 w-10 shrink-0 rounded-full object-cover" />
@@ -844,6 +911,11 @@ onBeforeUnmount(() => {
                   </template>
                 </div>
               </div>
+            </div>
+            <div v-if="selectMode" class="ml-auto flex shrink-0 items-center self-center pl-1">
+              <span class="flex h-6 w-6 items-center justify-center rounded-full border-2 transition" :class="selected.has(m.id) ? 'border-saffron-500 bg-saffron-500 text-white' : 'border-parchment-400 bg-white/80'">
+                <AppIcon v-if="selected.has(m.id)" name="check" :size="14" />
+              </span>
             </div>
           </div>
           </template>
@@ -945,7 +1017,9 @@ onBeforeUnmount(() => {
         <button class="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-ink-700 hover:bg-parchment-100" @click="ctxReply"><AppIcon name="reply" :size="15" /> Ответить</button>
         <button v-if="canCopy(ctx.m) || ctx.selText" class="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-ink-700 hover:bg-parchment-100" @click="ctxCopy"><AppIcon name="copy" :size="15" /> Копировать</button>
         <button v-if="canEdit(ctx.m)" class="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-ink-700 hover:bg-parchment-100" @click="ctxEdit"><AppIcon name="edit" :size="15" /> Изменить</button>
+        <button v-if="ctx.m && !ctx.m.deleted" class="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-ink-700 hover:bg-parchment-100" @click="ctxForward"><AppIcon name="forward" :size="15" /> Переслать</button>
         <button v-if="canDelete(ctx.m)" class="flex w-full items-center gap-2.5 border-t border-parchment-100 px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50" @click="ctxDelete"><AppIcon name="trash" :size="15" /> Удалить</button>
+        <button v-if="ctx.m && !ctx.m.deleted" class="flex w-full items-center gap-2.5 border-t border-parchment-100 px-3 py-2 text-left text-sm text-ink-700 hover:bg-parchment-100" @click="ctxSelect"><AppIcon name="check" :size="15" /> Выделить</button>
       </div>
     </template>
 
@@ -976,6 +1050,45 @@ onBeforeUnmount(() => {
         <div class="flex justify-end gap-2 border-t border-parchment-200 p-3">
           <button class="btn-ghost" @click="deleteTarget = null">Отмена</button>
           <button class="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700" @click="confirmDelete">Удалить</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Диалог удаления нескольких сообщений -->
+    <div v-if="deleteManyOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/40 p-4" @click.self="deleteManyOpen = false">
+      <div class="w-full max-w-sm overflow-hidden rounded-xl bg-white shadow-xl">
+        <div class="p-5">
+          <h3 class="font-medium text-ink-900">Удалить {{ selected.size }} сообщ.?</h3>
+          <label v-if="activeChat?.type === 'direct'" class="mt-4 flex items-center gap-2.5 text-sm text-ink-800">
+            <input type="checkbox" v-model="deleteManyForAll" class="h-4 w-4" /> Также удалить у {{ peerName }}
+          </label>
+          <p v-else class="mt-3 text-sm text-ink-700/70">Ваши сообщения удалятся для всех, чужие — скроются у вас.</p>
+        </div>
+        <div class="flex justify-end gap-2 border-t border-parchment-200 p-3">
+          <button class="btn-ghost" @click="deleteManyOpen = false">Отмена</button>
+          <button class="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700" @click="confirmDeleteSelected">Удалить</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Выбор чата для пересылки -->
+    <div v-if="forwardOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/40 p-4" @click.self="forwardOpen = false">
+      <div class="flex max-h-[70vh] w-full max-w-sm flex-col overflow-hidden rounded-xl bg-white shadow-xl">
+        <div class="flex items-center gap-2 border-b border-parchment-200 p-3">
+          <div class="font-medium text-ink-900">Переслать в…</div>
+          <span class="text-sm text-ink-700/50">{{ forwardBodies.length }} сообщ.</span>
+          <button class="ml-auto rounded-lg p-1 text-ink-700/50 hover:bg-parchment-100" @click="forwardOpen = false"><AppIcon name="close" :size="18" /></button>
+        </div>
+        <div class="p-3">
+          <input ref="forwardSearchInput" v-model="forwardSearch" class="input" placeholder="Поиск чата…" @keydown.esc.prevent.stop="forwardOpen = false" />
+        </div>
+        <div class="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
+          <button v-for="c in forwardList" :key="c.id" class="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left hover:bg-parchment-100" @click="doForward(c.id)">
+            <img v-if="c.avatar_url" :src="c.avatar_url" class="photo-bw h-10 w-10 shrink-0 rounded-full object-cover" />
+            <span v-else class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold text-white" :class="c.type === 'group' ? 'bg-gradient-to-br from-sage-400 to-sage-600' : 'bg-gradient-to-br from-saffron-400 to-saffron-600'">{{ initials(c.title) }}</span>
+            <span class="min-w-0 flex-1 truncate font-medium text-ink-900">{{ c.title }}</span>
+          </button>
+          <div v-if="!forwardList.length" class="px-2 py-4 text-center text-sm text-ink-700/50">Ничего не найдено</div>
         </div>
       </div>
     </div>

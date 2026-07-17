@@ -43,7 +43,9 @@ const regionOptions = computed(() => [{ value: '', label: 'Все области
 const cityOptions = computed(() => [{ value: '', label: 'Все города' }, ...cities.value.map((c) => ({ value: c.name, label: c.name }))])
 
 let debounce
+let seeding = true  // пока сеем фильтры из URL — не запускаем повторную (дебаунс) загрузку
 watch(filters, () => {
+  if (seeding) return
   clearTimeout(debounce)
   debounce = setTimeout(load, 300)
 })
@@ -108,6 +110,7 @@ onMounted(async () => {
   regions.value = r.data
   cities.value = c.data
   await load()
+  seeding = false  // дальше правки фильтров пользователем идут через дебаунс
 })
 </script>
 
@@ -129,7 +132,11 @@ onMounted(async () => {
       <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <div class="relative lg:col-span-1">
           <AppIcon name="search" :size="16" class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-700/40" />
-          <input ref="searchInput" v-model="filters.q" class="input pl-9" placeholder="Поиск по имени…" />
+          <input ref="searchInput" v-model="filters.q" class="input pl-9 pr-9" placeholder="Поиск по имени…" @keydown.escape="filters.q = ''" />
+          <button v-if="filters.q" @click="filters.q = ''" title="Очистить"
+                  class="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-700/40 transition hover:text-ink-700">
+            <AppIcon name="close" :size="16" />
+          </button>
         </div>
         <AppSelect v-model="filters.status" :options="statusOptions" placeholder="Все статусы" />
         <AppSelect v-model="filters.region" :options="regionOptions" placeholder="Все области" />

@@ -44,7 +44,12 @@ export async function initChat({ meId, getToken }) {
     socket = new ChatSocket({
       getToken,
       onMessage: (evt) => engine.handleWs(evt),
-      onReconnect: () => { engine.catchUp(); engine.flushOutbox(); },
+      onReconnect: () => {
+        engine.catchUp(); engine.flushOutbox();
+        // пока были офлайн, могли пропустить delete/edit (они не двигают seq → догон их не берёт).
+        // Пересинхроним открытый чат: listMessages вернёт актуальные флаги deleted/edited.
+        if (chatState.activeChatId) engine.ensureChatMessages(chatState.activeChatId);
+      },
       onStatus: (s) => { chatState.connection = s; },
     });
     unsub = db.subscribe(({ tables }) => onDbChange(tables));

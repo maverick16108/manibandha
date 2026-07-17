@@ -209,6 +209,12 @@ const EDIT_WINDOW = 24 * 3600_000
 function canEdit(m) { return isMine(m) && m.id && !m.deleted && !isVoice(m) && (Date.now() - new Date(m.created_at).getTime()) <= EDIT_WINDOW }
 // в группе удалять можно только своё (для всех); в личном — любое (чужое скрывается у себя)
 function canDelete(m) { return m.id && !m.deleted && (isMine(m) || activeChat.value?.type === 'direct') }
+// понятная подпись действия: своё в группе — «у всех», чужое — «скрыть у меня»
+function delLabel(m) {
+  if (!m) return 'Удалить'
+  if (!isMine(m)) return 'Скрыть у меня'
+  return activeChat.value?.type === 'group' ? 'Удалить у всех' : 'Удалить'
+}
 function isVoice(m) { return /@\[audio\]\(/.test(m.body || '') }
 
 function ctxReply() { startReply(ctx.m, ctx.selText); closeCtx() }
@@ -1142,7 +1148,7 @@ onBeforeUnmount(() => {
         <button v-if="canCopy(ctx.m) || ctx.selText" class="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-ink-700 hover:bg-parchment-100" @click="ctxCopy"><AppIcon name="copy" :size="15" /> Копировать</button>
         <button v-if="canEdit(ctx.m)" class="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-ink-700 hover:bg-parchment-100" @click="ctxEdit"><AppIcon name="edit" :size="15" /> Изменить</button>
         <button v-if="ctx.m && !ctx.m.deleted" class="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-ink-700 hover:bg-parchment-100" @click="ctxForward"><AppIcon name="reply" :size="15" class="-scale-x-100" /> Переслать</button>
-        <button v-if="canDelete(ctx.m)" class="flex w-full items-center gap-2.5 border-t border-parchment-100 px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50" @click="ctxDelete"><AppIcon name="trash" :size="15" /> Удалить</button>
+        <button v-if="canDelete(ctx.m)" class="flex w-full items-center gap-2.5 border-t border-parchment-100 px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50" @click="ctxDelete"><AppIcon name="trash" :size="15" /> {{ delLabel(ctx.m) }}</button>
         <button v-if="ctx.m && !ctx.m.deleted" class="flex w-full items-center gap-2.5 border-t border-parchment-100 px-3 py-2 text-left text-sm text-ink-700 hover:bg-parchment-100" @click="ctxSelect"><AppIcon name="check" :size="15" /> Выделить</button>
       </div>
     </template>
@@ -1164,16 +1170,16 @@ onBeforeUnmount(() => {
     <div v-if="deleteTarget" class="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/40 p-4" @click.self="deleteTarget = null">
       <div class="w-full max-w-sm overflow-hidden rounded-xl bg-white shadow-xl">
         <div class="p-5">
-          <h3 class="font-medium text-ink-900">Удалить это сообщение?</h3>
+          <h3 class="font-medium text-ink-900">{{ isMine(deleteTarget) ? 'Удалить это сообщение?' : 'Скрыть это сообщение?' }}</h3>
           <label v-if="activeChat?.type === 'direct' && isMine(deleteTarget)" class="mt-4 flex items-center gap-2.5 text-sm text-ink-800">
             <input type="checkbox" v-model="deleteForAll" class="h-4 w-4" /> Также удалить для {{ peerName }}
           </label>
-          <p v-else-if="activeChat?.type === 'group'" class="mt-3 text-sm text-ink-700/70">Сообщение будет удалено для всех в этом чате.</p>
-          <p v-else class="mt-3 text-sm text-ink-700/70">Сообщение будет скрыто только у вас.</p>
+          <p v-else-if="activeChat?.type === 'group' && isMine(deleteTarget)" class="mt-3 text-sm text-ink-700/70">Сообщение будет удалено для всех в этом чате.</p>
+          <p v-else class="mt-3 text-sm text-ink-700/70">Сообщение будет скрыто только у вас — у остальных оно останется.</p>
         </div>
         <div class="flex justify-end gap-2 border-t border-parchment-200 p-3">
           <button class="btn-ghost" @click="deleteTarget = null">Отмена</button>
-          <button class="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700" @click="confirmDelete">Удалить</button>
+          <button class="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700" @click="confirmDelete">{{ delLabel(deleteTarget) }}</button>
         </div>
       </div>
     </div>

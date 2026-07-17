@@ -289,19 +289,16 @@ async function onPaste(e) {
     .filter((i) => i.type.startsWith('image/')).map((i) => i.getAsFile()).filter(Boolean)
   if (imgs.length) { e.preventDefault(); await uploadAndSend(imgs, 'picture') }
 }
-// drag&drop — если есть картинки, спросить: как картинку или как файл
+// drag&drop — две зоны: сверху «файлом» (без сжатия), снизу «картинкой»
 const dragOver = ref(false)
-const pendingDrop = ref(null)
-function onDragOver(e) { if (e.dataTransfer?.types?.includes('Files')) { e.preventDefault(); dragOver.value = true } }
-function onDragLeave(e) { if (!e.relatedTarget || !e.currentTarget.contains(e.relatedTarget)) dragOver.value = false }
-function onDrop(e) {
-  e.preventDefault(); dragOver.value = false
+const hoverZone = ref(null)
+function onDragOver(e) { if (activeId.value && e.dataTransfer?.types?.includes('Files')) { e.preventDefault(); dragOver.value = true } }
+function onDragLeave(e) { if (!e.relatedTarget || !e.currentTarget.contains(e.relatedTarget)) { dragOver.value = false; hoverZone.value = null } }
+function onZoneDrop(e, mode) {
+  e.preventDefault(); dragOver.value = false; hoverZone.value = null
   const files = Array.from(e.dataTransfer?.files || [])
-  if (!files.length || !activeId.value) return
-  if (files.some((f) => (f.type || '').startsWith('image/'))) pendingDrop.value = files
-  else uploadAndSend(files, 'file')
+  if (files.length) uploadAndSend(files, mode)
 }
-async function chooseDrop(mode) { const files = pendingDrop.value; pendingDrop.value = null; if (files) await uploadAndSend(files, mode) }
 
 // ── голосовые ────────────────────────────────────────────────────────────
 const recording = ref(false)
@@ -608,7 +605,8 @@ onBeforeUnmount(() => {
     <div class="hidden w-1.5 shrink-0 cursor-col-resize transition-colors hover:bg-saffron-300/50 sm:block" @mousedown="startResize"></div>
 
     <!-- Разговор -->
-    <section ref="convEl" class="flex min-w-0 flex-1 flex-col" :class="activeId ? 'flex' : 'hidden sm:flex'">
+    <section ref="convEl" class="relative flex min-w-0 flex-1 flex-col" :class="activeId ? 'flex' : 'hidden sm:flex'"
+             @dragover="onDragOver" @dragleave="onDragLeave">
       <template v-if="activeChat">
         <header class="flex items-center gap-3 border-b border-parchment-200 px-4 py-2.5">
           <button class="rounded-lg p-1.5 text-ink-700/60 hover:bg-parchment-100 sm:hidden" @click="backToList"><AppIcon name="chevron" :size="18" class="rotate-90" /></button>
@@ -629,12 +627,8 @@ onBeforeUnmount(() => {
 
         <AudioBar />
 
-        <div ref="scroller" class="chat-bg relative flex-1 space-y-1 overflow-y-auto p-4"
-             @scroll="onScroll" @click="onScrollerClick" @mousedown="onScrollerDown" @touchstart="onScrollerDown"
-             @dragover="onDragOver" @dragleave="onDragLeave" @drop="onDrop">
-          <div v-if="dragOver" class="pointer-events-none sticky top-0 z-10 -mx-4 -mt-4 mb-2 flex h-24 items-center justify-center rounded-b-xl border-2 border-dashed border-saffron-400 bg-saffron-500/10 text-sm font-medium text-saffron-700">
-            Отпустите, чтобы отправить
-          </div>
+        <div ref="scroller" class="chat-bg flex-1 space-y-1 overflow-y-auto p-4"
+             @scroll="onScroll" @click="onScrollerClick" @mousedown="onScrollerDown" @touchstart="onScrollerDown">
           <template v-for="(m, i) in chatState.messages" :key="m.client_uuid">
           <div v-if="m.client_uuid === firstUnreadKey" class="my-2 flex items-center gap-2 px-2 text-xs text-ink-700/50">
             <span class="h-px flex-1 bg-parchment-300"></span><span>Непрочитанные</span><span class="h-px flex-1 bg-parchment-300"></span>
@@ -736,6 +730,24 @@ onBeforeUnmount(() => {
         <AppIcon name="chat" :size="48" />
         <p class="mt-3 text-sm">Выберите чат или начните новый</p>
       </div>
+
+      <!-- Две зоны для перетаскивания: сверху файлом (без сжатия), снизу картинкой -->
+      <div v-if="dragOver && activeChat" class="absolute inset-0 z-30 flex flex-col gap-3 bg-parchment-100/70 p-4 backdrop-blur-sm">
+        <div class="flex flex-1 flex-col items-center justify-center rounded-3xl border-2 border-dashed transition-colors"
+             :class="hoverZone === 'file' ? 'border-saffron-500 bg-saffron-500/20' : 'border-saffron-300 bg-white/70'"
+             @dragover.prevent="hoverZone = 'file'" @dragleave="hoverZone = null" @drop="onZoneDrop($event, 'file')">
+          <AppIcon name="paperclip" :size="34" class="text-saffron-600" />
+          <div class="mt-3 font-display text-2xl font-semibold text-saffron-700">Перетащите сюда</div>
+          <div class="mt-1 text-sm text-ink-700/60">чтобы отправить файлом — без сжатия</div>
+        </div>
+        <div class="flex flex-1 flex-col items-center justify-center rounded-3xl border-2 border-dashed transition-colors"
+             :class="hoverZone === 'picture' ? 'border-sage-500 bg-sage-500/20' : 'border-sage-400 bg-white/70'"
+             @dragover.prevent="hoverZone = 'picture'" @dragleave="hoverZone = null" @drop="onZoneDrop($event, 'picture')">
+          <AppIcon name="image" :size="34" class="text-sage-600" />
+          <div class="mt-3 font-display text-2xl font-semibold text-sage-600">Перетащите сюда</div>
+          <div class="mt-1 text-sm text-ink-700/60">чтобы отправить картинкой — быстро</div>
+        </div>
+      </div>
     </section>
 
     <!-- Контекстное меню (ПКМ) -->
@@ -752,18 +764,6 @@ onBeforeUnmount(() => {
         <button v-if="canDelete(ctx.m)" class="flex w-full items-center gap-2.5 border-t border-parchment-100 px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50" @click="ctxDelete"><AppIcon name="trash" :size="15" /> Удалить</button>
       </div>
     </template>
-
-    <!-- Выбор способа отправки перетащенных файлов -->
-    <div v-if="pendingDrop" class="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/40 p-4" @click.self="pendingDrop = null">
-      <div class="w-full max-w-xs overflow-hidden rounded-xl bg-white shadow-xl">
-        <div class="border-b border-parchment-200 px-4 py-3 text-center font-medium text-ink-900">Как отправить?</div>
-        <div class="p-3">
-          <button class="btn-primary mb-2 w-full" @click="chooseDrop('picture')">Картинкой</button>
-          <button class="btn-outline mb-2 w-full" @click="chooseDrop('file')">Файлом</button>
-          <button class="btn-ghost w-full" @click="pendingDrop = null">Отмена</button>
-        </div>
-      </div>
-    </div>
 
     <!-- Контекстное меню списка чатов (ПКМ) -->
     <template v-if="listCtx.open">

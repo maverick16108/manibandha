@@ -78,7 +78,7 @@ watch(activeId, async (id, oldId) => {
   if (oldId && !editingMsg.value) saveDraft(oldId, body.value) // сохранить черновик прежнего чата
   replyTo.value = null; editingMsg.value = null; closeCtx()
   body.value = id ? loadDraft(id) : ''
-  if (id) { stickBottom.value = true; await openChat(id); scrollToBottom() }
+  if (id) { stickBottom.value = true; await openChat(id); scrollToBottom(); nextTick(() => inputEl.value?.focus()) }
   else closeChat()
   nextTick(autoGrow)
 }, { immediate: false })
@@ -448,8 +448,10 @@ async function onPickFile(ev) {
   if (fileInput.value) fileInput.value.value = ''
   if (files.length) addComposeItems(files)   // всё → диалог
 }
-// вставка из буфера (Ctrl+V) — картинку в диалог
+// вставка из буфера (Ctrl+V) — картинку в диалог. Ловим глобально: где бы ни был фокус,
+// вставленная картинка открывает диалог отправки. Текст в чужие поля не трогаем.
 async function onPaste(e) {
+  if (!activeId.value) return
   const imgs = Array.from(e.clipboardData?.items || [])
     .filter((i) => i.type.startsWith('image/')).map((i) => i.getAsFile()).filter(Boolean)
   if (imgs.length) { e.preventDefault(); addComposeItems(imgs) }
@@ -735,13 +737,13 @@ function onGlobalKey(e) {
 
 // печать в любом месте страницы → в поле ввода сообщения (как в мессенджерах)
 function onDocType(e) {
-  if (!activeId.value || recording.value || ctx.open || showNew.value) return
+  if (!activeId.value || recording.value || ctx.open || showNew.value || showCompose.value) return
   if (e.ctrlKey || e.metaKey || e.altKey) return
   const t = e.target
   const tag = (t.tagName || '').toLowerCase()
   if (tag === 'input' || tag === 'textarea' || tag === 'select' || t.isContentEditable) return
   const focusEnd = () => nextTick(() => { const el = inputEl.value; if (el) { el.focus(); el.selectionStart = el.selectionEnd = el.value.length; autoGrow() } })
-  if (e.key.length === 1 && e.key !== ' ') {
+  if (e.key.length === 1) {
     if (body.value.length >= MAX_LEN) return
     e.preventDefault(); body.value = (body.value + e.key).slice(0, MAX_LEN); focusEnd()
   } else if (e.key === 'Backspace' && body.value) {
@@ -752,6 +754,7 @@ function onDocType(e) {
 onMounted(async () => {
   document.addEventListener('keydown', onGlobalKey)
   document.addEventListener('keydown', onDocType)
+  document.addEventListener('paste', onPaste)  // вставка картинки — где бы ни был фокус
   if (convEl.value && typeof ResizeObserver !== 'undefined') {
     resizeObs = new ResizeObserver((entries) => { for (const e of entries) wide.value = e.contentRect.width > 900 })
     resizeObs.observe(convEl.value)
@@ -765,6 +768,7 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   document.removeEventListener('keydown', onGlobalKey)
   document.removeEventListener('keydown', onDocType)
+  document.removeEventListener('paste', onPaste)
   resizeObs?.disconnect()
   listObs?.disconnect()
   cancelCompose()
@@ -900,8 +904,8 @@ onBeforeUnmount(() => {
               <div v-if="captionText(m)" class="flex items-end justify-between gap-2 px-2.5 pb-1.5 pt-1">
                 <div class="flex flex-wrap gap-1">
                   <button v-for="r in parseReactions(m)" :key="r.emoji" @click.stop="onChip(m, r.emoji)" @contextmenu.prevent.stop="openWho($event, r)" title="ПКМ — кто поставил"
-                          class="inline-flex items-center gap-1 rounded-full bg-black/45 px-1.5 py-0.5 text-white ring-1 ring-white/20"
-                          :class="m.my_reaction === r.emoji && 'ring-2 ring-white/70'"><span class="text-lg leading-none">{{ r.emoji }}</span><span v-if="r.count > 1" class="text-xs font-semibold tabular-nums">{{ r.count }}</span></button>
+                          class="flex items-center gap-1 rounded-full px-2.5 py-1 leading-none ring-1 transition"
+                          :class="m.my_reaction === r.emoji ? 'bg-saffron-500/25 text-saffron-800 ring-saffron-400' : 'bg-saffron-500/10 text-ink-700 ring-transparent hover:bg-saffron-500/20'"><span class="text-xl leading-none">{{ r.emoji }}</span><span v-if="r.count > 1" class="text-sm font-semibold tabular-nums">{{ r.count }}</span></button>
                 </div>
                 <div class="flex shrink-0 items-center gap-1 pb-0.5 text-[11px]" :class="isMine(m) ? 'text-white/70' : 'text-ink-700/40'">
                   <span>{{ fmtTime(m.created_at) }}</span>
@@ -1179,7 +1183,7 @@ onBeforeUnmount(() => {
             <label class="label">Подпись</label>
             <textarea ref="composeCaptionInput" v-model="composeCaption" rows="1" :maxlength="MAX_LEN"
                       class="input max-h-40 resize-none overflow-y-auto" placeholder="Добавьте подпись…"
-                      @input="composeAutoGrow"></textarea>
+                      @input="composeAutoGrow" @keydown.enter.exact.prevent="sendCompose"></textarea>
           </div>
         </div>
         <div class="flex items-center justify-end gap-2 border-t border-parchment-200 p-3">

@@ -165,3 +165,9 @@ input[type="checkbox"]:focus-visible,
 input[type="radio"]:focus-visible { outline: 2px solid rgba(200, 116, 42, 0.5); outline-offset: 1px; }
 input[type="checkbox"]:disabled,
 input[type="radio"]:disabled { opacity: 0.5; cursor: default; }
+
+/* Убираем синюю рамку фокуса (браузерный outline при Tab) по всему проекту.
+   Осознанные фокус-состояния сделаны через ring/box-shadow — они сохраняются;
+   у чекбоксов/радио своё, более специфичное outline-правило выше — оно тоже остаётся. */
+:focus,
+:focus-visible { outline: none; }

@@ -27,6 +27,7 @@ const router = useRouter()
 const MAX_LEN = 1000
 const body = ref('')
 const replyTo = ref(null)
+const editingMedia = ref('') // при правке фото: сохраняем медиа-часть (![](url)), редактируем только подпись
 const editingMsg = ref(null)
 const scroller = ref(null)
 const listWrap = ref(null)
@@ -298,8 +299,15 @@ function canCopy(m) {
 function startReply(m, selText) {
   editingMsg.value = null
   const sel = (selText || '').trim()
-  replyTo.value = { id: m.id, author_name: nameOf(m), body: sel ? sel.slice(0, 200) : snippet(contentBody(m)), quote: sel ? sel.slice(0, 300) : quoteText(contentBody(m)) }
+  replyTo.value = { id: m.id, author_name: nameOf(m), body: sel ? sel.slice(0, 200) : snippet(contentBody(m)), quote: sel ? sel.slice(0, 300) : quoteText(contentBody(m)), photo: photoUrls(m)[0] || null }
   nextTick(() => inputEl.value?.focus())
+}
+// миниатюра фото у отвечаемого сообщения (по reply_to_id из локальной ленты)
+function replyThumb(m) {
+  if (!m || !m.reply_to_id) return null
+  const src = (chatState.messages || []).find((x) => x.id === m.reply_to_id)
+  const u = src ? photoUrls(src)[0] : null
+  return u ? thumbUrl(u) : null
 }
 // Текст цитаты для пересылаемого reply_quote: чистим медиа-разметку, но СОХРАНЯЕМ переносы строк.
 function quoteText(b) {
@@ -309,8 +317,20 @@ function quoteText(b) {
     .replace(/!\[[^\]]*\]\([^)]*\)/g, '🖼 Фото')
     .trim().slice(0, 300)
 }
-function startEdit(m) { replyTo.value = null; editingMsg.value = m; body.value = m.body; nextTick(() => { autoGrow(); inputEl.value?.focus() }) }
-function cancelEdit() { editingMsg.value = null; body.value = activeId.value ? loadDraft(activeId.value) : '' }
+function startEdit(m) {
+  replyTo.value = null; editingMsg.value = m
+  if (isPhoto(m)) {
+    // фото: в поле только подпись; медиа (и маркер пересылки) сохраняем отдельно
+    const fwd = (m.body || '').match(FWD_RE)?.[0] || ''
+    const imgs = []; contentBody(m).replace(/!\[[^\]]*\]\([^)]+\)/g, (x) => { imgs.push(x); return '' })
+    editingMedia.value = fwd + imgs.join('\n')
+    body.value = captionText(m)
+  } else {
+    editingMedia.value = ''; body.value = m.body
+  }
+  nextTick(() => { autoGrow(); inputEl.value?.focus() })
+}
+function cancelEdit() { editingMsg.value = null; editingMedia.value = ''; body.value = activeId.value ? loadDraft(activeId.value) : '' }
 function snippet(b) {
   return (b || '')
     .replace(FWD_RE, '')
@@ -346,13 +366,17 @@ function onKeydown(e) {
 
 async function send() {
   const text = body.value.trim()
-  if (!text) return
   if (editingMsg.value) {
     const m = editingMsg.value
-    editingMsg.value = null; body.value = ''
-    await editMessage(m.id, text)
+    // фото: пересобираем body из медиа + новой подписи (подпись можно и убрать)
+    const isMedia = !!editingMedia.value
+    if (!text && !isMedia) return
+    const newBody = isMedia ? (editingMedia.value + (text ? '\n' + text : '')) : text
+    editingMsg.value = null; editingMedia.value = ''; body.value = ''
+    await editMessage(m.id, newBody)
     return
   }
+  if (!text) return
   const reply = replyTo.value?.id || null
   const quote = replyTo.value?.quote || null
   body.value = ''; replyTo.value = null
@@ -893,9 +917,12 @@ onBeforeUnmount(() => {
               <div v-if="fwdName(m)" class="flex items-center gap-1 px-3 pt-2 text-xs font-semibold" :class="captionText(m) && isMine(m) ? 'text-white/90' : 'text-saffron-700'">
                 <AppIcon name="reply" :size="12" class="-scale-x-100" /> Переслано от {{ fwdName(m) }}
               </div>
-              <div v-if="m.reply_preview" class="mx-3 mt-2 rounded-r-md border-l-2 border-saffron-400 bg-black/5 py-1 pl-2 pr-2 text-xs">
-                <div v-if="replyAuthorName(m)" class="font-semibold text-saffron-700">{{ replyAuthorName(m) }}</div>
-                <div class="whitespace-pre-wrap break-words text-ink-700/70">{{ m.reply_preview }}</div>
+              <div v-if="m.reply_preview" class="mx-3 mt-2 flex items-center gap-2 rounded-r-md border-l-2 border-saffron-400 bg-black/5 py-1 pl-2 pr-2 text-xs">
+                <img v-if="replyThumb(m)" :src="replyThumb(m)" class="h-8 w-8 shrink-0 rounded object-cover" />
+                <div class="min-w-0 flex-1">
+                  <div v-if="replyAuthorName(m)" class="font-semibold text-saffron-700">{{ replyAuthorName(m) }}</div>
+                  <div class="whitespace-pre-wrap break-words text-ink-700/70">{{ m.reply_preview }}</div>
+                </div>
               </div>
               <img v-for="(u, k) in photoUrls(m)" :key="k" :src="u" loading="lazy"
                    class="block max-h-[400px] w-full cursor-zoom-in object-cover" @click.stop="openLightbox(u)" />
@@ -935,9 +962,12 @@ onBeforeUnmount(() => {
               <div v-if="fwdName(m)" class="mb-1 flex items-center gap-1 text-xs font-semibold" :class="isMine(m) ? 'text-white/90' : 'text-saffron-700'">
                 <AppIcon name="reply" :size="12" class="-scale-x-100" /> Переслано от {{ fwdName(m) }}
               </div>
-              <div v-if="m.reply_preview" class="mb-1 rounded-r-md border-l-2 py-1 pl-2 pr-2 text-xs" :class="isMine(m) ? 'border-white/70 bg-white/10' : 'border-saffron-400 bg-saffron-500/5'">
-                <div v-if="replyAuthorName(m)" class="font-semibold" :class="isMine(m) ? 'text-white' : 'text-saffron-700'">{{ replyAuthorName(m) }}</div>
-                <div class="whitespace-pre-wrap break-words opacity-80">{{ m.reply_preview }}</div>
+              <div v-if="m.reply_preview" class="mb-1 flex items-center gap-2 rounded-r-md border-l-2 py-1 pl-2 pr-2 text-xs" :class="isMine(m) ? 'border-white/70 bg-white/10' : 'border-saffron-400 bg-saffron-500/5'">
+                <img v-if="replyThumb(m)" :src="replyThumb(m)" class="h-8 w-8 shrink-0 rounded object-cover" />
+                <div class="min-w-0 flex-1">
+                  <div v-if="replyAuthorName(m)" class="font-semibold" :class="isMine(m) ? 'text-white' : 'text-saffron-700'">{{ replyAuthorName(m) }}</div>
+                  <div class="whitespace-pre-wrap break-words opacity-80">{{ m.reply_preview }}</div>
+                </div>
               </div>
               <div v-if="m.deleted" class="italic opacity-60">сообщение удалено</div>
               <div v-else class="markdown-body break-words" :class="isMine(m) && 'markdown-on-accent'" v-html="renderChatBody(contentBody(m))"></div>
@@ -979,7 +1009,8 @@ onBeforeUnmount(() => {
         <!-- Композер -->
         <div class="border-t border-parchment-200 p-3">
           <div v-if="replyTo" class="mb-2 flex items-center gap-2 rounded-lg bg-parchment-100 px-3 py-1.5 text-sm">
-            <AppIcon name="reply" :size="14" class="text-saffron-600" />
+            <AppIcon name="reply" :size="14" class="shrink-0 text-saffron-600" />
+            <img v-if="replyTo.photo" :src="thumbUrl(replyTo.photo)" class="h-8 w-8 shrink-0 rounded object-cover" />
             <span class="min-w-0 flex-1 truncate text-ink-700/70"><b class="text-ink-800">{{ replyTo.author_name }}</b>: {{ replyTo.body }}</span>
             <button class="text-ink-700/50 hover:text-ink-900" @click="replyTo = null"><AppIcon name="close" :size="15" /></button>
           </div>

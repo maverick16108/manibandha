@@ -83,6 +83,11 @@ export function teardownChat() {
 async function onDbChange(tables) {
   const t = tables || [];
   if (t.includes('chats') || t.includes('members')) await refreshChats();
+  // событие «прочитано» меняет только members → обновляем участников активного чата,
+  // иначе peerReadSeq остаётся устаревшим и вторая галочка (прочитано) не появляется
+  if (t.includes('members') && chatState.activeChatId) {
+    chatState.members = await db.all('SELECT * FROM members WHERE chat_id=?', [chatState.activeChatId]);
+  }
   if (t.includes('messages')) {
     if (chatState.activeChatId) await refreshMessages();
     await refreshChats(); // превью/порядок в списке

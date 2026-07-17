@@ -1,0 +1,21 @@
+{
+  "expo": {
+    "name": "Manibandha Chat",
+    "slug": "manibandha-chat",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "manibandha",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "su.prema.manibandha.chat"
+    },
+    "android": {
+      "package": "su.prema.manibandha.chat"
+    },
+    "plugins": [
+      "@op-engineering/op-sqlite"
+    ]
+  }
+}

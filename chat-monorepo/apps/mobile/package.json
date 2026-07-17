@@ -1,0 +1,26 @@
+{
+  "name": "@manibandha/mobile",
+  "version": "0.1.0",
+  "private": true,
+  "main": "index.ts",
+  "scripts": {
+    "start": "expo start --dev-client",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@manibandha/adapter-op-sqlite": "workspace:*",
+    "@manibandha/chat-core": "workspace:*",
+    "@op-engineering/op-sqlite": "^11.0.0",
+    "expo": "~51.0.28",
+    "expo-status-bar": "~1.12.1",
+    "react": "18.2.0",
+    "react-native": "0.74.5"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.24.0",
+    "@types/react": "~18.2.79",
+    "typescript": "^5.5.4"
+  }
+}

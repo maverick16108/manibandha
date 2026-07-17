@@ -1,0 +1,13 @@
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    "jsx": "react-jsx",
+    "moduleResolution": "bundler",
+    "paths": {
+      "@manibandha/chat-core": ["../../packages/chat-core/src"],
+      "@manibandha/adapter-op-sqlite": ["../../packages/adapter-op-sqlite/src"]
+    }
+  },
+  "include": ["**/*.ts", "**/*.tsx"]
+}

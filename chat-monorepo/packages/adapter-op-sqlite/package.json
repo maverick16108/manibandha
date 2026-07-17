@@ -1,0 +1,25 @@
+{
+  "name": "@manibandha/adapter-op-sqlite",
+  "version": "0.1.0",
+  "description": "op-sqlite implementation of the chat-core DbAdapter (React Native).",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "peerDependencies": {
+    "@manibandha/chat-core": "workspace:*",
+    "@op-engineering/op-sqlite": ">=9"
+  },
+  "devDependencies": {
+    "@manibandha/chat-core": "workspace:*",
+    "@op-engineering/op-sqlite": "^11.0.0",
+    "typescript": "^5.5.4"
+  }
+}

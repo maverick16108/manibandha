@@ -76,6 +76,12 @@ func (s *Server) Router() http.Handler {
 		pr.Delete("/drafts/{scope}", s.deleteDraft)
 		pr.Get("/settings", s.readSettings)
 		pr.Post("/uploads", s.upload)
+		// отчёты (агрегаты + экспорт)
+		pr.Get("/reports/summary", s.reportSummary)
+		pr.Get("/reports/timeline", s.reportTimeline)
+		pr.Get("/reports/group", s.reportGroup)
+		pr.Get("/reports/disciples.xlsx", s.exportXlsx)
+		pr.Get("/reports/disciples.pdf", s.exportPdf)
 	})
 
 	// события: изменение — staff

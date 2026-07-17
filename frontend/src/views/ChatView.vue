@@ -1050,9 +1050,9 @@ onBeforeUnmount(() => {
 .chat-bg {
   background-color: #fbf3e6;
   background-image:
-    url('/chat-mandala.svg'),
+    url('/chat-veda.svg'),
     linear-gradient(160deg, rgba(214,158,74,0.12) 0%, rgba(200,121,46,0.09) 100%);
-  background-size: 430px 430px, cover;
+  background-size: 300px 300px, cover;
   background-repeat: repeat, no-repeat;
 }
 </style>

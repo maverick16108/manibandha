@@ -288,8 +288,11 @@ export class ChatEngine {
   }
 
   async deleteMessage(chatId, messageId) {
-    await this.api.deleteMessage(chatId, messageId);
+    // мгновенно локально, сервер — в фоне (с одним ретраем); при сбое сверка вернёт как есть
     await this.db.run('UPDATE messages SET deleted=1, body=\'\' WHERE chat_id=? AND id=?', [chatId, messageId], ['messages']);
+    this.api.deleteMessage(chatId, messageId).catch(() => {
+      setTimeout(() => { this.api.deleteMessage(chatId, messageId).catch(() => {}); }, 3000);
+    });
   }
 
   // «удалить для себя» — скрываем локально, на сервер не ходим

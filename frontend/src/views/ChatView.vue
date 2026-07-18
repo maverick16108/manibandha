@@ -318,6 +318,9 @@ async function confirmDelete() {
   if (!m?.id) return
   const isDir = activeChat.value?.type === 'direct'
   const everyone = !isDir ? true : (isMine(m) ? deleteForAll.value : false)
+  // эффект «растворения» для одиночного удаления, затем убираем
+  const el = document.getElementById(`msg-${m.id}`)
+  if (el) { el.classList.add('msg-dissolve'); await new Promise((r) => setTimeout(r, 340)) }
   await deleteMessage(m.id, everyone)
 }
 function cleanBody(b) {
@@ -402,7 +405,8 @@ async function confirmDeleteSelected() {
   deleteManyOpen.value = false
   exitSelect() // снять выделение и убрать из UI сразу
   const isDir = activeChat.value?.type === 'direct'
-  // удаляем все одним пакетом (параллельно) — быстро и надёжно
+  // локально исчезают сразу; для большой пачки покажем снек с прогрессом
+  if (msgs.length >= 8) showToast(`Удаление ${msgs.length} сообщ.…`)
   await Promise.all(msgs.map((m) => deleteMessage(m.id, !isDir ? isMine(m) : (isMine(m) ? deleteManyForAll.value : false))))
 }
 // копировать можно только когда есть текст (голосовое/фото — нечего копировать)
@@ -1889,6 +1893,11 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+/* «растворение» при удалении одиночного сообщения */
+.msg-dissolve { animation: msgDissolve .34s ease forwards; pointer-events: none; }
+@keyframes msgDissolve {
+  to { opacity: 0; filter: blur(5px); transform: scale(.88) translateY(-4px); }
+}
 /* подсветка сообщения при переходе из поиска */
 .msg-flash { animation: msgFlash 1.6s ease; border-radius: 0.75rem; }
 @keyframes msgFlash {

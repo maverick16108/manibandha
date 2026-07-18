@@ -632,6 +632,17 @@ func (s *Server) chatInfo(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// GET /api/users/{id}/card — карточка пользователя (для клика по имени в чате)
+func (s *Server) userCardHandler(w http.ResponseWriter, r *http.Request) {
+	id, _ := strconv.Atoi(chi.URLParam(r, "id"))
+	var u models.User
+	if err := s.DB.First(&u, id).Error; err != nil {
+		httpErr(w, http.StatusNotFound, "Пользователь не найден")
+		return
+	}
+	writeJSON(w, http.StatusOK, s.userCard(&u))
+}
+
 // карточка пользователя (телефон/город/семейное — из анкеты ученика, если есть)
 func (s *Server) userCard(pu *models.User) map[string]any {
 	m := map[string]any{

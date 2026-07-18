@@ -21,7 +21,14 @@ watch(lightboxSrc, (u) => {
   full.src = u
 }, { immediate: true })
 watch(lightboxSrc, () => { rot.value = 0; menu.value = null })
-watch(() => lb.index, () => { menu.value = null })
+watch(() => lb.index, () => {
+  menu.value = null
+  // предзагружаем пару фото слева и справа — при листании нет лоадера
+  for (const d of [1, -1, 2, -2]) {
+    const it = lb.items[lb.index + d]
+    if (it && it.url) { const im = new Image(); im.decoding = 'async'; im.src = it.url }
+  }
+}, { immediate: true })
 
 function onDocClick(e) {
   const t = e.target

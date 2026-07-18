@@ -110,10 +110,13 @@ async function prefetchPhotos() {
   if (!db) return;
   try {
     const rows = await db.all(
-      "SELECT body FROM messages WHERE deleted=0 AND body LIKE '%![]%' ORDER BY (seq IS NULL), seq DESC LIMIT 400",
+      "SELECT body FROM messages WHERE deleted=0 AND (body LIKE '%![]%' OR body LIKE '%@[video]%') ORDER BY (seq IS NULL), seq DESC LIMIT 400",
     );
     for (const r of rows) {
-      (r.body || '').replace(/!\[[^\]]*\]\(([^)]+)\)/g, (_x, u) => { warmImage(thumbUrl(u)); return ''; });
+      const b = r.body || '';
+      b.replace(/!\[[^\]]*\]\(([^)]+)\)/g, (_x, u) => { warmImage(thumbUrl(u)); return ''; });
+      // постеры видео тоже прогреваем (для мгновенного показа и точного резерва места)
+      b.replace(/@\[video\]\([^|)]+\|([^|)]*)/g, (_x, poster) => { if (poster) warmImage(thumbUrl(poster)); return ''; });
     }
   } catch { /* ignore */ }
 }

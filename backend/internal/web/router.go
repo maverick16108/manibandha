@@ -44,6 +44,7 @@ func (s *Server) Router() http.Handler {
 		pr.Patch("/auth/me", s.patchMe)
 		pr.Get("/me/capabilities", s.myCapabilities)
 		pr.Get("/users/mentors", s.listMentors)
+		pr.Get("/users/{id}/card", s.userCardHandler)
 		// справочники: чтение — любому авторизованному
 		pr.Get("/cities", s.listCities)
 		pr.Get("/regions", s.listRegions)

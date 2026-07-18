@@ -36,7 +36,8 @@ function onVideoTime(e, m) {
   videoState[m.id] = { remain: fmtSec(Math.max(0, (v.duration || 0) - (v.currentTime || 0))) }
 }
 function openVideoFull(e, m) {
-  const v = e.currentTarget
+  const v = e.currentTarget.closest('.video-box')?.querySelector('video')
+  if (!v) return
   v.muted = false; v.controls = true
   const req = v.requestFullscreen || v.webkitRequestFullscreen || v.webkitEnterFullscreen
   if (req) { try { req.call(v) } catch { /* ignore */ } }
@@ -456,8 +457,15 @@ function snippet(b) {
     .replace(/!\[[^\]]*\]\([^)]*\)/g, 'Фото')
     .replace(/\s+/g, ' ').trim().slice(0, 80)
 }
-// видео: маркер @[video](url|poster)
-const VIDEO_RE = /@\[video\]\(([^|)\s]+)\|([^)]*)\)/
+// видео: маркер @[video](url|poster|bytes)
+const VIDEO_RE = /@\[video\]\(([^|)\s]+)\|([^|)]*)\|?([^)]*)\)/
+const VIDEO_AUTO_MAX = 10 * 1024 * 1024 // ≤10МБ авто-проигрываем, крупнее — постер с кнопкой
+const videoLoaded = reactive({})        // id видео, которые пользователь запустил вручную
+function videoAuto(m) {
+  const v = videoOf(m)
+  if (!v) return false
+  return !!videoLoaded[m.id] || (v.size > 0 && v.size <= VIDEO_AUTO_MAX)
+}
 // первый URL медиа-миниатюры (фото или постер видео) — для превью списка/ответа/правки
 function firstPhotoUrl(b) {
   const s = (b || '').replace(FWD_RE, '')
@@ -467,7 +475,7 @@ function firstPhotoUrl(b) {
   return m ? m[1] : null
 }
 function isVideoMsg(m) { return VIDEO_RE.test(m?.body || '') }
-function videoOf(m) { const mm = contentBody(m).match(VIDEO_RE); return mm ? { url: mm[1], poster: mm[2] || '' } : null }
+function videoOf(m) { const mm = contentBody(m).match(VIDEO_RE); return mm ? { url: mm[1], poster: mm[2] || '', size: Number(mm[3]) || 0 } : null }
 function lastPhoto(c) { return firstPhotoUrl(c?.last?.body) }
 
 // ── композер: авто-рост, лимит, отправка ───────────────────────────────
@@ -635,7 +643,7 @@ async function runUpload(pu) {
       const vurl = await uploadOne(it.file)
       let purl = ''
       if (it.posterBlob) { try { purl = await uploadOne(new File([it.posterBlob], 'poster.jpg', { type: 'image/jpeg' })) } catch { purl = '' } }
-      let s = `@[video](${vurl}|${purl})`
+      let s = `@[video](${vurl}|${purl}|${it.file.size || 0})`
       if (cap && !capUsed && !files.length) { s += `\n${cap}`; capUsed = true }
       await sendMessage(s)
     }
@@ -734,6 +742,10 @@ function albumItemClass(n, k) { return (n === 3 && k === 0) ? 'col-span-2' : '' 
 // картинка внутри — object-cover: место занято заранее, лента НИКОГДА не «прыгает».
 function photoBoxStyle(u) {
   return { aspectRatio: String(imageAspect(u) || 1.4), maxHeight: '400px' }
+}
+// резерв места под видео (по постеру) — крупнее фото, до 70vh
+function videoBoxStyle(u) {
+  return { aspectRatio: String(imageAspect(u) || 0.7), maxHeight: '70vh' }
 }
 
 // ── превью ссылок (OG-карточки) ───────────────────────────────────────────
@@ -1026,6 +1038,18 @@ async function openInfo() {
   } catch { /* оставляем кэш */ }
 }
 function closeInfo() { showInfo.value = false; infoData.value = null }
+// инфо о конкретном пользователе (клик по имени автора в группе)
+async function openUserInfo(uid) {
+  if (!uid || uid === chatState.meId) return
+  showInfo.value = true
+  const key = 'u' + uid
+  infoData.value = infoCache[key] || null
+  try {
+    const { data } = await client.get(`/users/${uid}/card`)
+    infoData.value = { type: 'direct', peer: data }; infoCache[key] = infoData.value
+    try { localStorage.setItem('chatInfoCache', JSON.stringify(infoCache)) } catch { /* ignore */ }
+  } catch { /* оставляем кэш */ }
+}
 function maritalLabel(v) {
   const m = { single: 'Не в браке', married: 'В браке', widowed: 'Вдова / вдовец', divorced: 'В разводе', unmarried: 'Не в браке' }
   return m[v] || v
@@ -1369,21 +1393,31 @@ onBeforeUnmount(() => {
             <div v-if="isVideoMsg(m)" class="relative overflow-hidden rounded-2xl shadow-sm"
                  :class="[wide ? 'max-w-[420px]' : 'max-w-[80%]', isMine(m) ? 'bg-saffron-500 text-white' : 'bg-white text-ink-900 ring-1 ring-parchment-200']"
                  @contextmenu="onContext($event, m)">
-              <div v-if="showAuthor(m, i)" class="px-3 pt-2 text-sm font-semibold text-sage-600">{{ nameOf(m) }}</div>
+              <div v-if="showAuthor(m, i)" class="cursor-pointer px-3 pt-2 text-sm font-semibold text-sage-600 hover:underline" @click.stop="openUserInfo(m.author_id)">{{ nameOf(m) }}</div>
               <div v-if="fwdName(m)" class="flex items-center gap-1.5 px-3 pt-2 text-sm font-semibold" :class="isMine(m) ? 'text-white/90' : 'text-saffron-700'">
                 <AppIcon name="reply" :size="12" class="-scale-x-100" /> <span>Переслано от</span>
                 <img v-if="fwdAvatar(m)" :src="thumbUrl(fwdAvatar(m))" class="h-4 w-4 shrink-0 rounded-full object-cover" />
                 <span v-else class="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-saffron-500 text-[8px] font-semibold text-white">{{ initials(fwdName(m)) }}</span>
                 <span class="truncate">{{ fwdName(m) }}</span>
               </div>
-              <!-- в чате: авто muted+loop с обратным таймером; клик — полный экран со звуком и controls -->
-              <div class="relative flex justify-center overflow-hidden bg-black">
-                <video :src="videoOf(m)?.url" :poster="thumbUrl(videoOf(m)?.poster || '')" autoplay muted loop playsinline
-                       class="block max-h-[70vh] max-w-full cursor-pointer" @timeupdate="onVideoTime($event, m)" @click.stop="openVideoFull($event, m)"></video>
-                <span class="pointer-events-none absolute left-1.5 top-1.5 flex items-center gap-1 rounded-full bg-black/55 px-2 py-0.5 text-[11px] text-white">
-                  <span class="tabular-nums">{{ videoState[m.id]?.remain || '' }}</span>
-                  <AppIcon name="volume-x" :size="13" />
-                </span>
+              <!-- ≤10МБ или уже запущено: авто muted+loop + таймер; крупнее: постер с кнопкой (тот же размер).
+                   Место резервируется по постеру (object-cover) — при открытии чата не «прыгает». -->
+              <div class="video-box relative flex justify-center overflow-hidden bg-black" :style="videoBoxStyle(videoOf(m)?.poster || '')">
+                <template v-if="videoAuto(m)">
+                  <video :src="videoOf(m).url" :poster="thumbUrl(videoOf(m).poster || '')" autoplay muted loop playsinline
+                         class="block h-full w-full object-cover" @timeupdate="onVideoTime($event, m)"></video>
+                  <div class="absolute inset-0 cursor-pointer" @click.stop="openVideoFull($event, m)"></div>
+                  <span class="pointer-events-none absolute left-2 top-2 flex items-center gap-1 rounded-full bg-black/55 px-2.5 py-1 text-sm text-white">
+                    <span class="tabular-nums">{{ videoState[m.id]?.remain || '' }}</span>
+                    <AppIcon name="volume-x" :size="15" />
+                  </span>
+                </template>
+                <template v-else>
+                  <img :src="thumbUrl(videoOf(m)?.poster || '')" @error="imgFull($event, videoOf(m)?.poster)" class="block h-full w-full object-cover" />
+                  <button class="absolute inset-0 flex items-center justify-center" @click.stop="videoLoaded[m.id] = true" title="Запустить видео">
+                    <span class="flex h-14 w-14 items-center justify-center rounded-full bg-black/50 text-white ring-2 ring-white/40"><AppIcon name="play" :size="26" /></span>
+                  </button>
+                </template>
               </div>
               <div v-if="captionText(m)" class="markdown-body break-words px-3.5 pt-1.5 text-[15px]" :class="isMine(m) && 'markdown-on-accent'" v-html="renderChatBody(captionText(m))"></div>
               <div class="flex items-end justify-between gap-2 px-2.5 pb-1.5 pt-1">
@@ -1392,7 +1426,7 @@ onBeforeUnmount(() => {
                           class="flex items-center gap-1 rounded-full px-2.5 py-1 leading-none ring-1 transition"
                           :class="m.my_reaction === r.emoji ? 'bg-saffron-500/25 text-saffron-800 ring-saffron-400' : 'bg-saffron-500/10 text-ink-700 ring-transparent hover:bg-saffron-500/20'"><span class="text-xl leading-none">{{ r.emoji }}</span><span v-if="r.count > 1" class="text-sm font-semibold tabular-nums">{{ r.count }}</span></button>
                 </div>
-                <div class="flex shrink-0 items-center gap-1 pb-0.5 text-[11px]" :class="captionText(m) && isMine(m) ? 'text-white/70' : 'text-ink-700/40'">
+                <div class="flex shrink-0 items-center gap-1 pb-0.5 text-[11px]" :class="isMine(m) ? 'text-white/70' : 'text-ink-700/40'">
                   <span>{{ fmtTime(m.created_at) }}</span>
                   <template v-if="statusOf(m)"><AppIcon v-if="statusOf(m) === 'pending'" name="clock" :size="15" /><AppIcon v-else-if="statusOf(m) === 'read'" name="check-double" :size="16" /><AppIcon v-else-if="statusOf(m) === 'sent'" name="check" :size="15" /></template>
                 </div>
@@ -1402,7 +1436,7 @@ onBeforeUnmount(() => {
             <div v-else-if="isPhoto(m)" class="relative overflow-hidden rounded-2xl shadow-sm"
                  :class="[wide ? 'max-w-[420px]' : 'max-w-[80%]', (captionText(m) || fwdName(m) || showAuthor(m, i)) && (isMine(m) ? 'bg-saffron-500 text-white' : 'bg-white text-ink-900 ring-1 ring-parchment-200')]"
                  @contextmenu="onContext($event, m)">
-              <div v-if="showAuthor(m, i)" class="px-3 pt-2 text-sm font-semibold text-sage-600">{{ nameOf(m) }}</div>
+              <div v-if="showAuthor(m, i)" class="cursor-pointer px-3 pt-2 text-sm font-semibold text-sage-600 hover:underline" @click.stop="openUserInfo(m.author_id)">{{ nameOf(m) }}</div>
               <div v-if="fwdName(m)" class="flex items-center gap-1.5 px-3 pt-2 text-sm font-semibold" :class="isMine(m) ? 'text-white/90' : 'text-saffron-700'">
                 <AppIcon name="reply" :size="12" class="-scale-x-100" /> <span>Переслано от</span>
                 <img v-if="fwdAvatar(m)" :src="thumbUrl(fwdAvatar(m))" class="h-4 w-4 shrink-0 rounded-full object-cover" />
@@ -1457,7 +1491,7 @@ onBeforeUnmount(() => {
                  :class="[isMine(m) ? 'bg-saffron-500 text-white' : 'bg-white text-ink-900 ring-1 ring-parchment-200', wide ? 'max-w-[600px]' : 'max-w-[78%]']"
                  :data-audio-label="`${nameOf(m) || 'Голосовое'} · ${fmtTime(m.created_at)}`"
                  @contextmenu="onContext($event, m)">
-              <div v-if="showAuthor(m, i)" class="mb-0.5 text-sm font-semibold text-sage-600">{{ nameOf(m) }}</div>
+              <div v-if="showAuthor(m, i)" class="mb-0.5 cursor-pointer text-sm font-semibold text-sage-600 hover:underline" @click.stop="openUserInfo(m.author_id)">{{ nameOf(m) }}</div>
               <div v-if="fwdName(m)" class="mb-1 flex items-center gap-1.5 text-sm font-semibold" :class="isMine(m) ? 'text-white/90' : 'text-saffron-700'">
                 <AppIcon name="reply" :size="12" class="-scale-x-100" /> <span>Переслано от</span>
                 <img v-if="fwdAvatar(m)" :src="thumbUrl(fwdAvatar(m))" class="h-4 w-4 shrink-0 rounded-full object-cover" />

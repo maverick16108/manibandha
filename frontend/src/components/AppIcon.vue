@@ -162,6 +162,12 @@ defineProps({
       <path d="m5 12.5 4.5 4.5L19 7" />
     </template>
 
+    <!-- rotate / повернуть -->
+    <template v-else-if="name === 'rotate'">
+      <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+      <path d="M21 3v5h-5" />
+    </template>
+
     <!-- check-double / прочитано (две галочки с наездом, как в Telegram) -->
     <template v-else-if="name === 'check-double'">
       <path d="m1.5 12.5 4.5 4.5L15.5 7" />

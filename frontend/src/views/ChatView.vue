@@ -598,6 +598,13 @@ function photoUrls(m) {
 }
 function captionText(m) { return contentBody(m).replace(/!\[[^\]]*\]\([^)]*\)/g, '').trim() }
 function isPhoto(m) { return photoUrls(m).length > 0 }
+// все фото чата по порядку — для навигации в лайтбоксе (←/→, свайп)
+const allChatPhotos = computed(() => {
+  const out = []
+  for (const m of chatState.messages) if (!m.deleted) for (const u of photoUrls(m)) out.push(u)
+  return out
+})
+function openPhoto(u) { openLightbox(u, allChatPhotos.value) }
 // сетка-альбом под количество фото (как в мессенджерах)
 function albumCols(n) { return n <= 1 ? '' : (n <= 4 ? 'grid-cols-2' : 'grid-cols-3') }
 function albumItemClass(n, k) { return (n === 3 && k === 0) ? 'col-span-2' : '' } // 3 фото: первое во всю ширину
@@ -1219,12 +1226,12 @@ onBeforeUnmount(() => {
               </div>
               <div v-if="photoUrls(m).length === 1" class="w-full overflow-hidden" :style="photoBoxStyle(photoUrls(m)[0])">
                 <img :src="thumbUrl(photoUrls(m)[0])" @error="imgFull($event, photoUrls(m)[0])"
-                     class="block h-full max-h-[400px] w-full cursor-zoom-in object-cover" @click.stop="openLightbox(photoUrls(m)[0])" />
+                     class="block h-full max-h-[400px] w-full cursor-zoom-in object-cover" @click.stop="openPhoto(photoUrls(m)[0])" />
               </div>
               <div v-else class="grid gap-0.5" :class="albumCols(photoUrls(m).length)">
                 <img v-for="(u, k) in photoUrls(m).slice(0, 10)" :key="k" :src="thumbUrl(u)" @error="imgFull($event, u)"
                      class="aspect-square w-full cursor-zoom-in object-cover" :class="albumItemClass(photoUrls(m).length, k)"
-                     @click.stop="openLightbox(u)" />
+                     @click.stop="openPhoto(u)" />
               </div>
               <div v-if="captionText(m)" class="markdown-body break-words px-3.5 pt-1.5 text-[15px]" :class="isMine(m) && 'markdown-on-accent'" v-html="renderChatBody(captionText(m))"></div>
               <!-- реакции + время в одной строке (с подписью) -->

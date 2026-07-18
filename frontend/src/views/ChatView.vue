@@ -956,8 +956,15 @@ async function onScroll() {
   const el = scroller.value
   if (!el) return
   stickBottom.value = (el.scrollHeight - el.scrollTop - el.clientHeight) < 60
-  if (el.scrollTop < 40) { const prevH = el.scrollHeight; const n = await loadOlder(); if (n) nextTick(() => { el.scrollTop = el.scrollHeight - prevH }) }
+  if (el.scrollTop < 40 && !loadingOlder) {
+    loadingOlder = true
+    const prevH = el.scrollHeight
+    try { await loadOlder() } finally { loadingOlder = false }
+    // сохраняем позицию, когда контент вырос (сервер ИЛИ расширение окна) — без рывка
+    nextTick(() => { const nh = el.scrollHeight; if (nh > prevH) el.scrollTop += nh - prevH })
+  }
 }
+let loadingOlder = false
 
 // ── создание чата ──────────────────────────────────────────────────────
 const newTab = ref('direct')

@@ -17,7 +17,10 @@ import (
 	_ "golang.org/x/image/webp"
 )
 
-const maxUploadBytes = 16 * 1024 * 1024
+const maxUploadBytes = 16 * 1024 * 1024        // картинки/аудио/документы
+const maxVideoBytes = 100 * 1024 * 1024        // видео — больший лимит
+
+var uploadVideoTypes = map[string]bool{"video/mp4": true, "video/quicktime": true, "video/webm": true}
 
 // расширения по content-type (как в app/api/routes/uploads.py)
 var uploadAllowed = map[string]string{
@@ -35,7 +38,7 @@ var uploadAllowed = map[string]string{
 	"application/x-rar-compressed": ".rar", "application/vnd.rar": ".rar",
 	"application/x-7z-compressed": ".7z",
 	"text/plain": ".txt", "text/csv": ".csv",
-	"video/mp4": ".mp4", "video/quicktime": ".mov",
+	"video/mp4": ".mp4", "video/quicktime": ".mov", "video/webm": ".webm",
 }
 
 var uploadImageTypes = map[string]bool{"image/jpeg": true, "image/png": true, "image/webp": true}
@@ -45,7 +48,7 @@ const uploadThumbMax = 320
 
 // POST /uploads
 func (s *Server) upload(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseMultipartForm(maxUploadBytes + 1024); err != nil {
+	if err := r.ParseMultipartForm(maxVideoBytes + 1024); err != nil {
 		httpErr(w, http.StatusBadRequest, "Некорректная форма")
 		return
 	}
@@ -70,10 +73,18 @@ func (s *Server) upload(w http.ResponseWriter, r *http.Request) {
 			httpErr(w, http.StatusBadRequest, "Не удалось прочитать файл")
 			return
 		}
-		data, _ := io.ReadAll(io.LimitReader(f, maxUploadBytes+1))
+		limit := int64(maxUploadBytes)
+		if uploadVideoTypes[ctype] {
+			limit = maxVideoBytes
+		}
+		data, _ := io.ReadAll(io.LimitReader(f, limit+1))
 		f.Close()
-		if len(data) > maxUploadBytes {
-			httpErr(w, http.StatusBadRequest, "Файл больше 16 МБ")
+		if int64(len(data)) > limit {
+			if uploadVideoTypes[ctype] {
+				httpErr(w, http.StatusBadRequest, "Видео больше 100 МБ")
+			} else {
+				httpErr(w, http.StatusBadRequest, "Файл больше 16 МБ")
+			}
 			return
 		}
 		stem := randHex()

@@ -28,6 +28,7 @@ const MAX_LEN = 1000
 const body = ref('')
 const replyTo = ref(null)
 const editingMedia = ref('') // при правке фото: сохраняем медиа-часть (![](url)), редактируем только подпись
+const playingId = ref(null)  // id видео-сообщения, которое сейчас проигрывается инлайн
 const editingMsg = ref(null)
 const scroller = ref(null)
 const listWrap = ref(null)
@@ -384,6 +385,7 @@ function replyThumb(m) {
 function quoteText(b) {
   return (b || '')
     .replace(/@\[audio\]\([^)]*\)/g, '🎤 Голосовое')
+    .replace(/@\[video\]\([^)]*\)/g, 'Видео')
     .replace(/@\[file\]\([^|)]*\|([^)]*)\)/g, (_m, name) => { try { return '📎 ' + decodeURIComponent(name) } catch { return '📎 файл' } })
     .replace(/!\[[^\]]*\]\([^)]*\)/g, 'Фото')
     .trim().slice(0, 300)
@@ -406,17 +408,23 @@ function snippet(b) {
   return (b || '')
     .replace(FWD_RE, '')
     .replace(/@\[audio\]\([^)]*\)/g, '🎤 Голосовое')
+    .replace(/@\[video\]\([^)]*\)/g, 'Видео')
     .replace(/@\[file\]\([^|)]*\|([^)]*)\)/g, (_m, name) => { try { return '📎 ' + decodeURIComponent(name) } catch { return '📎 файл' } })
     .replace(/!\[[^\]]*\]\([^)]*\)/g, 'Фото')
     .replace(/\s+/g, ' ').trim().slice(0, 80)
 }
-// первый URL фото из тела (для миниатюры в превью списка/ответа/правки)
+// видео: маркер @[video](url|poster)
+const VIDEO_RE = /@\[video\]\(([^|)\s]+)\|([^)]*)\)/
+// первый URL медиа-миниатюры (фото или постер видео) — для превью списка/ответа/правки
 function firstPhotoUrl(b) {
   const s = (b || '').replace(FWD_RE, '')
+  const vm = s.match(VIDEO_RE); if (vm) return vm[2] || null
   if (/@\[audio\]|@\[file\]/.test(s)) return null
   const m = s.match(/!\[[^\]]*\]\(([^)]+)\)/)
   return m ? m[1] : null
 }
+function isVideoMsg(m) { return VIDEO_RE.test(m?.body || '') }
+function videoOf(m) { const mm = contentBody(m).match(VIDEO_RE); return mm ? { url: mm[1], poster: mm[2] || '' } : null }
 function lastPhoto(c) { return firstPhotoUrl(c?.last?.body) }
 
 // ── композер: авто-рост, лимит, отправка ───────────────────────────────
@@ -503,11 +511,17 @@ const composeInput = ref(null)
 const composeCaptionInput = ref(null)
 const showCompose = computed(() => composeItems.value.length > 0)
 const composeImages = computed(() => composeItems.value.filter((it) => it.isImage))
-const composeFiles = computed(() => composeItems.value.filter((it) => !it.isImage))
+const composeMedia = computed(() => composeItems.value.filter((it) => it.isImage || it.isVideo))
+const composeFiles = computed(() => composeItems.value.filter((it) => !it.isImage && !it.isVideo))
 function plural(n) { const a = n % 10, b = n % 100; if (a === 1 && b !== 11) return 'файл'; if (a >= 2 && a <= 4 && (b < 10 || b >= 20)) return 'файла'; return 'файлов' }
 const composeTitle = computed(() => {
-  if (!composeImages.value.length) return 'Отправить как файл'
-  if (!composeFiles.value.length) return 'Отправить изображение'
+  const img = composeImages.value.length
+  const vid = composeMedia.value.length - img
+  if (!composeMedia.value.length) return 'Отправить как файл'
+  if (!composeFiles.value.length) {
+    if (img && vid) return 'Отправить медиа'
+    return vid ? 'Отправить видео' : 'Отправить изображение'
+  }
   return `Выбрано ${composeItems.value.length} ${plural(composeItems.value.length)}`
 })
 function fmtSize(bytes) { if (!bytes) return ''; if (bytes < 1024) return `${bytes} Б`; if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} КБ`; return `${(bytes / 1048576).toFixed(1)} МБ` }
@@ -517,11 +531,35 @@ function addComposeItems(files, compress) {
   if (compress !== undefined) composeCompress.value = compress
   for (const f of Array.from(files)) {
     const isImage = (f.type || '').startsWith('image/')
-    composeItems.value.push({ file: f, url: isImage ? URL.createObjectURL(f) : null, isImage, size: f.size })
+    const isVideo = (f.type || '').startsWith('video/')
+    const it = reactive({ file: f, url: (isImage || isVideo) ? URL.createObjectURL(f) : null, isImage, isVideo, size: f.size, poster: null, posterBlob: null })
+    composeItems.value.push(it)
+    if (isVideo) capturePoster(f).then((r) => { if (r) { it.posterBlob = r.blob; it.poster = r.url } })
   }
 }
-function removeComposeItem(it) { const i = composeItems.value.indexOf(it); if (i < 0) return; if (it.url) URL.revokeObjectURL(it.url); composeItems.value.splice(i, 1) }
-function cancelCompose() { composeItems.value.forEach((it) => it.url && URL.revokeObjectURL(it.url)); composeItems.value = []; composeCaption.value = ''; composeCompress.value = true }
+// постер (кадр) видео на клиенте — ffmpeg на сервере не нужен
+function capturePoster(file) {
+  return new Promise((resolve) => {
+    try {
+      const v = document.createElement('video')
+      v.preload = 'metadata'; v.muted = true; v.playsInline = true
+      const src = URL.createObjectURL(file); v.src = src
+      const done = (blob) => { URL.revokeObjectURL(src); resolve(blob ? { blob, url: URL.createObjectURL(blob) } : null) }
+      v.onloadeddata = () => { try { v.currentTime = Math.min(0.1, (v.duration || 1) / 2) } catch { done(null) } }
+      v.onseeked = () => {
+        try {
+          const c = document.createElement('canvas'); c.width = v.videoWidth || 320; c.height = v.videoHeight || 240
+          c.getContext('2d').drawImage(v, 0, 0, c.width, c.height)
+          c.toBlob((b) => done(b), 'image/jpeg', 0.82)
+        } catch { done(null) }
+      }
+      v.onerror = () => done(null)
+    } catch { resolve(null) }
+  })
+}
+function revokeItem(it) { if (it.url) URL.revokeObjectURL(it.url); if (it.poster) URL.revokeObjectURL(it.poster) }
+function removeComposeItem(it) { const i = composeItems.value.indexOf(it); if (i < 0) return; revokeItem(it); composeItems.value.splice(i, 1) }
+function cancelCompose() { composeItems.value.forEach(revokeItem); composeItems.value = []; composeCaption.value = ''; composeCompress.value = true }
 function onComposeAdd(ev) { addComposeItems(ev.target.files || []); if (composeInput.value) composeInput.value.value = '' }
 // оптимистичная отправка вложений: диалог закрывается мгновенно, фото сразу видно в чате
 // с лоадером, загрузка идёт в фоне, затем сообщение уходит на сервер.
@@ -539,24 +577,35 @@ async function uploadOne(file) {
 }
 async function runUpload(pu) {
   pu.failed = false
-  const { compress, cap, imgs, files } = pu
+  const { cap, imgs, vids, files } = pu
   try {
+    let capUsed = false
+    // альбом изображений — одним сообщением
     if (imgs.length) {
       const urls = await Promise.all(imgs.map((it) => uploadOne(it.file)))
       let body = urls.map((u) => `![](${u})`).join('')
-      if (cap && !files.length) body += `\n${cap}`
+      if (cap && !vids.length && !files.length) { body += `\n${cap}`; capUsed = true }
       await sendMessage(body)
-      removePending(pu)
     }
-    let first = !imgs.length
+    // видео — каждое отдельным сообщением (видео + постер)
+    for (const it of vids) {
+      const vurl = await uploadOne(it.file)
+      let purl = ''
+      if (it.posterBlob) { try { purl = await uploadOne(new File([it.posterBlob], 'poster.jpg', { type: 'image/jpeg' })) } catch { purl = '' } }
+      let s = `@[video](${vurl}|${purl})`
+      if (cap && !capUsed && !files.length) { s += `\n${cap}`; capUsed = true }
+      await sendMessage(s)
+    }
+    // прочие файлы
     for (const it of files) {
       const url = await uploadOne(it.file)
       const name = (it.file.name || 'файл').replace(/[|)(]/g, '_')
       let s = `@[file](${url}|${encodeURIComponent(name)})`
-      if (first && cap) { s += `\n${cap}`; first = false }
+      if (cap && !capUsed) { s += `\n${cap}`; capUsed = true }
       await sendMessage(s)
       if (it.url) URL.revokeObjectURL(it.url)
     }
+    removePending(pu)
     scrollToBottom()
   } catch { pu.failed = true }
 }
@@ -565,14 +614,16 @@ async function sendCompose() {
   const items = [...composeItems.value]; const cap = composeCaption.value.trim(); const compress = composeCompress.value
   if (!items.length) return
   const chatId = activeId.value
-  // с «сжать» — картинки идут альбомом (![]); без сжатия — всё как файлы
-  const imgs = compress ? items.filter((it) => it.isImage) : []
-  const files = compress ? items.filter((it) => !it.isImage) : items
-  // закрываем диалог мгновенно, blob-превью переносим в pending (НЕ revoke)
+  const vids = items.filter((it) => it.isVideo)
+  const imgs = compress ? items.filter((it) => it.isImage) : []       // «сжать» → альбом ![]
+  const files = items.filter((it) => !it.isVideo && !imgs.includes(it)) // остальное — файлами
   composeItems.value = []; composeCaption.value = ''; composeCompress.value = true
-  const pu = reactive({ id: `up-${uploadSeq++}`, chatId, compress, cap, imgs, files, failed: false,
-    previews: imgs.map((it) => ({ url: it.url })) })
-  if (imgs.length) { pendingUploads.push(pu); nextTick(scrollToBottom) }
+  const previews = [
+    ...imgs.map((it) => ({ url: it.url })),
+    ...vids.map((it) => ({ url: it.poster || it.url, isVideo: true })),
+  ]
+  const pu = reactive({ id: `up-${uploadSeq++}`, chatId, cap, imgs, vids, files, failed: false, previews })
+  if (previews.length) { pendingUploads.push(pu); nextTick(scrollToBottom) }
   runUpload(pu)
 }
 
@@ -615,7 +666,7 @@ function photoUrls(m) {
   if (m.deleted || /@\[audio\]|@\[file\]/.test(b)) return []
   const urls = []; b.replace(/!\[[^\]]*\]\(([^)]+)\)/g, (_x, u) => { urls.push(u); return '' }); return urls
 }
-function captionText(m) { return contentBody(m).replace(/!\[[^\]]*\]\([^)]*\)/g, '').trim() }
+function captionText(m) { return contentBody(m).replace(/!\[[^\]]*\]\([^)]*\)/g, '').replace(VIDEO_RE, '').trim() }
 function isPhoto(m) { return photoUrls(m).length > 0 }
 // все фото чата по порядку — для навигации в лайтбоксе (←/→, свайп)
 const allChatPhotos = computed(() => {
@@ -623,7 +674,16 @@ const allChatPhotos = computed(() => {
   for (const m of chatState.messages) if (!m.deleted) for (const u of photoUrls(m)) out.push(u)
   return out
 })
-function openPhoto(u) { openLightbox(u, allChatPhotos.value) }
+function photoIndex(m, k) {
+  let idx = 0
+  for (const x of chatState.messages) {
+    if (x.deleted) continue
+    if (x.id === m.id) return idx + k
+    idx += photoUrls(x).length
+  }
+  return idx
+}
+function openPhoto(m, k) { const i = photoIndex(m, k); openLightbox(allChatPhotos.value[i], allChatPhotos.value, i) }
 // сетка-альбом под количество фото (как в мессенджерах)
 function albumCols(n) { return n <= 1 ? '' : (n <= 4 ? 'grid-cols-2' : 'grid-cols-3') }
 function albumItemClass(n, k) { return (n === 3 && k === 0) ? 'col-span-2' : '' } // 3 фото: первое во всю ширину
@@ -1247,8 +1307,42 @@ onBeforeUnmount(() => {
               <span v-else class="h-10 w-10 shrink-0"></span>
             </template>
             <!-- ФОТО-сообщение: без «полей» пузыря (как в телеге) -->
-            <div v-if="isPhoto(m)" class="relative overflow-hidden rounded-2xl shadow-sm"
-                 :class="[wide ? 'max-w-[420px]' : 'max-w-[80%]', captionText(m) && (isMine(m) ? 'bg-saffron-500 text-white' : 'bg-white text-ink-900 ring-1 ring-parchment-200')]"
+            <!-- видео-сообщение -->
+            <div v-if="isVideoMsg(m)" class="relative overflow-hidden rounded-2xl shadow-sm"
+                 :class="[wide ? 'max-w-[420px]' : 'max-w-[80%]', isMine(m) ? 'bg-saffron-500 text-white' : 'bg-white text-ink-900 ring-1 ring-parchment-200']"
+                 @contextmenu="onContext($event, m)">
+              <div v-if="showAuthor(m, i)" class="px-3 pt-2 text-xs font-semibold text-sage-600">{{ nameOf(m) }}</div>
+              <div v-if="fwdName(m)" class="flex items-center gap-1.5 px-3 pt-2 text-xs font-semibold" :class="captionText(m) && isMine(m) ? 'text-white/90' : 'text-saffron-700'">
+                <AppIcon name="reply" :size="12" class="-scale-x-100" /> <span>Переслано от</span>
+                <img v-if="fwdAvatar(m)" :src="thumbUrl(fwdAvatar(m))" class="h-4 w-4 shrink-0 rounded-full object-cover" />
+                <span v-else class="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-saffron-500 text-[8px] font-semibold text-white">{{ initials(fwdName(m)) }}</span>
+                <span class="truncate">{{ fwdName(m) }}</span>
+              </div>
+              <div class="relative w-full overflow-hidden bg-black" :style="photoBoxStyle(videoOf(m)?.poster || '')">
+                <video v-if="playingId === m.id" :src="videoOf(m).url" controls autoplay playsinline class="block h-full max-h-[400px] w-full bg-black object-contain"></video>
+                <template v-else>
+                  <img v-if="videoOf(m)?.poster" :src="thumbUrl(videoOf(m).poster)" @error="imgFull($event, videoOf(m).poster)" class="block h-full max-h-[400px] w-full object-cover" />
+                  <button class="absolute inset-0 flex items-center justify-center" @click.stop="playingId = m.id" title="Смотреть">
+                    <span class="flex h-14 w-14 items-center justify-center rounded-full bg-black/50 text-white ring-2 ring-white/40"><AppIcon name="play" :size="26" /></span>
+                  </button>
+                </template>
+              </div>
+              <div v-if="captionText(m)" class="markdown-body break-words px-3.5 pt-1.5 text-[15px]" :class="isMine(m) && 'markdown-on-accent'" v-html="renderChatBody(captionText(m))"></div>
+              <div class="flex items-end justify-between gap-2 px-2.5 pb-1.5 pt-1">
+                <div class="flex flex-wrap gap-1">
+                  <button v-for="r in parseReactions(m)" :key="r.emoji" @click.stop="onChip(m, r.emoji)" @contextmenu.prevent.stop="openWho($event, r)" title="ПКМ — кто поставил"
+                          class="flex items-center gap-1 rounded-full px-2.5 py-1 leading-none ring-1 transition"
+                          :class="m.my_reaction === r.emoji ? 'bg-saffron-500/25 text-saffron-800 ring-saffron-400' : 'bg-saffron-500/10 text-ink-700 ring-transparent hover:bg-saffron-500/20'"><span class="text-xl leading-none">{{ r.emoji }}</span><span v-if="r.count > 1" class="text-sm font-semibold tabular-nums">{{ r.count }}</span></button>
+                </div>
+                <div class="flex shrink-0 items-center gap-1 pb-0.5 text-[11px]" :class="captionText(m) && isMine(m) ? 'text-white/70' : 'text-ink-700/40'">
+                  <span>{{ fmtTime(m.created_at) }}</span>
+                  <template v-if="statusOf(m)"><AppIcon v-if="statusOf(m) === 'pending'" name="clock" :size="15" /><AppIcon v-else-if="statusOf(m) === 'read'" name="check-double" :size="16" /><AppIcon v-else-if="statusOf(m) === 'sent'" name="check" :size="15" /></template>
+                </div>
+              </div>
+            </div>
+
+            <div v-else-if="isPhoto(m)" class="relative overflow-hidden rounded-2xl shadow-sm"
+                 :class="[wide ? 'max-w-[420px]' : 'max-w-[80%]', (captionText(m) || fwdName(m) || showAuthor(m, i)) && (isMine(m) ? 'bg-saffron-500 text-white' : 'bg-white text-ink-900 ring-1 ring-parchment-200')]"
                  @contextmenu="onContext($event, m)">
               <div v-if="showAuthor(m, i)" class="px-3 pt-2 text-xs font-semibold text-sage-600">{{ nameOf(m) }}</div>
               <div v-if="fwdName(m)" class="flex items-center gap-1.5 px-3 pt-2 text-xs font-semibold" :class="captionText(m) && isMine(m) ? 'text-white/90' : 'text-saffron-700'">
@@ -1266,12 +1360,12 @@ onBeforeUnmount(() => {
               </div>
               <div v-if="photoUrls(m).length === 1" class="w-full overflow-hidden" :style="photoBoxStyle(photoUrls(m)[0])">
                 <img :src="thumbUrl(photoUrls(m)[0])" @error="imgFull($event, photoUrls(m)[0])"
-                     class="block h-full max-h-[400px] w-full cursor-zoom-in object-cover" @click.stop="openPhoto(photoUrls(m)[0])" />
+                     class="block h-full max-h-[400px] w-full cursor-zoom-in object-cover" @click.stop="openPhoto(m, 0)" />
               </div>
               <div v-else class="grid gap-0.5" :class="albumCols(photoUrls(m).length)">
                 <img v-for="(u, k) in photoUrls(m).slice(0, 10)" :key="k" :src="thumbUrl(u)" @error="imgFull($event, u)"
                      class="aspect-square w-full cursor-zoom-in object-cover" :class="albumItemClass(photoUrls(m).length, k)"
-                     @click.stop="openPhoto(u)" />
+                     @click.stop="openPhoto(m, k)" />
               </div>
               <div v-if="captionText(m)" class="markdown-body break-words px-3.5 pt-1.5 text-[15px]" :class="isMine(m) && 'markdown-on-accent'" v-html="renderChatBody(captionText(m))"></div>
               <!-- реакции + время в одной строке (с подписью) -->
@@ -1485,17 +1579,17 @@ onBeforeUnmount(() => {
     <!-- Контекстное меню (ПКМ) -->
     <template v-if="ctx.open">
       <div class="fixed inset-0 z-40" @click="closeCtx" @contextmenu.prevent="closeCtx"></div>
-      <div class="fixed z-50 w-52 overflow-hidden rounded-xl bg-white py-1 shadow-xl ring-1 ring-parchment-200" :style="ctxStyle">
-        <div class="flex justify-around px-2 py-1.5">
-          <button v-for="e in REACTION_EMOJIS" :key="e" class="rounded-full p-1 text-lg leading-none transition hover:scale-125" @click="ctxReact(e)">{{ e }}</button>
+      <div class="fixed z-50 w-60 overflow-hidden rounded-xl bg-white py-1 shadow-xl ring-1 ring-parchment-200" :style="ctxStyle">
+        <div class="flex justify-around px-2 py-2">
+          <button v-for="e in REACTION_EMOJIS" :key="e" class="rounded-full p-1 text-2xl leading-none transition hover:scale-125" @click="ctxReact(e)">{{ e }}</button>
         </div>
         <div class="my-1 border-t border-parchment-100"></div>
-        <button class="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-ink-700 hover:bg-parchment-100" @click="ctxReply"><AppIcon name="reply" :size="15" /> Ответить</button>
-        <button v-if="canCopy(ctx.m) || ctx.selText" class="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-ink-700 hover:bg-parchment-100" @click="ctxCopy"><AppIcon name="copy" :size="15" /> Копировать</button>
-        <button v-if="canEdit(ctx.m)" class="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-ink-700 hover:bg-parchment-100" @click="ctxEdit"><AppIcon name="edit" :size="15" /> Изменить</button>
-        <button v-if="ctx.m && !ctx.m.deleted" class="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-ink-700 hover:bg-parchment-100" @click="ctxForward"><AppIcon name="reply" :size="15" class="-scale-x-100" /> Переслать</button>
-        <button v-if="canDelete(ctx.m)" class="flex w-full items-center gap-2.5 border-t border-parchment-100 px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50" @click="ctxDelete"><AppIcon name="trash" :size="15" /> {{ delLabel(ctx.m) }}</button>
-        <button v-if="ctx.m && !ctx.m.deleted" class="flex w-full items-center gap-2.5 border-t border-parchment-100 px-3 py-2 text-left text-sm text-ink-700 hover:bg-parchment-100" @click="ctxSelect"><AppIcon name="check" :size="15" /> Выделить</button>
+        <button class="flex w-full items-center gap-3 px-3.5 py-2.5 text-left text-[15px] text-ink-700 hover:bg-parchment-100" @click="ctxReply"><AppIcon name="reply" :size="19" /> Ответить</button>
+        <button v-if="canCopy(ctx.m) || ctx.selText" class="flex w-full items-center gap-3 px-3.5 py-2.5 text-left text-[15px] text-ink-700 hover:bg-parchment-100" @click="ctxCopy"><AppIcon name="copy" :size="19" /> Копировать</button>
+        <button v-if="canEdit(ctx.m)" class="flex w-full items-center gap-3 px-3.5 py-2.5 text-left text-[15px] text-ink-700 hover:bg-parchment-100" @click="ctxEdit"><AppIcon name="edit" :size="19" /> Изменить</button>
+        <button v-if="ctx.m && !ctx.m.deleted" class="flex w-full items-center gap-3 px-3.5 py-2.5 text-left text-[15px] text-ink-700 hover:bg-parchment-100" @click="ctxForward"><AppIcon name="reply" :size="19" class="-scale-x-100" /> Переслать</button>
+        <button v-if="canDelete(ctx.m)" class="flex w-full items-center gap-3 border-t border-parchment-100 px-3.5 py-2.5 text-left text-[15px] text-red-600 hover:bg-red-50" @click="ctxDelete"><AppIcon name="trash" :size="19" /> {{ delLabel(ctx.m) }}</button>
+        <button v-if="ctx.m && !ctx.m.deleted" class="flex w-full items-center gap-3 border-t border-parchment-100 px-3.5 py-2.5 text-left text-[15px] text-ink-700 hover:bg-parchment-100" @click="ctxSelect"><AppIcon name="check" :size="19" /> Выделить</button>
       </div>
     </template>
 
@@ -1586,10 +1680,13 @@ onBeforeUnmount(() => {
             </span>
             <button class="text-ink-700/40 hover:text-red-600" title="Убрать" @click="removeComposeItem(it)"><AppIcon name="trash" :size="16" /></button>
           </div>
-          <!-- картинки -->
-          <div v-if="composeImages.length" class="grid grid-cols-3 gap-2">
-            <div v-for="(it, k) in composeImages" :key="'i' + k" class="group relative aspect-square overflow-hidden rounded-lg ring-1 ring-parchment-200">
-              <img :src="it.url" class="h-full w-full object-cover" />
+          <!-- картинки и видео -->
+          <div v-if="composeMedia.length" class="grid grid-cols-3 gap-2">
+            <div v-for="(it, k) in composeMedia" :key="'m' + k" class="group relative aspect-square overflow-hidden rounded-lg bg-ink-900/5 ring-1 ring-parchment-200">
+              <img v-if="it.isVideo ? it.poster : it.url" :src="it.isVideo ? it.poster : it.url" class="h-full w-full object-cover" />
+              <div v-if="it.isVideo" class="pointer-events-none absolute inset-0 flex items-center justify-center">
+                <span class="flex h-9 w-9 items-center justify-center rounded-full bg-black/50 text-white"><AppIcon name="play" :size="18" /></span>
+              </div>
               <button class="absolute right-1 top-1 hidden rounded-full bg-ink-900/60 p-1 text-white group-hover:block" title="Убрать" @click="removeComposeItem(it)"><AppIcon name="trash" :size="14" /></button>
             </div>
             <button class="flex aspect-square items-center justify-center rounded-lg border-2 border-dashed border-parchment-300 text-ink-700/50 hover:border-saffron-400 hover:text-saffron-600" title="Добавить" @click="composeInput.click()">

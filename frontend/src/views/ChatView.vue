@@ -29,6 +29,25 @@ const body = ref('')
 const replyTo = ref(null)
 const editingMedia = ref('') // при правке фото: сохраняем медиа-часть (![](url)), редактируем только подпись
 const playingId = ref(null)  // id видео-сообщения, которое сейчас проигрывается инлайн
+// видео в чате: обратный таймер + полноэкранный просмотр по клику
+const videoState = reactive({})
+function onVideoTime(e, m) {
+  const v = e.target
+  videoState[m.id] = { remain: fmtSec(Math.max(0, (v.duration || 0) - (v.currentTime || 0))) }
+}
+function openVideoFull(e, m) {
+  const v = e.currentTarget
+  v.muted = false; v.controls = true
+  const req = v.requestFullscreen || v.webkitRequestFullscreen || v.webkitEnterFullscreen
+  if (req) { try { req.call(v) } catch { /* ignore */ } }
+  const onFs = () => {
+    if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+      v.muted = true; v.controls = false
+      document.removeEventListener('fullscreenchange', onFs); document.removeEventListener('webkitfullscreenchange', onFs)
+    }
+  }
+  document.addEventListener('fullscreenchange', onFs); document.addEventListener('webkitfullscreenchange', onFs)
+}
 const editingMsg = ref(null)
 const scroller = ref(null)
 const listWrap = ref(null)
@@ -1350,21 +1369,21 @@ onBeforeUnmount(() => {
             <div v-if="isVideoMsg(m)" class="relative overflow-hidden rounded-2xl shadow-sm"
                  :class="[wide ? 'max-w-[420px]' : 'max-w-[80%]', isMine(m) ? 'bg-saffron-500 text-white' : 'bg-white text-ink-900 ring-1 ring-parchment-200']"
                  @contextmenu="onContext($event, m)">
-              <div v-if="showAuthor(m, i)" class="px-3 pt-2 text-xs font-semibold text-sage-600">{{ nameOf(m) }}</div>
-              <div v-if="fwdName(m)" class="flex items-center gap-1.5 px-3 pt-2 text-xs font-semibold" :class="isMine(m) ? 'text-white/90' : 'text-saffron-700'">
+              <div v-if="showAuthor(m, i)" class="px-3 pt-2 text-sm font-semibold text-sage-600">{{ nameOf(m) }}</div>
+              <div v-if="fwdName(m)" class="flex items-center gap-1.5 px-3 pt-2 text-sm font-semibold" :class="isMine(m) ? 'text-white/90' : 'text-saffron-700'">
                 <AppIcon name="reply" :size="12" class="-scale-x-100" /> <span>Переслано от</span>
                 <img v-if="fwdAvatar(m)" :src="thumbUrl(fwdAvatar(m))" class="h-4 w-4 shrink-0 rounded-full object-cover" />
                 <span v-else class="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-saffron-500 text-[8px] font-semibold text-white">{{ initials(fwdName(m)) }}</span>
                 <span class="truncate">{{ fwdName(m) }}</span>
               </div>
-              <div class="relative w-full overflow-hidden bg-black" :style="photoBoxStyle(videoOf(m)?.poster || '')">
-                <video v-if="playingId === m.id" :src="videoOf(m).url" controls autoplay playsinline class="block h-full max-h-[400px] w-full bg-black object-contain"></video>
-                <template v-else>
-                  <img v-if="videoOf(m)?.poster" :src="thumbUrl(videoOf(m).poster)" @error="imgFull($event, videoOf(m).poster)" class="block h-full max-h-[400px] w-full object-cover" />
-                  <button class="absolute inset-0 flex items-center justify-center" @click.stop="playingId = m.id" title="Смотреть">
-                    <span class="flex h-14 w-14 items-center justify-center rounded-full bg-black/50 text-white ring-2 ring-white/40"><AppIcon name="play" :size="26" /></span>
-                  </button>
-                </template>
+              <!-- в чате: авто muted+loop с обратным таймером; клик — полный экран со звуком и controls -->
+              <div class="relative flex justify-center overflow-hidden bg-black">
+                <video :src="videoOf(m)?.url" :poster="thumbUrl(videoOf(m)?.poster || '')" autoplay muted loop playsinline
+                       class="block max-h-[70vh] max-w-full cursor-pointer" @timeupdate="onVideoTime($event, m)" @click.stop="openVideoFull($event, m)"></video>
+                <span class="pointer-events-none absolute left-1.5 top-1.5 flex items-center gap-1 rounded-full bg-black/55 px-2 py-0.5 text-[11px] text-white">
+                  <span class="tabular-nums">{{ videoState[m.id]?.remain || '' }}</span>
+                  <AppIcon name="volume-x" :size="13" />
+                </span>
               </div>
               <div v-if="captionText(m)" class="markdown-body break-words px-3.5 pt-1.5 text-[15px]" :class="isMine(m) && 'markdown-on-accent'" v-html="renderChatBody(captionText(m))"></div>
               <div class="flex items-end justify-between gap-2 px-2.5 pb-1.5 pt-1">
@@ -1383,8 +1402,8 @@ onBeforeUnmount(() => {
             <div v-else-if="isPhoto(m)" class="relative overflow-hidden rounded-2xl shadow-sm"
                  :class="[wide ? 'max-w-[420px]' : 'max-w-[80%]', (captionText(m) || fwdName(m) || showAuthor(m, i)) && (isMine(m) ? 'bg-saffron-500 text-white' : 'bg-white text-ink-900 ring-1 ring-parchment-200')]"
                  @contextmenu="onContext($event, m)">
-              <div v-if="showAuthor(m, i)" class="px-3 pt-2 text-xs font-semibold text-sage-600">{{ nameOf(m) }}</div>
-              <div v-if="fwdName(m)" class="flex items-center gap-1.5 px-3 pt-2 text-xs font-semibold" :class="isMine(m) ? 'text-white/90' : 'text-saffron-700'">
+              <div v-if="showAuthor(m, i)" class="px-3 pt-2 text-sm font-semibold text-sage-600">{{ nameOf(m) }}</div>
+              <div v-if="fwdName(m)" class="flex items-center gap-1.5 px-3 pt-2 text-sm font-semibold" :class="isMine(m) ? 'text-white/90' : 'text-saffron-700'">
                 <AppIcon name="reply" :size="12" class="-scale-x-100" /> <span>Переслано от</span>
                 <img v-if="fwdAvatar(m)" :src="thumbUrl(fwdAvatar(m))" class="h-4 w-4 shrink-0 rounded-full object-cover" />
                 <span v-else class="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-saffron-500 text-[8px] font-semibold text-white">{{ initials(fwdName(m)) }}</span>
@@ -1438,8 +1457,8 @@ onBeforeUnmount(() => {
                  :class="[isMine(m) ? 'bg-saffron-500 text-white' : 'bg-white text-ink-900 ring-1 ring-parchment-200', wide ? 'max-w-[600px]' : 'max-w-[78%]']"
                  :data-audio-label="`${nameOf(m) || 'Голосовое'} · ${fmtTime(m.created_at)}`"
                  @contextmenu="onContext($event, m)">
-              <div v-if="showAuthor(m, i)" class="mb-0.5 text-xs font-semibold text-sage-600">{{ nameOf(m) }}</div>
-              <div v-if="fwdName(m)" class="mb-1 flex items-center gap-1.5 text-xs font-semibold" :class="isMine(m) ? 'text-white/90' : 'text-saffron-700'">
+              <div v-if="showAuthor(m, i)" class="mb-0.5 text-sm font-semibold text-sage-600">{{ nameOf(m) }}</div>
+              <div v-if="fwdName(m)" class="mb-1 flex items-center gap-1.5 text-sm font-semibold" :class="isMine(m) ? 'text-white/90' : 'text-saffron-700'">
                 <AppIcon name="reply" :size="12" class="-scale-x-100" /> <span>Переслано от</span>
                 <img v-if="fwdAvatar(m)" :src="thumbUrl(fwdAvatar(m))" class="h-4 w-4 shrink-0 rounded-full object-cover" />
                 <span v-else class="flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[8px] font-semibold text-white" :class="isMine(m) ? 'bg-white/30' : 'bg-saffron-500'">{{ initials(fwdName(m)) }}</span>
@@ -1532,13 +1551,13 @@ onBeforeUnmount(() => {
         <!-- Композер -->
         <div class="border-t border-parchment-200 p-3">
           <div v-if="replyTo" class="mb-2 flex items-center gap-2 rounded-lg bg-parchment-100 px-3 py-1.5 text-sm">
-            <AppIcon name="reply" :size="14" class="shrink-0 text-saffron-600" />
+            <AppIcon name="reply" :size="19" class="shrink-0 text-saffron-600" />
             <img v-if="replyTo.photo" :src="thumbUrl(replyTo.photo)" class="h-8 w-8 shrink-0 rounded object-cover" />
             <span class="min-w-0 flex-1 truncate text-ink-700/70"><b class="text-ink-800">{{ replyTo.author_name }}</b>: {{ replyTo.body }}</span>
             <button class="text-ink-700/50 hover:text-ink-900" @click="replyTo = null"><AppIcon name="close" :size="15" /></button>
           </div>
           <div v-else-if="editingMsg" class="mb-2 flex items-center gap-2 rounded-lg border-l-2 border-saffron-400 bg-parchment-100 px-3 py-1.5 text-sm">
-            <AppIcon name="edit" :size="14" class="shrink-0 text-saffron-600" />
+            <AppIcon name="edit" :size="19" class="shrink-0 text-saffron-600" />
             <img v-if="firstPhotoUrl(editingMsg.body)" :src="thumbUrl(firstPhotoUrl(editingMsg.body))" class="h-8 w-8 shrink-0 rounded object-cover" />
             <span class="min-w-0 flex-1 truncate text-ink-700/70"><b class="text-saffron-700">Редактирование</b> · {{ snippet(editingMsg.body) }}</span>
             <button class="text-ink-700/50 hover:text-ink-900" @click="cancelEdit"><AppIcon name="close" :size="15" /></button>
@@ -1563,7 +1582,7 @@ onBeforeUnmount(() => {
 
             <div class="relative mb-0.5 shrink-0">
               <button class="rounded-full p-2 text-ink-700/60 hover:bg-parchment-100 hover:text-saffron-600" title="Эмодзи" @click="showEmoji = !showEmoji">
-                <AppIcon name="react" :size="24" />
+                <AppIcon name="react" :size="28" />
               </button>
               <template v-if="showEmoji">
                 <div class="fixed inset-0 z-10" @click="showEmoji = false"></div>

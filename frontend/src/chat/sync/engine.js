@@ -136,31 +136,52 @@ export class ChatEngine {
     this._catchUpQueued = true;
     try {
       let pts = await this._getPts();
-      for (let i = 0; i < 100; i++) {
+      for (let i = 0; i < 200; i++) {
         let resp;
         try { resp = await this.api.getUpdates(pts); } catch { break; }
-        for (const u of resp.updates || []) {
-          if (u.type === 'message' && u.message) await this._applyServerMessage(u.message);
+        const ups = resp.updates || [];
+        // pts двигаем ТОЛЬКО за успешно применёнными апдейтами — если запись упала,
+        // курсор не проскакивает пропущенное сообщение (иначе — вечная дыра/расхождение)
+        let applied = pts;
+        let ok = true;
+        for (const u of ups) {
+          if (u.type === 'message' && u.message) {
+            try { await this._applyServerMessage(u.message); }
+            catch { ok = false; break; }
+          }
+          const s = Number(u.seq) || 0;
+          if (s > applied) applied = s;
         }
-        const np = Number(resp.pts) || pts;
+        const np = ok ? (Number(resp.pts) || applied) : applied;
         if (np <= pts) break;
         pts = np;
         await this._setPts(pts);
-        if (!resp.has_more) break;
+        if (!ok || !resp.has_more) break;
       }
     } finally {
       this._catchUpQueued = false;
     }
   }
 
-  // подгрузить актуальные сообщения чата (сверка правок/удалений при открытии)
+  // сигнатура хвоста чата — чтобы сверка не дёргала перерисовку, когда ничего не изменилось
+  async _chatSig(chatId) {
+    const r = await this.db.get(
+      `SELECT COUNT(*) c, COALESCE(MAX(seq),0) s, COALESCE(SUM(edit_count),0) e,
+              COALESCE(SUM(deleted),0) d FROM messages WHERE chat_id=?`, [chatId]);
+    return r ? `${r.c}:${r.s}:${r.e}:${r.d}` : '';
+  }
+
+  // Сверить хвост чата с сервером (авторитетно). Вызывается при открытии, реконнекте,
+  // возврате фокуса/сети и периодически — гарантирует, что хвост совпадает с сервером.
+  // Перерисовку сигналим только если данные реально изменились.
   async ensureChatMessages(chatId, beforeSeq) {
     try {
+      const before = beforeSeq ? null : await this._chatSig(chatId);
       const msgs = await this.api.listMessages(chatId, beforeSeq, 50);
       for (const m of msgs) await this._writeMessage(m, false);
       await this._recomputeUnread(chatId);
-      // один сигнал перерисовки после пакетной записи истории
-      await this.db.run("UPDATE sync_state SET value=value WHERE key='pts'", [], ['messages']);
+      const changed = beforeSeq ? true : (before !== await this._chatSig(chatId));
+      if (changed) await this.db.run("UPDATE sync_state SET value=value WHERE key='pts'", [], ['messages']);
       return msgs.length;
     } catch { return 0; }
   }

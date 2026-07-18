@@ -57,8 +57,13 @@ export async function initChat({ meId, getToken }) {
     socket.connect();
     try { await refreshChats(); } catch (e) { console.warn('[chat] refreshChats failed', e); }
     chatState.ready = true; // показываем список даже если что-то пошло не так
-    // страховочный догон (на случай пропущенного WS-бродкаста)
-    safetyTimer = setInterval(() => { engine?.catchUp(); engine?.flushOutbox(); }, 25000);
+    // страховочная сверка: догон по глобальному pts + авторитетная сверка ХВОСТА
+    // открытого чата (закрывает любые расхождения, даже без разрыва связи) + дошлём outbox
+    safetyTimer = setInterval(() => { resync(); }, 15000);
+    // немедленная сверка при возврате в сеть / на вкладку
+    window.addEventListener('online', resync);
+    document.addEventListener('visibilitychange', onVisibleResync);
+    window.addEventListener('focus', resync);
     // очистка индикатора «печатает…»
     typingTimer = setInterval(() => {
       const now = Date.now();
@@ -71,10 +76,23 @@ export async function initChat({ meId, getToken }) {
   try { await starting; } finally { starting = null; }
 }
 
+// Полная сверка с сервером: догон по pts, дошли outbox, авторитетно сверить хвост
+// открытого чата. Идемпотентно и без лишних перерисовок (см. engine.ensureChatMessages).
+function resync() {
+  if (!engine) return;
+  engine.catchUp();
+  engine.flushOutbox();
+  if (chatState.activeChatId) engine.ensureChatMessages(chatState.activeChatId);
+}
+function onVisibleResync() { if (document.visibilityState === 'visible') resync(); }
+
 export function teardownChat() {
   try { socket?.close(); } catch { /* ignore */ }
   try { unsub?.(); } catch { /* ignore */ }
   try { db?.close(); } catch { /* ignore */ }
+  try { window.removeEventListener('online', resync); } catch { /* ignore */ }
+  try { document.removeEventListener('visibilitychange', onVisibleResync); } catch { /* ignore */ }
+  try { window.removeEventListener('focus', resync); } catch { /* ignore */ }
   if (safetyTimer) clearInterval(safetyTimer);
   if (typingTimer) clearInterval(typingTimer);
   if (refreshChatsTimer) { clearTimeout(refreshChatsTimer); refreshChatsTimer = null; }

@@ -105,16 +105,29 @@ function saveDraftDebounced(id, text) { if (draftTimer) clearTimeout(draftTimer)
 const openSettled = ref(false) // после открытия чата — можно авто-читать живые входящие
 watch(() => chatState.messages.length, (n, old) => {
   nextTick(scrollToBottom)
-  // живое входящее при активном просмотре (в фокусе, у нижнего края) → сразу читаем:
-  // без разделителя «Непрочитанные» и без роста бейджа в списке
-  if (openSettled.value && n > (old || 0) && stickBottom.value && activeId.value && document.hasFocus()) {
-    const last = chatState.messages[chatState.messages.length - 1]
-    if (last && last.author_id !== chatState.meId) {
-      if (last.seq && last.seq > (chatState.unreadBeforeSeq || 0)) chatState.unreadBeforeSeq = last.seq
-      markActiveRead()
-    }
-  }
+  maybeAutoReadLive(n, old)
 })
+// живое входящее при активном просмотре (вкладка ВИДНА и мы у нижнего края) → сразу читаем:
+// без разделителя «Непрочитанные» и без роста бейджа. Ориентир — видимость, а не фокус
+// (при тесте в двух окнах неактивное окно всё равно «в чате»).
+function maybeAutoReadLive(n, old) {
+  if (!openSettled.value || !activeId.value || !stickBottom.value) return
+  if (document.visibilityState === 'hidden') return
+  if (n <= (old ?? chatState.messages.length - 1)) return
+  const last = chatState.messages[chatState.messages.length - 1]
+  if (!last || last.author_id === chatState.meId) return
+  if (last.seq && last.seq > (chatState.unreadBeforeSeq || 0)) chatState.unreadBeforeSeq = last.seq
+  markActiveRead()
+}
+// возврат на вкладку/в окно: если чат открыт и мы у нижнего края — дочитываем видимое
+// (убираем «Непрочитанные» и бейдж, шлём read → у отправителя появятся 2 галочки)
+function onChatVisible() {
+  if (document.visibilityState === 'hidden' || !activeId.value || !stickBottom.value || !openSettled.value) return
+  let maxSeq = 0
+  for (const m of chatState.messages) if (m.seq && m.seq > maxSeq) maxSeq = m.seq
+  if (maxSeq > (chatState.unreadBeforeSeq || 0)) chatState.unreadBeforeSeq = maxSeq
+  markActiveRead()
+}
 function scrollToBottom() { nextTick(() => { const el = scroller.value; if (el) el.scrollTop = el.scrollHeight }) }
 
 // ── список чатов ─────────────────────────────────────────────────────────
@@ -904,6 +917,8 @@ onMounted(async () => {
   document.addEventListener('keydown', onGlobalKey)
   document.addEventListener('keydown', onDocType)
   document.addEventListener('paste', onPaste)  // вставка картинки — где бы ни был фокус
+  document.addEventListener('visibilitychange', onChatVisible)
+  window.addEventListener('focus', onChatVisible)
   if (convEl.value && typeof ResizeObserver !== 'undefined') {
     resizeObs = new ResizeObserver((entries) => { for (const e of entries) wide.value = e.contentRect.width > 900 })
     resizeObs.observe(convEl.value)
@@ -918,6 +933,8 @@ onBeforeUnmount(() => {
   document.removeEventListener('keydown', onGlobalKey)
   document.removeEventListener('keydown', onDocType)
   document.removeEventListener('paste', onPaste)
+  document.removeEventListener('visibilitychange', onChatVisible)
+  window.removeEventListener('focus', onChatVisible)
   resizeObs?.disconnect()
   listObs?.disconnect()
   cancelCompose()

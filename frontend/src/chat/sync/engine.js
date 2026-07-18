@@ -298,9 +298,31 @@ export class ChatEngine {
   }
 
   async react(chatId, messageId, emoji) {
-    const res = await this.api.react(chatId, messageId, emoji);  // { reactions, my_reaction }
-    await this.db.run('UPDATE messages SET reactions=?, my_reaction=? WHERE chat_id=? AND id=?',
-      [JSON.stringify(res.reactions || []), res.my_reaction || null, chatId, messageId], ['messages']);
+    // оптимистично: мгновенно показываем свою реакцию, потом синхронизируем с сервером
+    const row = await this.db.get('SELECT reactions, my_reaction FROM messages WHERE chat_id=? AND id=?', [chatId, messageId]);
+    if (row) {
+      let list = [];
+      try { list = JSON.parse(row.reactions || '[]'); } catch { list = []; }
+      const prev = row.my_reaction || null;
+      const dec = (em) => {
+        const it = list.find((r) => r.emoji === em);
+        if (it) { it.count = (it.count || 1) - 1; if (it.count <= 0) list = list.filter((r) => r.emoji !== em); }
+      };
+      if (prev) dec(prev);                 // снять прошлый голос
+      let mine = null;
+      if (prev !== emoji) {                // не тот же смайл — ставим новый
+        mine = emoji;
+        const it = list.find((r) => r.emoji === emoji);
+        if (it) it.count = (it.count || 0) + 1; else list.push({ emoji, count: 1 });
+      }
+      await this.db.run('UPDATE messages SET reactions=?, my_reaction=? WHERE chat_id=? AND id=?',
+        [JSON.stringify(list), mine, chatId, messageId], ['messages']);
+    }
+    try {
+      const res = await this.api.react(chatId, messageId, emoji);  // { reactions, my_reaction }
+      await this.db.run('UPDATE messages SET reactions=?, my_reaction=? WHERE chat_id=? AND id=?',
+        [JSON.stringify(res.reactions || []), res.my_reaction || null, chatId, messageId], ['messages']);
+    } catch { /* сервер поправит на следующей сверке */ }
   }
 
   async createChat(payload) {

@@ -81,6 +81,13 @@ func (s *Server) broadcastChat(chatID int, data any) {
 	go chatH.sendToUsers(ids, data)
 }
 
+// онлайн, если у пользователя есть хотя бы один активный чат-сокет
+func (h *chatHubT) isOnline(uid int) bool {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return len(h.sockets[uid]) > 0
+}
+
 // ── Хаб веток: тема → набор сокетов ──────────────────────────────────────────
 
 type threadHubT struct {

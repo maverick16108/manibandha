@@ -81,7 +81,9 @@ watch(activeId, async (id, oldId) => {
   body.value = id ? loadDraft(id) : ''
   openSettled.value = false
   if (id) {
-    stickBottom.value = true; await openChat(id); scrollToBottom(); nextTick(() => inputEl.value?.focus())
+    stickBottom.value = true
+    nextTick(() => inputEl.value?.focus()) // фокус сразу, не ждём загрузки истории
+    await openChat(id); scrollToBottom()
     setTimeout(() => { openSettled.value = true }, 500) // после открытия — авто-читаем живые входящие
   } else closeChat()
   nextTick(autoGrow)
@@ -875,9 +877,17 @@ async function createGroup() {
 // панель информации о собеседнике (личный чат)
 const showInfo = ref(false)
 const infoData = ref(null)
+let infoCache = {}
+try { infoCache = JSON.parse(localStorage.getItem('chatInfoCache') || '{}') || {} } catch { infoCache = {} }
 async function openInfo() {
-  showInfo.value = true; infoData.value = null
-  try { const { data } = await client.get(`/chats/${activeId.value}/info`); infoData.value = data } catch { infoData.value = null }
+  const id = activeId.value
+  showInfo.value = true
+  infoData.value = infoCache[id] || null // мгновенно из кэша, если открывали раньше
+  try {
+    const { data } = await client.get(`/chats/${id}/info`)
+    infoData.value = data; infoCache[id] = data
+    try { localStorage.setItem('chatInfoCache', JSON.stringify(infoCache)) } catch { /* ignore */ }
+  } catch { /* оставляем кэш */ }
 }
 function closeInfo() { showInfo.value = false; infoData.value = null }
 function maritalLabel(v) {
@@ -961,6 +971,7 @@ function onGlobalKey(e) {
     return
   }
   if (e.key !== 'Escape') return
+  if (showInfo.value) { closeInfo(); return }
   if (searchChat.open) { closeChatSearch(); return }
   if (recording.value) cancelRec()
   else if (forwardOpen.value) forwardOpen.value = false
@@ -1158,7 +1169,6 @@ onBeforeUnmount(() => {
                   <div v-if="infoData?.peer?.phone" class="px-6 py-3"><div class="text-[15px] text-ink-900">{{ infoData.peer.phone }}</div><div class="text-xs text-ink-700/50">Телефон</div></div>
                   <div v-if="infoData?.peer?.spiritual_name" class="px-6 py-3"><div class="text-[15px] text-ink-900">{{ infoData.peer.spiritual_name }}</div><div class="text-xs text-ink-700/50">Духовное имя</div></div>
                   <div v-if="cityLine" class="px-6 py-3"><div class="text-[15px] text-ink-900">{{ cityLine }}</div><div class="text-xs text-ink-700/50">Город</div></div>
-                  <div v-if="infoData?.peer?.marital_status" class="px-6 py-3"><div class="text-[15px] text-ink-900">{{ maritalLabel(infoData.peer.marital_status) }}</div><div class="text-xs text-ink-700/50">Семейное положение</div></div>
                 </div>
               </div>
             </div>

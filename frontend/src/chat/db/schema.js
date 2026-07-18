@@ -71,4 +71,5 @@ export const MIGRATIONS = [
   'ALTER TABLE outbox ADD COLUMN reply_quote TEXT',
   'ALTER TABLE chats ADD COLUMN pinned INTEGER DEFAULT 0',
   'ALTER TABLE messages ADD COLUMN hidden INTEGER DEFAULT 0',
+  'ALTER TABLE chats ADD COLUMN pin_order INTEGER DEFAULT 0',
 ];

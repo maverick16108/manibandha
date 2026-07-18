@@ -15,7 +15,7 @@ import { usePageTitle } from '../composables/pageTitle'
 import {
   chatState, initChat, openChat, closeChat, sendMessage, sendTyping,
   editMessage, deleteMessage, retryFailed, loadOlder, loadContacts, startDirect, startGroup,
-  reactMessage, REACTION_EMOJIS, updateChat, pinChat, leaveChat, forwardMessages, loadAroundSeq, markActiveRead, imageAspect, expandWindow,
+  reactMessage, REACTION_EMOJIS, updateChat, pinChat, leaveChat, forwardMessages, loadAroundSeq, markActiveRead, imageAspect, expandWindow, reorderPins,
 } from '../chat/store'
 
 usePageTitle('Чат')
@@ -142,6 +142,30 @@ const filteredChats = computed(() => {
   return q ? chatState.chats.filter((c) => (c.title || '').toLowerCase().includes(q)) : chatState.chats
 })
 function selectChat(c) { router.push({ name: 'chat', params: { id: c.id } }) }
+
+// перетаскивание закреплённых чатов (native drag). @mousedown.prevent ломает старт drag,
+// поэтому preventDefault ставим только для незакреплённых (чтобы не терять фокус композера)
+const dragChatId = ref(null)
+const dragOverChatId = ref(null)
+function chatMouseDown(e, c) { if (!c.pinned) e.preventDefault() }
+function pinDragStart(e, c) {
+  if (!c.pinned) { e.preventDefault(); return }
+  dragChatId.value = c.id
+  try { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', String(c.id)) } catch { /* ignore */ }
+}
+function pinDragOver(e, c) {
+  if (dragChatId.value && c.pinned && c.id !== dragChatId.value) { e.preventDefault(); dragOverChatId.value = c.id }
+}
+function pinDragLeave(c) { if (dragOverChatId.value === c.id) dragOverChatId.value = null }
+function pinDrop(e, c) {
+  if (!dragChatId.value || !c.pinned || c.id === dragChatId.value) return
+  e.preventDefault()
+  const ids = chatState.chats.filter((x) => x.pinned).map((x) => x.id)
+  const from = ids.indexOf(dragChatId.value), to = ids.indexOf(c.id)
+  if (from >= 0 && to >= 0) { ids.splice(to, 0, ids.splice(from, 1)[0]); reorderPins(ids) }
+  dragChatId.value = null; dragOverChatId.value = null
+}
+function pinDragEnd() { dragChatId.value = null; dragOverChatId.value = null }
 function backToList() { router.push({ name: 'chat-home' }) }
 
 // ── список: умное время / превью с автором / галки статуса ──────────────
@@ -1184,7 +1208,9 @@ onBeforeUnmount(() => {
         <p v-else-if="!filteredChats.length" class="p-4 text-sm text-ink-700/50">Чатов пока нет. Нажмите «плюс», чтобы начать.</p>
         <button v-for="c in filteredChats" :key="c.id"
                 class="flex w-full items-center gap-3 border-b border-parchment-100 px-3 py-2.5 text-left hover:bg-parchment-50"
-                :class="c.id === activeId && 'bg-saffron-500/10'" @mousedown.prevent @click="selectChat(c)" @contextmenu="onListContext($event, c)">
+                :class="[c.id === activeId && 'bg-saffron-500/10', dragChatId === c.id && 'opacity-40', dragOverChatId === c.id && 'ring-2 ring-inset ring-saffron-400']"
+                :draggable="c.pinned && !search" @mousedown="chatMouseDown($event, c)" @click="selectChat(c)" @contextmenu="onListContext($event, c)"
+                @dragstart="pinDragStart($event, c)" @dragover="pinDragOver($event, c)" @dragleave="pinDragLeave(c)" @drop="pinDrop($event, c)" @dragend="pinDragEnd">
           <img v-if="c.avatar_url" :src="thumbUrl(c.avatar_url)" @error="imgFull($event, c.avatar_url)" class="photo-bw h-11 w-11 shrink-0 rounded-full object-cover" />
           <span v-else class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-base font-semibold text-white"
                 :class="c.type === 'group' ? 'bg-gradient-to-br from-sage-400 to-sage-600' : 'bg-gradient-to-br from-saffron-400 to-saffron-600'">{{ initials(c.title) }}</span>

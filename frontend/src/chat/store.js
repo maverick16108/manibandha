@@ -161,7 +161,7 @@ async function onDbChange(tables) {
 
 async function refreshChats() {
   if (!db) return;
-  const chats = await db.all('SELECT * FROM chats ORDER BY pinned DESC, (updated_at IS NULL), updated_at DESC');
+  const chats = await db.all('SELECT * FROM chats ORDER BY pinned DESC, pin_order ASC, (updated_at IS NULL), updated_at DESC');
   const mem = await db.all('SELECT * FROM members');
   const out = [];
   let total = 0;
@@ -227,6 +227,16 @@ export async function openChat(chatId) {
 
 export async function pinChat(chatId, pinned) {
   await engine?.pinChat(chatId, pinned);
+}
+
+// новый порядок закреплённых (перетаскивание): оптимистично локально + на сервер
+export async function reorderPins(ids) {
+  if (!db || !ids?.length) return;
+  for (let i = 0; i < ids.length; i++) {
+    await db.run('UPDATE chats SET pin_order=? WHERE id=?', [i, ids[i]], []);
+  }
+  await refreshChats();
+  try { await chatApi.reorderPins(ids); } catch { /* сверится при следующем listChats */ }
 }
 
 export async function leaveChat(chatId) {

@@ -13,6 +13,7 @@ export const chatApi = {
   react: (chatId, messageId, emoji) => client.post(`/chats/${chatId}/messages/${messageId}/react`, { emoji }).then((r) => r.data),
   markRead: (chatId, seq) => client.post(`/chats/${chatId}/read`, { seq }),
   pin: (chatId, pinned) => client.post(`/chats/${chatId}/pin`, { pinned }),
+  reorderPins: (ids) => client.post('/chats/pins/reorder', { ids }),
   leaveChat: (chatId) => client.delete(`/chats/${chatId}/leave`),
   createChat: (payload) => client.post('/chats', payload).then((r) => r.data),
   updateChat: (id, payload) => client.patch(`/chats/${id}`, payload).then((r) => r.data),

@@ -35,15 +35,15 @@ export class ChatEngine {
   // ── запись чатов/сообщений в локальную БД ─────────────────────────────
   async upsertChatMeta(chat) {
     const items = [{
-      sql: `INSERT INTO chats(id,type,title,photo_url,created_by,updated_at,last_seq,my_last_read_seq,unread,pinned)
-            VALUES(?,?,?,?,?,?,?,?,?,?)
+      sql: `INSERT INTO chats(id,type,title,photo_url,created_by,updated_at,last_seq,my_last_read_seq,unread,pinned,pin_order)
+            VALUES(?,?,?,?,?,?,?,?,?,?,?)
             ON CONFLICT(id) DO UPDATE SET type=excluded.type, title=excluded.title,
               photo_url=excluded.photo_url, created_by=excluded.created_by, updated_at=excluded.updated_at,
-              pinned=excluded.pinned`,
+              pinned=excluded.pinned, pin_order=excluded.pin_order`,
       params: [
         chat.id, chat.type, chat.title || null, chat.photo_url || null, chat.created_by || null,
         chat.updated_at || null, chat.last_message?.seq || 0, myLastRead(chat, this.meId), chat.unread || 0,
-        chat.pinned ? 1 : 0,
+        chat.pinned ? 1 : 0, chat.pin_order || 0,
       ],
     }];
     for (const m of chat.members || []) {

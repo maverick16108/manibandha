@@ -482,6 +482,7 @@ type ChatMember struct {
 	UserID      int       `gorm:"column:user_id" json:"user_id"`
 	Role        string    `gorm:"column:role" json:"role"`
 	Pinned      bool      `gorm:"column:pinned" json:"pinned"`
+	PinOrder    int       `gorm:"column:pin_order" json:"pin_order"`
 	LastReadSeq int64     `gorm:"column:last_read_seq" json:"last_read_seq"`
 	JoinedAt    time.Time `gorm:"column:joined_at" json:"-"`
 

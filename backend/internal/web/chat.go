@@ -176,9 +176,11 @@ func (s *Server) chatOut(chat *models.Chat, userID int) map[string]any {
 	}
 	var lastRead int64
 	pinned := false
+	pinOrder := 0
 	if me != nil {
 		lastRead = me.LastReadSeq
 		pinned = me.Pinned
+		pinOrder = me.PinOrder
 	}
 	var unread int64
 	s.DB.Model(&models.ChatMessage{}).
@@ -187,7 +189,7 @@ func (s *Server) chatOut(chat *models.Chat, userID int) map[string]any {
 	return map[string]any{
 		"id": chat.ID, "type": chat.Type, "title": chat.Title, "photo_url": chat.PhotoURL,
 		"created_by": chat.CreatedBy, "created_at": tsUTC(chat.CreatedAt), "updated_at": tsUTC(chat.UpdatedAt),
-		"members": membersOut(chat), "last_message": lastOut, "unread": unread, "pinned": pinned,
+		"members": membersOut(chat), "last_message": lastOut, "unread": unread, "pinned": pinned, "pin_order": pinOrder,
 	}
 }
 
@@ -680,6 +682,22 @@ func (s *Server) searchChatMessages(w http.ResponseWriter, r *http.Request) {
 		out = append(out, chatMsgOut(&rows[i], u.ID))
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+// POST /api/chats/pins/reorder — новый порядок закреплённых чатов (перетаскивание)
+func (s *Server) reorderPins(w http.ResponseWriter, r *http.Request) {
+	u := currentUser(r)
+	var p struct {
+		IDs []int `json:"ids"`
+	}
+	if err := decodeJSON(r, &p); err != nil {
+		httpErr(w, http.StatusBadRequest, "Некорректный запрос")
+		return
+	}
+	for i, cid := range p.IDs {
+		s.DB.Model(&models.ChatMember{}).Where("chat_id = ? AND user_id = ?", cid, u.ID).Update("pin_order", i)
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) pinChat(w http.ResponseWriter, r *http.Request) {

@@ -189,30 +189,36 @@ async function refreshChats() {
   chatState.totalUnread = total;
 }
 
+// Рендерим ОКНО последних сообщений (не всю историю) — иначе на больших чатах отрисовка
+// тысяч нод тормозит открытие. Прокрутка вверх расширяет окно (loadOlder).
+const MSG_WINDOW = 200;
+let msgWindow = MSG_WINDOW;
 async function refreshMessages() {
   if (!db || !chatState.activeChatId) return;
-  chatState.messages = await db.all(
-    'SELECT * FROM messages WHERE chat_id=? AND deleted=0 AND (hidden IS NULL OR hidden=0) ORDER BY (seq IS NULL), seq ASC, local_ts ASC',
-    [chatState.activeChatId],
+  const rows = await db.all(
+    `SELECT * FROM (
+       SELECT * FROM messages WHERE chat_id=? AND deleted=0 AND (hidden IS NULL OR hidden=0)
+       ORDER BY (seq IS NULL) DESC, seq DESC, local_ts DESC LIMIT ?
+     ) t ORDER BY (seq IS NULL), seq ASC, local_ts ASC`,
+    [chatState.activeChatId, msgWindow],
   );
+  chatState.messages = rows;
   chatState.members = await db.all('SELECT * FROM members WHERE chat_id=?', [chatState.activeChatId]);
 }
 
 export async function openChat(chatId) {
   const id = Number(chatId);
   chatState.activeChatId = id;
-  // не показываем сообщения прежнего чата в новом контексте (иначе «прыжок» и пропажа аватарок)
-  chatState.messages = [];
-  chatState.members = [];
-  // граница непрочитанного ДО отметки о прочтении (для разделителя «Непрочитанные»)
+  msgWindow = MSG_WINDOW;
+  // граница непрочитанного до показа — из локальной БД (быстро), для разделителя «Непрочитанные»
   try {
     const row = await db.get('SELECT my_last_read_seq FROM chats WHERE id=?', [id]);
     chatState.unreadBeforeSeq = row ? (row.my_last_read_seq || 0) : 0;
   } catch { chatState.unreadBeforeSeq = 0; }
-  // сразу гасим бейдж непрочитанного в списке (оптимистично, до синка)
+  // АТОМАРНО подменяем содержимое на новый чат (без пустого мигания): читаем и присваиваем разом
+  await refreshMessages();
   const c = chatState.chats.find((x) => x.id === id);
   if (c) c.unread = 0;
-  await refreshMessages();   // локально — чат виден мгновенно
   prefetchPhotos();          // прогрев миниатюр открытого чата
   markReadNow();
   // авторитетная сверка с сервером — в ФОНЕ, не блокируем показ (перерисует, только если изменилось)
@@ -291,6 +297,8 @@ export async function loadOlder() {
   if (!chatState.activeChatId || !chatState.messages.length) return 0;
   const oldest = chatState.messages.find((m) => m.seq != null);
   if (!oldest) return 0;
+  // расширяем окно локального рендера и, при нужде, подтягиваем историю с сервера
+  msgWindow += MSG_WINDOW;
   const n = await engine?.ensureChatMessages(chatState.activeChatId, oldest.seq);
   await refreshMessages();
   return n;

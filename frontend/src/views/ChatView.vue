@@ -720,21 +720,28 @@ function photoUrls(m) {
 function captionText(m) { return contentBody(m).replace(/!\[[^\]]*\]\([^)]*\)/g, '').replace(VIDEO_RE, '').trim() }
 function isPhoto(m) { return photoUrls(m).length > 0 }
 // все фото чата по порядку — для навигации в лайтбоксе (←/→, свайп)
-const allChatPhotos = computed(() => {
+// все медиа чата (фото и видео) по порядку — для навигации в лайтбоксе
+const allChatMedia = computed(() => {
   const out = []
-  for (const m of chatState.messages) if (!m.deleted) for (const u of photoUrls(m)) out.push({ url: u, mid: m.id })
+  for (const m of chatState.messages) {
+    if (m.deleted) continue
+    if (isVideoMsg(m)) { const v = videoOf(m); if (v) out.push({ url: v.url, mid: m.id, video: true, poster: v.poster }) }
+    else for (const u of photoUrls(m)) out.push({ url: u, mid: m.id })
+  }
   return out
 })
-function photoIndex(m, k) {
+function mediaIndex(m, k) {
   let idx = 0
   for (const x of chatState.messages) {
     if (x.deleted) continue
-    if (x.id === m.id) return idx + k
-    idx += photoUrls(x).length
+    const n = isVideoMsg(x) ? (videoOf(x) ? 1 : 0) : photoUrls(x).length
+    if (x.id === m.id) return idx + (k || 0)
+    idx += n
   }
   return idx
 }
-function openPhoto(m, k) { const i = photoIndex(m, k); openLightbox(allChatPhotos.value[i]?.url, allChatPhotos.value, i) }
+function openPhoto(m, k) { const i = mediaIndex(m, k); openLightbox(allChatMedia.value[i]?.url, allChatMedia.value, i) }
+function openVideoLightbox(m) { const i = mediaIndex(m, 0); openLightbox(allChatMedia.value[i]?.url, allChatMedia.value, i) }
 // сетка-альбом под количество фото (как в мессенджерах)
 function albumCols(n) { return n <= 1 ? '' : (n <= 4 ? 'grid-cols-2' : 'grid-cols-3') }
 function albumItemClass(n, k) { return (n === 3 && k === 0) ? 'col-span-2' : '' } // 3 фото: первое во всю ширину
@@ -1406,7 +1413,7 @@ onBeforeUnmount(() => {
                 <template v-if="videoAuto(m)">
                   <video :src="videoOf(m).url" :poster="thumbUrl(videoOf(m).poster || '')" autoplay muted loop playsinline
                          class="block h-full w-full object-cover" @timeupdate="onVideoTime($event, m)"></video>
-                  <div class="absolute inset-0 cursor-pointer" @click.stop="openVideoFull($event, m)"></div>
+                  <div class="absolute inset-0 cursor-pointer" @click.stop="openVideoLightbox(m)"></div>
                   <span class="pointer-events-none absolute left-2 top-2 flex items-center gap-1 rounded-full bg-black/55 px-2.5 py-1 text-sm text-white">
                     <span class="tabular-nums">{{ videoState[m.id]?.remain || '' }}</span>
                     <AppIcon name="volume-x" :size="15" />
@@ -1414,7 +1421,7 @@ onBeforeUnmount(() => {
                 </template>
                 <template v-else>
                   <img :src="thumbUrl(videoOf(m)?.poster || '')" @error="imgFull($event, videoOf(m)?.poster)" class="block h-full w-full object-cover" />
-                  <button class="absolute inset-0 flex items-center justify-center" @click.stop="videoLoaded[m.id] = true" title="Запустить видео">
+                  <button class="absolute inset-0 flex items-center justify-center" @click.stop="videoLoaded[m.id] = true; openVideoLightbox(m)" title="Смотреть видео">
                     <span class="flex h-14 w-14 items-center justify-center rounded-full bg-black/50 text-white ring-2 ring-white/40"><AppIcon name="play" :size="26" /></span>
                   </button>
                 </template>

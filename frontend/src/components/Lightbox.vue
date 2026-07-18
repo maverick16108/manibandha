@@ -2,7 +2,7 @@
 import { onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import AppIcon from './AppIcon.vue'
 import { thumbUrl } from '../lib/format'
-import { lb, lightboxSrc, lightboxMid, lbHasList, openLightbox, closeLightbox, lbNext, lbPrev, lbGoto, lightboxAction } from '../composables/lightbox'
+import { lb, lightboxItem, lightboxSrc, lightboxMid, lbHasList, openLightbox, closeLightbox, lbNext, lbPrev, lbGoto, lightboxAction } from '../composables/lightbox'
 
 const rot = ref(0)
 const menu = ref(null)      // { x, y } контекстного меню или null
@@ -12,7 +12,7 @@ const grid = ref(false)     // показать сетку «Все фотогр
 const displaySrc = ref(null)
 const loading = ref(false)
 watch(lightboxSrc, (u) => {
-  if (!u) { displaySrc.value = null; loading.value = false; return }
+  if (!u || lightboxItem.value?.video) { displaySrc.value = null; loading.value = false; return }
   loading.value = true
   displaySrc.value = thumbUrl(u)
   const full = new Image()
@@ -87,13 +87,16 @@ onBeforeUnmount(() => { document.removeEventListener('click', onDocClick, true);
         </div>
       </div>
 
-      <!-- область фото -->
+      <!-- область медиа -->
       <div class="relative flex min-h-0 flex-1 items-center justify-center px-16 pb-4" @click="closeLightbox">
-        <img :src="displaySrc" :style="{ transform: `rotate(${rot}deg)` }"
+        <video v-if="lightboxItem?.video" :src="lightboxSrc" :poster="thumbUrl(lightboxItem.poster || '')" controls autoplay playsinline
+               controlslist="nodownload noremoteplayback" disablepictureinpicture
+               class="max-h-full max-w-full rounded-lg shadow-2xl" @click.stop @contextmenu.prevent.stop="openMenu"></video>
+        <img v-else :src="displaySrc" :style="{ transform: `rotate(${rot}deg)` }"
              class="lb-img max-h-full max-w-full select-none rounded-lg object-contain shadow-2xl transition-[filter] duration-300"
              :class="loading && 'blur-lg'"
              @click.stop @contextmenu.prevent.stop="openMenu" @mousedown="down" @mouseup="up" @touchstart.passive="down" @touchend="up" />
-        <span v-if="loading" class="pointer-events-none absolute h-11 w-11 animate-spin rounded-full border-[3px] border-white/30 border-t-white"></span>
+        <span v-if="loading && !lightboxItem?.video" class="pointer-events-none absolute h-11 w-11 animate-spin rounded-full border-[3px] border-white/30 border-t-white"></span>
 
         <button v-if="lbHasList && lb.index > 0" class="absolute left-3 top-1/2 -translate-y-1/2 rounded-full bg-white/10 p-2.5 text-white transition hover:bg-white/20" title="Назад (←)" @click.stop="lbPrev"><AppIcon name="chevron" :size="28" class="rotate-90" /></button>
         <button v-if="lbHasList && lb.index < lb.items.length - 1" class="absolute right-3 top-1/2 -translate-y-1/2 rounded-full bg-white/10 p-2.5 text-white transition hover:bg-white/20" title="Вперёд (→)" @click.stop="lbNext"><AppIcon name="chevron" :size="28" class="-rotate-90" /></button>
@@ -105,7 +108,7 @@ onBeforeUnmount(() => { document.removeEventListener('click', onDocClick, true);
         <div class="fixed z-[81] w-60 overflow-hidden rounded-xl bg-ink-900 py-1 text-white shadow-2xl ring-1 ring-white/10"
              :style="{ left: Math.min(menu.x, (typeof window !== 'undefined' ? window.innerWidth : 9999) - 250) + 'px', top: menu.y + 'px' }" @click.stop>
           <button v-if="lightboxMid" class="flex w-full items-center gap-3 px-4 py-2.5 text-left text-[15px] hover:bg-white/10" @click="run('goto')"><AppIcon name="eye" :size="19" /> Перейти к сообщению</button>
-          <button class="flex w-full items-center gap-3 px-4 py-2.5 text-left text-[15px] hover:bg-white/10" @click="menu = null; copyImage()"><AppIcon name="copy" :size="19" /> Копировать</button>
+          <button v-if="!lightboxItem?.video" class="flex w-full items-center gap-3 px-4 py-2.5 text-left text-[15px] hover:bg-white/10" @click="menu = null; copyImage()"><AppIcon name="copy" :size="19" /> Копировать</button>
           <button v-if="lightboxMid" class="flex w-full items-center gap-3 px-4 py-2.5 text-left text-[15px] hover:bg-white/10" @click="run('forward')"><AppIcon name="reply" :size="19" class="-scale-x-100" /> Переслать</button>
           <button v-if="lightboxMid" class="flex w-full items-center gap-3 px-4 py-2.5 text-left text-[15px] text-red-400 hover:bg-white/10" @click="run('delete')"><AppIcon name="trash" :size="19" /> Удалить</button>
           <button class="flex w-full items-center gap-3 px-4 py-2.5 text-left text-[15px] hover:bg-white/10" @click="menu = null; download()"><AppIcon name="download" :size="19" /> Сохранить как…</button>
@@ -120,8 +123,9 @@ onBeforeUnmount(() => { document.removeEventListener('click', onDocClick, true);
           <button class="rounded-full bg-white/10 p-2 hover:bg-white/20" @click="grid = false"><AppIcon name="close" :size="22" /></button>
         </div>
         <div class="grid grid-cols-3 gap-1 sm:grid-cols-4 md:grid-cols-6">
-          <button v-for="(it, i) in lb.items" :key="i" class="aspect-square overflow-hidden rounded" :class="i === lb.index && 'ring-2 ring-saffron-400'" @click="pickFromGrid(i)">
-            <img :src="thumbUrl(it.url)" class="h-full w-full object-cover" />
+          <button v-for="(it, i) in lb.items" :key="i" class="relative aspect-square overflow-hidden rounded" :class="i === lb.index && 'ring-2 ring-saffron-400'" @click="pickFromGrid(i)">
+            <img :src="thumbUrl(it.poster || it.url)" class="h-full w-full object-cover" />
+            <span v-if="it.video" class="absolute inset-0 flex items-center justify-center"><AppIcon name="play" :size="20" class="text-white drop-shadow" /></span>
           </button>
         </div>
       </div>

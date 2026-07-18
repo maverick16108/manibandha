@@ -3,8 +3,9 @@
 import { reactive, computed } from 'vue'
 
 export const lb = reactive({ items: [], index: -1 })
-export const lightboxSrc = computed(() => (lb.index >= 0 && lb.index < lb.items.length ? lb.items[lb.index].url : null))
-export const lightboxMid = computed(() => (lb.index >= 0 && lb.index < lb.items.length ? (lb.items[lb.index].mid ?? null) : null))
+export const lightboxItem = computed(() => (lb.index >= 0 && lb.index < lb.items.length ? lb.items[lb.index] : null))
+export const lightboxSrc = computed(() => lightboxItem.value?.url ?? null)
+export const lightboxMid = computed(() => lightboxItem.value?.mid ?? null)
 export const lbHasList = computed(() => lb.items.length > 1)
 
 // действия меню регистрирует ChatView (у него есть переход/пересылка/удаление)

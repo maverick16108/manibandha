@@ -468,8 +468,9 @@ type Chat struct {
 	Title     *string   `gorm:"column:title" json:"title"`
 	PhotoURL  *string   `gorm:"column:photo_url" json:"photo_url"`
 	CreatedBy *int      `gorm:"column:created_by" json:"created_by"`
-	CreatedAt time.Time `gorm:"column:created_at" json:"created_at"`
-	UpdatedAt time.Time `gorm:"column:updated_at" json:"updated_at"`
+	CreatedAt       time.Time `gorm:"column:created_at" json:"created_at"`
+	UpdatedAt       time.Time `gorm:"column:updated_at" json:"updated_at"`
+	PinnedMessageID *int64    `gorm:"column:pinned_message_id" json:"pinned_message_id"`
 
 	Members []ChatMember `gorm:"foreignKey:ChatID" json:"-"`
 }

@@ -190,7 +190,43 @@ func (s *Server) chatOut(chat *models.Chat, userID int) map[string]any {
 		"id": chat.ID, "type": chat.Type, "title": chat.Title, "photo_url": chat.PhotoURL,
 		"created_by": chat.CreatedBy, "created_at": tsUTC(chat.CreatedAt), "updated_at": tsUTC(chat.UpdatedAt),
 		"members": membersOut(chat), "last_message": lastOut, "unread": unread, "pinned": pinned, "pin_order": pinOrder,
+		"pinned_message_id": chat.PinnedMessageID,
 	}
+}
+
+// POST /api/chats/{id}/pin-message {message_id} — закрепить сообщение (одно на чат)
+func (s *Server) pinMessage(w http.ResponseWriter, r *http.Request) {
+	id, _ := strconv.Atoi(chi.URLParam(r, "id"))
+	u := currentUser(r)
+	if _, code := s.requireMembership(u.ID, id); code != http.StatusOK {
+		httpErr(w, code, membershipMsg(code))
+		return
+	}
+	var p struct {
+		MessageID int64 `json:"message_id"`
+	}
+	_ = decodeJSON(r, &p)
+	var msg models.ChatMessage
+	if err := s.DB.First(&msg, p.MessageID).Error; err != nil || msg.ChatID != id {
+		httpErr(w, http.StatusNotFound, "Сообщение не найдено")
+		return
+	}
+	s.DB.Model(&models.Chat{}).Where("id = ?", id).Update("pinned_message_id", p.MessageID)
+	s.broadcastChat(id, map[string]any{"type": "chat", "chat_id": id})
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// POST /api/chats/{id}/unpin-message
+func (s *Server) unpinMessage(w http.ResponseWriter, r *http.Request) {
+	id, _ := strconv.Atoi(chi.URLParam(r, "id"))
+	u := currentUser(r)
+	if _, code := s.requireMembership(u.ID, id); code != http.StatusOK {
+		httpErr(w, code, membershipMsg(code))
+		return
+	}
+	s.DB.Model(&models.Chat{}).Where("id = ?", id).Update("pinned_message_id", nil)
+	s.broadcastChat(id, map[string]any{"type": "chat", "chat_id": id})
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func membersOrdered(db *gorm.DB) *gorm.DB { return db.Order("id") }

@@ -16,6 +16,7 @@ import {
   chatState, initChat, openChat, closeChat, sendMessage, sendTyping,
   editMessage, deleteMessage, retryFailed, loadOlder, loadContacts, startDirect, startGroup,
   reactMessage, REACTION_EMOJIS, updateChat, pinChat, leaveChat, forwardMessages, loadAroundSeq, markActiveRead, imageAspect, expandWindow, reorderPins,
+  pinMessageInChat, unpinMessageInChat,
 } from '../chat/store'
 
 usePageTitle('Чат')
@@ -393,6 +394,20 @@ async function doForward(chatId) {
   else router.replace({ name: 'chat', params: { id: chatId } }) // открыть чат, куда переслали
 }
 function ctxForward() { const m = ctx.m; closeCtx(); if (m) openForward([fwdWrap(m)]) }
+function ctxPin() {
+  const m = ctx.m; closeCtx()
+  if (!m?.id || !activeChat.value) return
+  if (activeChat.value.pinned_message_id === m.id) unpinMessageInChat(activeId.value)
+  else pinMessageInChat(activeId.value, m.id)
+}
+// закреплённое сообщение (шапка-плашка)
+const pinnedMsg = computed(() => {
+  const pid = activeChat.value?.pinned_message_id
+  if (!pid) return null
+  return chatState.messages.find((m) => m.id === pid) || { id: pid }
+})
+const pinnedText = computed(() => { const p = pinnedMsg.value; return p?.body ? snippet(p.body) : 'Сообщение' })
+const pinnedPhoto = computed(() => { const p = pinnedMsg.value; return p?.body ? firstPhotoUrl(p.body) : null })
 function ctxSelect() { const m = ctx.m; closeCtx(); enterSelect(m) }
 function forwardSelected() { openForward(selectedMsgs.value.map(fwdWrap)) }
 
@@ -1163,8 +1178,7 @@ async function jumpToMessage(m) {
   await flashScrollTo(m.id)
 }
 // переход к процитированному сообщению по клику на блок цитаты
-async function jumpToReply(m) {
-  const id = m?.reply_to_id
+async function jumpToId(id) {
   if (!id) return
   let last = -1
   while (!chatState.messages.some((x) => x.id === id)) {
@@ -1174,6 +1188,7 @@ async function jumpToReply(m) {
   }
   await flashScrollTo(id)
 }
+function jumpToReply(m) { return jumpToId(m?.reply_to_id) }
 async function flashScrollTo(id) {
   await nextTick()
   const el = document.getElementById(`msg-${id}`)
@@ -1416,6 +1431,17 @@ onBeforeUnmount(() => {
             </div>
           </div>
         </transition>
+
+        <!-- Плашка закреплённого сообщения -->
+        <div v-if="activeChat && pinnedMsg" class="flex cursor-pointer items-center gap-2 border-b border-parchment-200 bg-white/70 px-4 py-2 hover:bg-parchment-50" @click="jumpToId(pinnedMsg.id)">
+          <div class="w-0.5 shrink-0 self-stretch rounded bg-saffron-400"></div>
+          <img v-if="pinnedPhoto" :src="thumbUrl(pinnedPhoto)" class="h-8 w-8 shrink-0 rounded object-cover" />
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-1 text-xs font-semibold text-saffron-700"><AppIcon name="pin-chat" :size="12" /> Закреплённое сообщение</div>
+            <div class="truncate text-sm text-ink-700/70">{{ pinnedText }}</div>
+          </div>
+          <button class="rounded-lg p-1.5 text-ink-700/50 hover:bg-parchment-100" title="Открепить" @click.stop="unpinMessageInChat(activeId)"><AppIcon name="close" :size="16" /></button>
+        </div>
 
         <AudioBar />
 
@@ -1736,6 +1762,7 @@ onBeforeUnmount(() => {
         <button v-if="canCopy(ctx.m) || ctx.selText" class="flex w-full items-center gap-3 px-3.5 py-2.5 text-left text-[15px] text-ink-700 hover:bg-parchment-100" @click="ctxCopy"><AppIcon name="copy" :size="19" /> Копировать</button>
         <button v-if="canEdit(ctx.m)" class="flex w-full items-center gap-3 px-3.5 py-2.5 text-left text-[15px] text-ink-700 hover:bg-parchment-100" @click="ctxEdit"><AppIcon name="edit" :size="19" /> Изменить</button>
         <button v-if="ctx.m && !ctx.m.deleted" class="flex w-full items-center gap-3 px-3.5 py-2.5 text-left text-[15px] text-ink-700 hover:bg-parchment-100" @click="ctxForward"><AppIcon name="reply" :size="19" class="-scale-x-100" /> Переслать</button>
+        <button v-if="ctx.m && ctx.m.id && !ctx.m.deleted" class="flex w-full items-center gap-3 px-3.5 py-2.5 text-left text-[15px] text-ink-700 hover:bg-parchment-100" @click="ctxPin"><AppIcon name="pin-chat" :size="19" /> {{ activeChat?.pinned_message_id === ctx.m.id ? 'Открепить' : 'Закрепить' }}</button>
         <button v-if="canDelete(ctx.m)" class="flex w-full items-center gap-3 border-t border-parchment-100 px-3.5 py-2.5 text-left text-[15px] text-red-600 hover:bg-red-50" @click="ctxDelete"><AppIcon name="trash" :size="19" /> {{ delLabel(ctx.m) }}</button>
         <button v-if="ctx.m && !ctx.m.deleted" class="flex w-full items-center gap-3 border-t border-parchment-100 px-3.5 py-2.5 text-left text-[15px] text-ink-700 hover:bg-parchment-100" @click="ctxSelect"><AppIcon name="check" :size="19" /> Выделить</button>
       </div>

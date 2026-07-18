@@ -184,6 +184,7 @@ async function refreshChats() {
       members,
       unread: c.unread || 0,
       pinned: !!c.pinned,
+      pinned_message_id: c.pinned_message_id || null,
       updated_at: c.updated_at,
       last,
     });
@@ -230,6 +231,18 @@ export async function openChat(chatId) {
 
 export async function pinChat(chatId, pinned) {
   await engine?.pinChat(chatId, pinned);
+}
+
+// закрепить/открепить сообщение в чате (оптимистично локально + на сервер)
+export async function pinMessageInChat(chatId, messageId) {
+  if (!db) return;
+  await db.run('UPDATE chats SET pinned_message_id=? WHERE id=?', [messageId, chatId], ['chats']);
+  try { await chatApi.pinMessage(chatId, messageId); } catch { /* сверится позже */ }
+}
+export async function unpinMessageInChat(chatId) {
+  if (!db) return;
+  await db.run('UPDATE chats SET pinned_message_id=NULL WHERE id=?', [chatId], ['chats']);
+  try { await chatApi.unpinMessage(chatId); } catch { /* сверится позже */ }
 }
 
 // новый порядок закреплённых (перетаскивание): оптимистично локально + на сервер

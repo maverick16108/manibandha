@@ -100,17 +100,15 @@ function onDocKey(e) {
 onMounted(() => document.addEventListener('keydown', onDocKey))
 onBeforeUnmount(() => document.removeEventListener('keydown', onDocKey))
 
-onMounted(async () => {
+onMounted(() => {
   // seed filters from URL query (deep links from the dashboard)
   for (const k of Object.keys(filters)) if (route.query[k] != null) filters[k] = String(route.query[k])
-  const [m, r, c] = await Promise.all([
+  // данные фильтров (в т.ч. тяжёлый /cities ~107КБ) — в ФОНЕ, чтобы не задерживать таблицу
+  Promise.all([
     client.get('/disciples', { params: { is_mentor: true, limit: 500 } }), client.get('/regions'), client.get('/cities'),
-  ])
-  mentors.value = m.data.items
-  regions.value = r.data
-  cities.value = c.data
-  await load()
-  seeding = false  // дальше правки фильтров пользователем идут через дебаунс
+  ]).then(([m, r, c]) => { mentors.value = m.data.items; regions.value = r.data; cities.value = c.data }).catch(() => {})
+  // таблицу грузим сразу
+  load().finally(() => { seeding = false })
 })
 </script>
 

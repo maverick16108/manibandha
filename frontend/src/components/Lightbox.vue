@@ -81,7 +81,7 @@ onBeforeUnmount(() => { document.removeEventListener('click', onDocClick, true);
         <div class="text-sm tabular-nums text-white/90">{{ lbHasList ? `${lb.index + 1} из ${lb.items.length}` : '' }}</div>
         <div class="flex items-center gap-2">
           <button v-if="lbHasList" class="rounded-full bg-white/10 p-2 text-white transition hover:bg-white/20" title="Все фотографии" @click="grid = true"><AppIcon name="grid" :size="22" /></button>
-          <button class="rounded-full bg-white/10 p-2 text-white transition hover:bg-white/20" title="Повернуть" @click="rotate"><AppIcon name="rotate" :size="22" /></button>
+          <button v-if="!lightboxItem?.video" class="rounded-full bg-white/10 p-2 text-white transition hover:bg-white/20" title="Повернуть" @click="rotate"><AppIcon name="rotate" :size="22" /></button>
           <button class="rounded-full bg-white/10 p-2 text-white transition hover:bg-white/20" title="Скачать" @click="download"><AppIcon name="download" :size="22" /></button>
           <button class="rounded-full bg-white/10 p-2 text-white transition hover:bg-white/20" title="Закрыть (Esc)" @click="closeLightbox"><AppIcon name="close" :size="24" /></button>
         </div>

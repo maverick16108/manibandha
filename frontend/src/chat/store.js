@@ -304,6 +304,13 @@ export async function loadOlder() {
   return n;
 }
 
+// расширить окно локального рендера (для перехода к процитированному сообщению вверху истории)
+export async function expandWindow() {
+  msgWindow += MSG_WINDOW;
+  await refreshMessages();
+  return chatState.messages.length;
+}
+
 // подгрузить окно сообщений вокруг seq (для перехода к результату поиска)
 export async function loadAroundSeq(seq) {
   if (!chatState.activeChatId || !seq) return

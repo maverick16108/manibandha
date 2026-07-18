@@ -15,7 +15,7 @@ import { usePageTitle } from '../composables/pageTitle'
 import {
   chatState, initChat, openChat, closeChat, sendMessage, sendTyping,
   editMessage, deleteMessage, retryFailed, loadOlder, loadContacts, startDirect, startGroup,
-  reactMessage, REACTION_EMOJIS, updateChat, pinChat, leaveChat, forwardMessages, loadAroundSeq, markActiveRead, imageAspect,
+  reactMessage, REACTION_EMOJIS, updateChat, pinChat, leaveChat, forwardMessages, loadAroundSeq, markActiveRead, imageAspect, expandWindow,
 } from '../chat/store'
 
 usePageTitle('Чат')
@@ -983,8 +983,23 @@ async function jumpToMessage(m) {
   if (!chatState.messages.some((x) => x.id === m.id)) {
     try { await loadAroundSeq(m.seq) } catch { /* ignore */ }
   }
+  await flashScrollTo(m.id)
+}
+// переход к процитированному сообщению по клику на блок цитаты
+async function jumpToReply(m) {
+  const id = m?.reply_to_id
+  if (!id) return
+  let last = -1
+  while (!chatState.messages.some((x) => x.id === id)) {
+    const n = await expandWindow()   // расширяем окно, пока не покажется цель или не кончится история
+    if (n === last) break
+    last = n
+  }
+  await flashScrollTo(id)
+}
+async function flashScrollTo(id) {
   await nextTick()
-  const el = document.getElementById(`msg-${m.id}`)
+  const el = document.getElementById(`msg-${id}`)
   if (el) {
     el.scrollIntoView({ block: 'center', behavior: 'smooth' })
     el.classList.add('msg-flash'); setTimeout(() => el.classList.remove('msg-flash'), 1600)
@@ -1242,7 +1257,7 @@ onBeforeUnmount(() => {
                 <span v-else class="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-saffron-500 text-[8px] font-semibold text-white">{{ initials(fwdName(m)) }}</span>
                 <span class="truncate">{{ fwdName(m) }}</span>
               </div>
-              <div v-if="m.reply_preview" class="mx-3 mt-2 flex items-center gap-2 rounded-r-md border-l-2 border-saffron-400 bg-black/5 py-1 pl-2 pr-2 text-xs">
+              <div v-if="m.reply_preview" @click.stop="jumpToReply(m)" class="mx-3 mt-2 flex cursor-pointer items-center gap-2 rounded-r-md border-l-2 border-saffron-400 bg-black/5 py-1 pl-2 pr-2 text-xs transition hover:bg-black/10">
                 <img v-if="replyThumb(m)" :src="replyThumb(m)" class="h-8 w-8 shrink-0 rounded object-cover" />
                 <div class="min-w-0 flex-1">
                   <div v-if="replyAuthorName(m)" class="font-semibold text-saffron-700">{{ replyAuthorName(m) }}</div>
@@ -1297,7 +1312,7 @@ onBeforeUnmount(() => {
                 <span v-else class="flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[8px] font-semibold text-white" :class="isMine(m) ? 'bg-white/30' : 'bg-saffron-500'">{{ initials(fwdName(m)) }}</span>
                 <span class="truncate">{{ fwdName(m) }}</span>
               </div>
-              <div v-if="m.reply_preview" class="mb-1 flex items-center gap-2 rounded-r-md border-l-2 py-1 pl-2 pr-2 text-xs" :class="isMine(m) ? 'border-white/70 bg-white/10' : 'border-saffron-400 bg-saffron-500/5'">
+              <div v-if="m.reply_preview" @click.stop="jumpToReply(m)" class="mb-1 flex cursor-pointer items-center gap-2 rounded-r-md border-l-2 py-1 pl-2 pr-2 text-xs transition" :class="isMine(m) ? 'border-white/70 bg-white/10 hover:bg-white/20' : 'border-saffron-400 bg-saffron-500/5 hover:bg-saffron-500/10'">
                 <img v-if="replyThumb(m)" :src="replyThumb(m)" class="h-8 w-8 shrink-0 rounded object-cover" />
                 <div class="min-w-0 flex-1">
                   <div v-if="replyAuthorName(m)" class="font-semibold" :class="isMine(m) ? 'text-white' : 'text-saffron-700'">{{ replyAuthorName(m) }}</div>

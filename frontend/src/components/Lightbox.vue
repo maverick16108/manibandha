@@ -1,9 +1,22 @@
 <script setup>
 import { onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import AppIcon from './AppIcon.vue'
+import { thumbUrl } from '../lib/format'
 import { lb, lightboxSrc, lbHasList, openLightbox, closeLightbox, lbNext, lbPrev } from '../composables/lightbox'
 
 const rot = ref(0) // угол поворота (кратно 90), анимируется плавно
+// blur-up: миниатюра (из кэша, мгновенно) как размытый плейсхолдер, пока грузится полное фото
+const displaySrc = ref(null)
+const loading = ref(false)
+watch(lightboxSrc, (u) => {
+  if (!u) { displaySrc.value = null; loading.value = false; return }
+  loading.value = true
+  displaySrc.value = thumbUrl(u) // размытая миниатюра сразу — размеры/место не «прыгают»
+  const full = new Image()
+  full.onload = () => { if (lightboxSrc.value === u) { displaySrc.value = u; loading.value = false } }
+  full.onerror = () => { if (lightboxSrc.value === u) { loading.value = false } }
+  full.src = u
+}, { immediate: true })
 
 // клик по любой картинке внутри текста (markdown) — открыть на весь экран
 function onDocClick(e) {
@@ -65,9 +78,12 @@ onBeforeUnmount(() => {
 
       <!-- область фото -->
       <div class="relative flex min-h-0 flex-1 items-center justify-center px-16 pb-4" @click="closeLightbox">
-        <img :src="lightboxSrc" :style="{ transform: `rotate(${rot}deg)` }"
-             class="lb-img max-h-full max-w-full select-none rounded-lg object-contain shadow-2xl"
+        <img :src="displaySrc" :style="{ transform: `rotate(${rot}deg)` }"
+             class="lb-img max-h-full max-w-full select-none rounded-lg object-contain shadow-2xl transition-[filter] duration-300"
+             :class="loading && 'blur-lg'"
              @click.stop @mousedown="down" @mouseup="up" @touchstart.passive="down" @touchend="up" />
+        <!-- спиннер, пока грузится полное фото -->
+        <span v-if="loading" class="pointer-events-none absolute h-11 w-11 animate-spin rounded-full border-[3px] border-white/30 border-t-white"></span>
 
         <button v-if="lbHasList && lb.index > 0" class="absolute left-3 top-1/2 -translate-y-1/2 rounded-full bg-white/10 p-2.5 text-white transition hover:bg-white/20" title="Назад (←)" @click.stop="lbPrev">
           <AppIcon name="chevron" :size="28" class="rotate-90" />

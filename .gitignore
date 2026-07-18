@@ -1,9 +1,6 @@
-# Python
-__pycache__/
-*.py[cod]
-backend/.venv/
-backend/.env
-backend/uploads/
+# Go backend runtime (env + user uploads live in the app root on prod, not in git)
+.env
+/uploads/
 *.sqlite
 
 # Node / frontend

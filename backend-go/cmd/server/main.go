@@ -6,12 +6,18 @@ import (
 
 	"manibandha/internal/config"
 	"manibandha/internal/database"
+	"manibandha/internal/migrate"
 	"manibandha/internal/security"
 	"manibandha/internal/web"
 )
 
 func main() {
 	cfg := config.Load()
+
+	// применяем миграции схемы до старта (заменяет alembic upgrade head)
+	if err := migrate.Run(cfg.DatabaseURL); err != nil {
+		log.Fatalf("migrate: %v", err)
+	}
 
 	db, err := database.Connect(cfg.DatabaseURL)
 	if err != nil {

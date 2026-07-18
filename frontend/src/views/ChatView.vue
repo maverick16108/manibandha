@@ -601,13 +601,34 @@ function albumCols(n) { return n <= 1 ? '' : (n <= 4 ? 'grid-cols-2' : 'grid-col
 function albumItemClass(n, k) { return (n === 3 && k === 0) ? 'col-span-2' : '' } // 3 фото: первое во всю ширину
 
 // ── превью ссылок (OG-карточки) ───────────────────────────────────────────
-// url → объект превью | false (нет/в процессе). Ключ `url in linkPreviews` — «уже запрашивали».
-const linkPreviews = reactive({})
+// url → объект превью | false (нет/в процессе). Персистим в localStorage, чтобы карточка
+// показывалась мгновенно (без дёрганья ленты), и префетчим заранее по списку чатов.
+const LP_KEY = 'chatLinkPreviews'
+function loadLinkPreviews() { try { return JSON.parse(localStorage.getItem(LP_KEY) || '{}') || {} } catch { return {} } }
+const linkPreviews = reactive(loadLinkPreviews())
+let lpSaveTimer = null
+function saveLinkPreviews() {
+  if (lpSaveTimer) return
+  lpSaveTimer = setTimeout(() => {
+    lpSaveTimer = null
+    try {
+      const out = {}
+      for (const [k, v] of Object.entries(linkPreviews)) if (v && typeof v === 'object') out[k] = v
+      const keys = Object.keys(out)
+      if (keys.length > 300) for (const k of keys.slice(0, keys.length - 300)) delete out[k]
+      localStorage.setItem(LP_KEY, JSON.stringify(out))
+    } catch { /* ignore */ }
+  }, 500)
+}
 const URL_IN_TEXT = /https?:\/\/[^\s<]+/i
+function urlInBody(b) {
+  if (!b || /!\[|@\[audio\]|@\[file\]/.test(b)) return null
+  const mm = b.match(URL_IN_TEXT)
+  return mm ? mm[0].replace(/[)\].,!?:;»"']+$/, '') : null
+}
 function firstLink(m) {
   if (!m || m.deleted || isVoice(m) || isPhoto(m) || /@\[file\]/.test(m.body || '')) return null
-  const mm = contentBody(m).match(URL_IN_TEXT)
-  return mm ? mm[0].replace(/[)\].,!?:;»"']+$/, '') : null
+  return urlInBody(contentBody(m))
 }
 function linkCard(m) {
   const u = firstLink(m)
@@ -619,11 +640,17 @@ async function fetchPreview(u) {
   linkPreviews[u] = false // «в процессе» — не дёргаем повторно
   try {
     const { data } = await client.get('/link-preview', { params: { url: u } })
-    linkPreviews[u] = (data && (data.title || data.image || data.description)) ? data : false
+    const ok = data && (data.title || data.image || data.description)
+    linkPreviews[u] = ok ? data : false
+    if (ok) saveLinkPreviews()
   } catch { linkPreviews[u] = false }
 }
 watch(() => chatState.messages, (msgs) => {
   for (const m of msgs || []) { const u = firstLink(m); if (u && !(u in linkPreviews)) fetchPreview(u) }
+}, { immediate: true })
+// префетч заранее: превью последних сообщений всех чатов — к моменту открытия уже готово
+watch(() => chatState.chats, (chats) => {
+  for (const c of chats || []) { const u = urlInBody(c.last?.body || ''); if (u && !(u in linkPreviews)) fetchPreview(u) }
 }, { immediate: true })
 // drag&drop — если все картинки: две зоны (файлом/картинкой); иначе одна зона «файлом»
 const dragOver = ref(false)

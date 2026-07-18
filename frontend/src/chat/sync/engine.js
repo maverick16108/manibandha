@@ -212,9 +212,17 @@ export class ChatEngine {
   async flushOutbox() {
     if (this._flushing) return;
     this._flushing = true;
+    // дренируем ПОКА в очереди есть новые строки: сообщение, добавленное во время
+    // отправки, иначе «залипло» бы pending до следующего триггера (быстрый ввод).
+    // attempted не даёт повторно крутить одну и ту же неотправленную (упавшую) строку.
+    const attempted = new Set();
     try {
-      const rows = await this.db.all('SELECT * FROM outbox ORDER BY created_at ASC, rowid ASC');
-      for (const row of rows) await this._flushOne(row);
+      for (;;) {
+        const rows = await this.db.all('SELECT * FROM outbox ORDER BY created_at ASC, rowid ASC');
+        const fresh = rows.filter((r) => !attempted.has(r.client_uuid));
+        if (!fresh.length) break;
+        for (const row of fresh) { attempted.add(row.client_uuid); await this._flushOne(row); }
+      }
     } finally {
       this._flushing = false;
     }

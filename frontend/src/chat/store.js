@@ -186,6 +186,9 @@ async function markReadNow() {
   if (maxSeq) await engine?.markRead(chatState.activeChatId, maxSeq);
 }
 
+// отметить активный чат прочитанным (для авто-чтения живых сообщений при просмотре)
+export async function markActiveRead() { await markReadNow(); }
+
 export async function sendMessage(body, replyToId = null, replyQuote = null) {
   if (!chatState.activeChatId) return;
   await engine?.send(chatState.activeChatId, body, replyToId, replyQuote);

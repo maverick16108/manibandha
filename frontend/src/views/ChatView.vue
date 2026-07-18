@@ -15,7 +15,7 @@ import { usePageTitle } from '../composables/pageTitle'
 import {
   chatState, initChat, openChat, closeChat, sendMessage, sendTyping,
   editMessage, deleteMessage, retryFailed, loadOlder, loadContacts, startDirect, startGroup,
-  reactMessage, REACTION_EMOJIS, updateChat, pinChat, leaveChat, forwardMessages, loadAroundSeq,
+  reactMessage, REACTION_EMOJIS, updateChat, pinChat, leaveChat, forwardMessages, loadAroundSeq, markActiveRead,
 } from '../chat/store'
 
 usePageTitle('Чат')
@@ -79,8 +79,11 @@ watch(activeId, async (id, oldId) => {
   if (oldId && !editingMsg.value) saveDraft(oldId, body.value) // сохранить черновик прежнего чата
   replyTo.value = null; editingMsg.value = null; closeCtx()
   body.value = id ? loadDraft(id) : ''
-  if (id) { stickBottom.value = true; await openChat(id); scrollToBottom(); nextTick(() => inputEl.value?.focus()) }
-  else closeChat()
+  openSettled.value = false
+  if (id) {
+    stickBottom.value = true; await openChat(id); scrollToBottom(); nextTick(() => inputEl.value?.focus())
+    setTimeout(() => { openSettled.value = true }, 500) // после открытия — авто-читаем живые входящие
+  } else closeChat()
   nextTick(autoGrow)
 }, { immediate: false })
 
@@ -99,7 +102,19 @@ function saveDraft(id, text) { try { if ((text || '').trim()) localStorage.setIt
 let draftTimer = null
 function saveDraftDebounced(id, text) { if (draftTimer) clearTimeout(draftTimer); draftTimer = setTimeout(() => saveDraft(id, text), 300) }
 
-watch(() => chatState.messages.length, () => nextTick(scrollToBottom))
+const openSettled = ref(false) // после открытия чата — можно авто-читать живые входящие
+watch(() => chatState.messages.length, (n, old) => {
+  nextTick(scrollToBottom)
+  // живое входящее при активном просмотре (в фокусе, у нижнего края) → сразу читаем:
+  // без разделителя «Непрочитанные» и без роста бейджа в списке
+  if (openSettled.value && n > (old || 0) && stickBottom.value && activeId.value && document.hasFocus()) {
+    const last = chatState.messages[chatState.messages.length - 1]
+    if (last && last.author_id !== chatState.meId) {
+      if (last.seq && last.seq > (chatState.unreadBeforeSeq || 0)) chatState.unreadBeforeSeq = last.seq
+      markActiveRead()
+    }
+  }
+})
 function scrollToBottom() { nextTick(() => { const el = scroller.value; if (el) el.scrollTop = el.scrollHeight }) }
 
 // ── список чатов ─────────────────────────────────────────────────────────
@@ -629,17 +644,20 @@ function cancelRec() { recCanceled = true; stopRec() }
 
 // ── участники / статусы ───────────────────────────────────────────────────
 const isMine = (m) => m.author_id === chatState.meId
-const peerReadSeq = computed(() => {
-  const ch = activeChat.value
-  if (!ch || ch.type !== 'direct') return 0
-  const peer = (chatState.members || []).find((x) => x.user_id !== chatState.meId)
-  return peer ? peer.last_read_seq || 0 : 0
+// «прочитано» = хотя бы ОДИН другой участник дочитал до этого seq (и для direct, и для группы)
+const othersMaxReadSeq = computed(() => {
+  let max = 0
+  for (const mem of chatState.members || []) {
+    if (mem.user_id === chatState.meId) continue
+    if ((mem.last_read_seq || 0) > max) max = mem.last_read_seq || 0
+  }
+  return max
 })
 function statusOf(m) {
   if (!isMine(m)) return null
   if (m.status === 'pending') return 'pending'
   if (m.status === 'failed') return 'failed'
-  if (activeChat.value?.type === 'direct' && m.seq && peerReadSeq.value >= m.seq) return 'read'
+  if (m.seq && othersMaxReadSeq.value >= m.seq) return 'read'
   return 'sent'
 }
 const typingLabel = computed(() => { const t = chatState.typing[activeId.value]; return t ? `${t.name} печатает…` : '' })
@@ -892,7 +910,7 @@ onMounted(async () => {
   }
   if (!auth.isPending && auth.user) {
     await initChat({ meId: auth.user.id, getToken: () => auth.token })
-    if (activeId.value) { stickBottom.value = true; await openChat(activeId.value); scrollToBottom() }
+    if (activeId.value) { stickBottom.value = true; await openChat(activeId.value); scrollToBottom(); setTimeout(() => { openSettled.value = true }, 500) }
     else maybeAutoOpen()
   }
 })
@@ -1072,7 +1090,7 @@ onBeforeUnmount(() => {
                 </div>
                 <div class="flex shrink-0 items-center gap-1 pb-0.5 text-[11px]" :class="isMine(m) ? 'text-white/70' : 'text-ink-700/40'">
                   <span>{{ fmtTime(m.created_at) }}</span>
-                  <template v-if="statusOf(m)"><AppIcon v-if="statusOf(m) === 'pending'" name="clock" :size="12" /><AppIcon v-else-if="statusOf(m) === 'read'" name="check" :size="12" class="-mr-2" /><AppIcon v-if="statusOf(m) === 'read' || statusOf(m) === 'sent'" name="check" :size="12" /></template>
+                  <template v-if="statusOf(m)"><AppIcon v-if="statusOf(m) === 'pending'" name="clock" :size="15" /><AppIcon v-else-if="statusOf(m) === 'read'" name="check" :size="15" class="-mr-2" /><AppIcon v-if="statusOf(m) === 'read' || statusOf(m) === 'sent'" name="check" :size="15" /></template>
                 </div>
               </div>
               <!-- без подписи: реакции слева + время справа, одной линией оверлеем на фото -->
@@ -1084,7 +1102,7 @@ onBeforeUnmount(() => {
                 </div>
                 <div class="pointer-events-auto ml-auto flex shrink-0 items-center gap-1 rounded-full bg-black/45 px-1.5 py-0.5 text-[11px] text-white">
                   <span>{{ fmtTime(m.created_at) }}</span>
-                  <template v-if="statusOf(m)"><AppIcon v-if="statusOf(m) === 'pending'" name="clock" :size="12" /><AppIcon v-else-if="statusOf(m) === 'read'" name="check" :size="12" class="-mr-2" /><AppIcon v-if="statusOf(m) === 'read' || statusOf(m) === 'sent'" name="check" :size="12" /></template>
+                  <template v-if="statusOf(m)"><AppIcon v-if="statusOf(m) === 'pending'" name="clock" :size="15" /><AppIcon v-else-if="statusOf(m) === 'read'" name="check" :size="15" class="-mr-2" /><AppIcon v-if="statusOf(m) === 'read' || statusOf(m) === 'sent'" name="check" :size="15" /></template>
                 </div>
               </div>
             </div>
@@ -1137,10 +1155,10 @@ onBeforeUnmount(() => {
                   <span v-if="m.edit_count">изм. · </span>
                   <span>{{ fmtTime(m.created_at) }}</span>
                   <template v-if="statusOf(m)">
-                    <AppIcon v-if="statusOf(m) === 'pending'" name="clock" :size="12" />
-                    <button v-else-if="statusOf(m) === 'failed'" class="text-red-200" title="Не отправлено — повторить" @click.stop="retryFailed"><AppIcon name="close" :size="12" /></button>
-                    <AppIcon v-else-if="statusOf(m) === 'read'" name="check" :size="12" class="-mr-2" />
-                    <AppIcon v-if="statusOf(m) === 'read' || statusOf(m) === 'sent'" name="check" :size="12" />
+                    <AppIcon v-if="statusOf(m) === 'pending'" name="clock" :size="15" />
+                    <button v-else-if="statusOf(m) === 'failed'" class="text-red-200" title="Не отправлено — повторить" @click.stop="retryFailed"><AppIcon name="close" :size="15" /></button>
+                    <AppIcon v-else-if="statusOf(m) === 'read'" name="check" :size="15" class="-mr-2" />
+                    <AppIcon v-if="statusOf(m) === 'read' || statusOf(m) === 'sent'" name="check" :size="15" />
                   </template>
                 </div>
               </div>

@@ -7,9 +7,12 @@
     -webkit-font-smoothing: antialiased;
     /* dark root so top/bottom overscroll on the landing (dark hero & footer) shows no pale bar */
     @apply bg-ink-900;
+    /* без «резинового» overscroll — страница не уезжает, снизу не появляется полоса */
+    overscroll-behavior: none;
   }
   body {
     @apply font-sans text-ink-800 bg-parchment-100;
+    overscroll-behavior: none;
   }
   h1, h2, h3 {
     @apply font-display;

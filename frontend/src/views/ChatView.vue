@@ -16,7 +16,7 @@ import {
   chatState, initChat, openChat, closeChat, sendMessage, sendMessageTo, sendTyping,
   editMessage, deleteMessage, retryFailed, loadOlder, loadContacts, startDirect, startGroup,
   reactMessage, REACTION_EMOJIS, updateChat, pinChat, leaveChat, forwardMessages, loadAroundSeq, markActiveRead, imageAspect, expandWindow, reorderPins,
-  pinMessageInChat, unpinMessageInChat,
+  pinMessageInChat, unpinMessageInChat, localCacheStats, wipeLocalChatCache,
 } from '../chat/store'
 
 usePageTitle('Чат')
@@ -624,7 +624,7 @@ const composeTitle = computed(() => {
   }
   return `Выбрано ${composeItems.value.length} ${plural(composeItems.value.length)}`
 })
-function fmtSize(bytes) { if (!bytes) return ''; if (bytes < 1024) return `${bytes} Б`; if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} КБ`; return `${(bytes / 1048576).toFixed(1)} МБ` }
+function fmtSize(bytes) { if (!bytes) return '0 Б'; if (bytes < 1024) return `${bytes} Б`; if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} КБ`; if (bytes < 1073741824) return `${(bytes / 1048576).toFixed(1)} МБ`; return `${(bytes / 1073741824).toFixed(2)} ГБ` }
 function composeAutoGrow() { const el = composeCaptionInput.value; if (!el) return; el.style.height = 'auto'; const b = el.offsetHeight - el.clientHeight; el.style.height = Math.min(el.scrollHeight + b, 160) + 'px' }
 watch(showCompose, (v) => { if (v) nextTick(() => { composeCaptionInput.value?.focus(); composeAutoGrow() }) })
 function addComposeItems(files, compress) {
@@ -798,6 +798,37 @@ function mediaIndex(m, k) {
 function openPhoto(m, k) { const i = mediaIndex(m, k); openLightbox(allChatMedia.value[i]?.url, allChatMedia.value, i) }
 function openVideoLightbox(m) { const i = mediaIndex(m, 0); openLightbox(allChatMedia.value[i]?.url, allChatMedia.value, i) }
 function openVideoNote(m) { const v = videoNoteOf(m); if (v) openLightbox(v.url, [{ url: v.url, mid: m.id, video: true, poster: v.poster }], 0) }
+
+// ── память устройства / кэш ────────────────────────────────────────────────
+const showStorage = ref(false)
+const storageBusy = ref(false)
+const storageWiping = ref(false)
+const storageInfo = reactive({ usage: 0, quota: 0, cacheBytes: 0, messages: 0, chats: 0 })
+const storagePct = computed(() => storageInfo.quota ? Math.min(100, Math.round(storageInfo.usage / storageInfo.quota * 100)) : 0)
+async function computeStorage() {
+  storageBusy.value = true
+  try {
+    let usage = 0, quota = 0
+    try { const e = await navigator.storage?.estimate?.(); usage = e?.usage || 0; quota = e?.quota || 0 } catch { /* ignore */ }
+    let cacheBytes = 0
+    try { for (const k of Object.keys(localStorage)) if (/^chat/i.test(k)) cacheBytes += ((localStorage.getItem(k) || '').length + k.length) * 2 } catch { /* ignore */ }
+    const st = await localCacheStats()
+    storageInfo.usage = usage; storageInfo.quota = quota; storageInfo.cacheBytes = cacheBytes
+    storageInfo.messages = st.messages; storageInfo.chats = st.chats
+  } finally { storageBusy.value = false }
+}
+function openStorage() { showStorage.value = true; computeStorage() }
+function clearPreviewCache() {
+  try { for (const k of ['chatLinkPreviews', 'chatImgDims', 'chatVideoLoaded', 'chatInfoCache']) localStorage.removeItem(k) } catch { /* ignore */ }
+  for (const k of Object.keys(linkPreviews)) delete linkPreviews[k]
+  computeStorage()
+}
+async function wipeAllCache() {
+  if (!confirm('Очистить весь локальный кэш чатов? Сообщения и медиа заново подгрузятся с сервера. Страница перезагрузится.')) return
+  storageWiping.value = true
+  await wipeLocalChatCache()
+  location.reload()
+}
 // сетка-альбом под количество фото (как в мессенджерах)
 function albumCols(n) { return n <= 1 ? '' : (n <= 4 ? 'grid-cols-2' : 'grid-cols-3') }
 function albumItemClass(n, k) { return (n === 3 && k === 0) ? 'col-span-2' : '' } // 3 фото: первое во всю ширину
@@ -1404,6 +1435,7 @@ onBeforeUnmount(() => {
           <button v-if="search" @click="search = ''" title="Очистить"
                   class="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-700/40 hover:text-ink-700"><AppIcon name="close" :size="15" /></button>
         </div>
+        <button class="h-9 shrink-0 rounded-lg px-2 text-ink-700/60 hover:bg-parchment-100 hover:text-saffron-600" title="Память устройства" @click="openStorage"><AppIcon name="settings" :size="20" /></button>
         <button class="btn-primary h-9 shrink-0 px-3" title="Новый чат" @click="openNew"><AppIcon name="plus" :size="18" /></button>
       </div>
       <div class="flex-1 overflow-y-auto">
@@ -1988,6 +2020,59 @@ onBeforeUnmount(() => {
     </div>
 
     <!-- Диалог отправки вложений (картинки + файлы) -->
+    <!-- Память устройства / кэш -->
+    <div v-if="showStorage" class="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/40 p-4" @click.self="showStorage = false">
+      <div class="flex max-h-[85vh] w-full max-w-md flex-col overflow-hidden rounded-xl bg-white shadow-xl">
+        <div class="flex items-center justify-between border-b border-parchment-200 px-4 py-3">
+          <h3 class="font-medium text-ink-900">Память устройства</h3>
+          <button class="text-ink-700/40 hover:text-ink-900" @click="showStorage = false"><AppIcon name="close" :size="18" /></button>
+        </div>
+        <div class="flex-1 space-y-4 overflow-y-auto p-4">
+          <!-- всего занято -->
+          <div class="rounded-xl bg-parchment-50 p-4 ring-1 ring-parchment-200">
+            <div class="flex items-baseline justify-between">
+              <span class="text-sm text-ink-700/60">Занято приложением</span>
+              <span class="text-lg font-semibold text-ink-900">{{ storageBusy ? '…' : fmtSize(storageInfo.usage) }}</span>
+            </div>
+            <div class="mt-2 h-2 w-full overflow-hidden rounded-full bg-parchment-200">
+              <div class="h-full rounded-full bg-saffron-500 transition-all" :style="{ width: storagePct + '%' }"></div>
+            </div>
+            <div class="mt-1.5 text-xs text-ink-700/40">
+              <template v-if="storageInfo.quota">из ~{{ fmtSize(storageInfo.quota) }} доступно на устройстве</template>
+              <template v-else>оценка недоступна в этом браузере</template>
+            </div>
+          </div>
+
+          <!-- что в кэше -->
+          <div class="divide-y divide-parchment-100 overflow-hidden rounded-xl ring-1 ring-parchment-200">
+            <div class="flex items-center justify-between gap-3 px-4 py-3">
+              <div class="min-w-0">
+                <div class="text-[15px] text-ink-900">База чатов</div>
+                <div class="text-xs text-ink-700/50">{{ storageInfo.messages }} сообщений · {{ storageInfo.chats }} чатов</div>
+              </div>
+              <span class="shrink-0 text-xs text-ink-700/40">локально</span>
+            </div>
+            <div class="flex items-center justify-between gap-3 px-4 py-3">
+              <div class="min-w-0">
+                <div class="text-[15px] text-ink-900">Превью и метаданные</div>
+                <div class="text-xs text-ink-700/50">ссылки, размеры фото, состояния · {{ fmtSize(storageInfo.cacheBytes) }}</div>
+              </div>
+              <button class="shrink-0 rounded-lg px-3 py-1.5 text-sm font-medium text-saffron-700 hover:bg-saffron-500/10" @click="clearPreviewCache">Очистить</button>
+            </div>
+          </div>
+
+          <p class="text-xs leading-relaxed text-ink-700/50">
+            Медиа-файлы (фото и видео) хранятся в кэше браузера и очищаются вместе с ним.
+            Полная очистка удалит локальную копию переписки — она заново загрузится с сервера, ничего не потеряется.
+          </p>
+
+          <button class="btn-outline w-full text-red-600 ring-red-200 hover:bg-red-50" :disabled="storageWiping" @click="wipeAllCache">
+            <AppIcon name="trash" :size="16" /> {{ storageWiping ? 'Очистка…' : 'Очистить весь кэш чатов' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
     <div v-if="showCompose" class="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/40 p-4" @click.self="cancelCompose">
       <div class="flex max-h-[85vh] w-full max-w-md flex-col overflow-hidden rounded-xl bg-white shadow-xl">
         <div class="flex items-center justify-between border-b border-parchment-200 px-4 py-3">

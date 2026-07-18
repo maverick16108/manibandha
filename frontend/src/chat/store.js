@@ -294,6 +294,42 @@ export async function updateChat(chatId, payload) {
   await engine?.updateChat(chatId, payload);
 }
 
+// Статистика локального кэша (сообщения/чаты в браузерной БД) — для «Памяти устройства».
+export async function localCacheStats() {
+  const out = { messages: 0, chats: 0 };
+  try {
+    const r1 = await engine?.db.all('SELECT COUNT(*) AS n FROM messages');
+    const r2 = await engine?.db.all('SELECT COUNT(*) AS n FROM chats');
+    out.messages = Number(r1?.[0]?.n) || 0;
+    out.chats = Number(r2?.[0]?.n) || 0;
+  } catch { /* БД ещё не готова */ }
+  return out;
+}
+
+// Полная очистка локального кэша чатов: закрываем БД, сносим IndexedDB/OPFS и chat-ключи
+// localStorage. Данные не теряются — при следующем открытии всё подтянется с сервера.
+export async function wipeLocalChatCache() {
+  try { teardownChat(); } catch { /* ignore */ }
+  // IndexedDB (снапшот sql.js-фолбэка и пр.)
+  try {
+    if (indexedDB.databases) {
+      const dbs = await indexedDB.databases();
+      await Promise.all((dbs || []).map((d) => d && d.name && new Promise((res) => {
+        const req = indexedDB.deleteDatabase(d.name); req.onsuccess = req.onerror = req.onblocked = () => res();
+      })));
+    } else {
+      for (const n of ['manibandha-chat-sqljs']) await new Promise((res) => { const r = indexedDB.deleteDatabase(n); r.onsuccess = r.onerror = r.onblocked = () => res(); });
+    }
+  } catch { /* ignore */ }
+  // OPFS (wa-sqlite)
+  try {
+    const root = await navigator.storage?.getDirectory?.();
+    if (root) { for await (const [name] of root.entries()) { try { await root.removeEntry(name, { recursive: true }); } catch { /* занят */ } } }
+  } catch { /* ignore */ }
+  // локальные кэши превью/метаданных
+  try { for (const k of Object.keys(localStorage)) if (/^chat/i.test(k)) localStorage.removeItem(k); } catch { /* ignore */ }
+}
+
 // Переслать сообщения (их тело) в другой чат — по очереди, с сохранением порядка.
 export async function forwardMessages(targetChatId, bodies) {
   if (!targetChatId || !engine) return;

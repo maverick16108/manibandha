@@ -725,6 +725,26 @@ func (s *Server) userCard(pu *models.User) map[string]any {
 	return m
 }
 
+// GET /api/chats/search?q=... — поиск по сообщениям во ВСЕХ чатах пользователя
+func (s *Server) searchAllChats(w http.ResponseWriter, r *http.Request) {
+	u := currentUser(r)
+	q := strings.TrimSpace(r.URL.Query().Get("q"))
+	if len([]rune(q)) < 2 {
+		writeJSON(w, http.StatusOK, []any{})
+		return
+	}
+	esc := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(q)
+	var rows []models.ChatMessage
+	s.DB.Preload("Author").
+		Where("chat_id IN ? AND deleted = ? AND body ILIKE ? ESCAPE '\\'", s.myChatIDs(u.ID), false, "%"+esc+"%").
+		Order("seq DESC").Limit(60).Find(&rows)
+	out := make([]map[string]any, 0, len(rows))
+	for i := range rows {
+		out = append(out, chatMsgOut(&rows[i], u.ID))
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
 // GET /api/chats/{id}/search?q=... — поиск по тексту сообщений внутри чата
 func (s *Server) searchChatMessages(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.Atoi(chi.URLParam(r, "id"))

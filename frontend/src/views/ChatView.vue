@@ -164,6 +164,26 @@ const filteredChats = computed(() => {
 })
 function selectChat(c) { router.push({ name: 'chat', params: { id: c.id } }) }
 
+// глобальный поиск по сообщениям всех чатов (в поле списка чатов)
+const globalResults = ref([])
+let globalSearchTimer = null
+watch(search, (v) => {
+  clearTimeout(globalSearchTimer)
+  const q = (v || '').trim()
+  if (q.length < 2) { globalResults.value = []; return }
+  globalSearchTimer = setTimeout(async () => {
+    try { const { data } = await client.get('/chats/search', { params: { q } }); if (search.value.trim() === q) globalResults.value = data }
+    catch { globalResults.value = [] }
+  }, 300)
+})
+function chatTitleById(id) { const c = chatState.chats.find((x) => x.id === id); return c ? c.title : 'Чат' }
+function openSearchResult(r) {
+  const target = r.id, chatId = r.chat_id
+  search.value = ''; globalResults.value = []
+  router.push({ name: 'chat', params: { id: chatId } })
+  setTimeout(() => jumpToId(target), 500) // после открытия чата
+}
+
 // перетаскивание закреплённых чатов (native drag). @mousedown.prevent ломает старт drag,
 // поэтому preventDefault ставим только для незакреплённых (чтобы не терять фокус композера)
 const dragChatId = ref(null)
@@ -1352,6 +1372,19 @@ onBeforeUnmount(() => {
             </span>
           </span>
         </button>
+
+        <!-- глобальный поиск: найденные сообщения во всех чатах -->
+        <template v-if="search.trim().length >= 2 && globalResults.length">
+          <div class="border-y border-parchment-200 bg-parchment-50 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-ink-700/50">Сообщения</div>
+          <button v-for="r in globalResults" :key="'g' + r.id" @click="openSearchResult(r)"
+                  class="flex w-full flex-col gap-0.5 border-b border-parchment-100 px-3 py-2.5 text-left hover:bg-parchment-50">
+            <span class="flex items-center justify-between gap-2">
+              <span class="truncate text-sm font-medium text-ink-900">{{ chatTitleById(r.chat_id) }}</span>
+              <span class="shrink-0 text-[11px] text-ink-700/40">{{ fmtListTime(r.created_at) }}</span>
+            </span>
+            <span class="line-clamp-2 text-sm text-ink-700/70"><span v-if="r.author_name" class="text-ink-700/50">{{ r.author_name }}: </span>{{ snippet(r.body) }}</span>
+          </button>
+        </template>
       </div>
       </template>
     </aside>

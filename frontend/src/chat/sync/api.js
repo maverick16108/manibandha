@@ -22,4 +22,5 @@ export const chatApi = {
   contacts: () => client.get('/chats/contacts').then((r) => r.data),
   linkPreview: (url) => client.get('/link-preview', { params: { url } }).then((r) => r.data),
   searchMessages: (chatId, q) => client.get(`/chats/${chatId}/search`, { params: { q } }).then((r) => r.data),
+  searchAllChats: (q) => client.get('/chats/search', { params: { q } }).then((r) => r.data),
 };

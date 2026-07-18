@@ -22,7 +22,7 @@ PostgreSQL (та же схема, миграции остаются на Alembic
 ## Структура
 
 ```
-backend-go/
+backend/
 ├── cmd/server/main.go        # точка входа
 └── internal/
     ├── config/               # env (.env), зеркалит app/core/config.py
@@ -36,7 +36,7 @@ backend-go/
 ## Запуск
 
 ```bash
-cd backend-go
+cd backend
 ENV_FILE=../backend/.env go run ./cmd/server   # берёт те же SECRET_KEY/DATABASE_URL
 # порт по умолчанию 8010 (как у Python-дев-сервера)
 go test ./...

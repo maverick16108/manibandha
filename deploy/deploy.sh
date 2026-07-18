@@ -18,7 +18,7 @@ git pull --ff-only
 # Go-бэкенд — собираем бинарь (чистый Go, без cgo). cwebp нужен для пережатия фото.
 echo ">>> build Go backend"
 command -v cwebp >/dev/null 2>&1 || apt-get install -y -qq webp
-cd "$APP_DIR/backend-go"
+cd "$APP_DIR/backend"
 CGO_ENABLED=0 "$GO" build -o "$APP_DIR/mani-go" ./cmd/server
 chown www-data:www-data "$APP_DIR/mani-go"
 chmod +x "$APP_DIR/mani-go"
@@ -33,5 +33,5 @@ systemctl restart manibandha-go          # боевой бэкенд (:8020); м
 nginx -t && systemctl reload nginx
 
 # uploads (в корне) не трогаем chown-ом рекурсивно ниже по ошибке — они уже www-data
-chown -R www-data:www-data "$APP_DIR/mani-go" "$APP_DIR/backend-go" "$APP_DIR/frontend/dist"
+chown -R www-data:www-data "$APP_DIR/mani-go" "$APP_DIR/backend" "$APP_DIR/frontend/dist"
 echo ">>> done (backend: Go on :8020)"

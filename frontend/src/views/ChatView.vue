@@ -1264,8 +1264,12 @@ onBeforeUnmount(() => {
                   <div v-if="linkCard(m).title" class="line-clamp-2 text-sm font-semibold leading-snug" :class="isMine(m) ? 'text-white' : 'text-ink-900'">{{ linkCard(m).title }}</div>
                   <div v-if="linkCard(m).description" class="mt-0.5 line-clamp-2 text-xs leading-snug" :class="isMine(m) ? 'text-white/80' : 'text-ink-700/70'">{{ linkCard(m).description }}</div>
                 </div>
-                <img v-if="linkCard(m).image" :src="linkCard(m).image"
-                     class="block max-h-[360px] w-full object-cover" @error="$event.target.style.display='none'" />
+                <!-- YouTube-миниатюра hqdefault — 4:3 с чёрными полями; кадрируем до 16:9 -->
+                <div v-if="linkCard(m).image" class="overflow-hidden" :class="linkCard(m).image.includes('ytimg') && 'aspect-video'">
+                  <img :src="linkCard(m).image" class="block w-full object-cover"
+                       :class="linkCard(m).image.includes('ytimg') ? 'h-full' : 'max-h-[360px]'"
+                       @error="$event.target.parentElement.style.display='none'" />
+                </div>
               </a>
 
               <div class="mt-1 flex items-end justify-between gap-2">

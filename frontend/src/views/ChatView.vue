@@ -1344,7 +1344,7 @@ onBeforeUnmount(() => {
                  :class="[wide ? 'max-w-[420px]' : 'max-w-[80%]', isMine(m) ? 'bg-saffron-500 text-white' : 'bg-white text-ink-900 ring-1 ring-parchment-200']"
                  @contextmenu="onContext($event, m)">
               <div v-if="showAuthor(m, i)" class="px-3 pt-2 text-xs font-semibold text-sage-600">{{ nameOf(m) }}</div>
-              <div v-if="fwdName(m)" class="flex items-center gap-1.5 px-3 pt-2 text-xs font-semibold" :class="captionText(m) && isMine(m) ? 'text-white/90' : 'text-saffron-700'">
+              <div v-if="fwdName(m)" class="flex items-center gap-1.5 px-3 pt-2 text-xs font-semibold" :class="isMine(m) ? 'text-white/90' : 'text-saffron-700'">
                 <AppIcon name="reply" :size="12" class="-scale-x-100" /> <span>Переслано от</span>
                 <img v-if="fwdAvatar(m)" :src="thumbUrl(fwdAvatar(m))" class="h-4 w-4 shrink-0 rounded-full object-cover" />
                 <span v-else class="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-saffron-500 text-[8px] font-semibold text-white">{{ initials(fwdName(m)) }}</span>
@@ -1377,7 +1377,7 @@ onBeforeUnmount(() => {
                  :class="[wide ? 'max-w-[420px]' : 'max-w-[80%]', (captionText(m) || fwdName(m) || showAuthor(m, i)) && (isMine(m) ? 'bg-saffron-500 text-white' : 'bg-white text-ink-900 ring-1 ring-parchment-200')]"
                  @contextmenu="onContext($event, m)">
               <div v-if="showAuthor(m, i)" class="px-3 pt-2 text-xs font-semibold text-sage-600">{{ nameOf(m) }}</div>
-              <div v-if="fwdName(m)" class="flex items-center gap-1.5 px-3 pt-2 text-xs font-semibold" :class="captionText(m) && isMine(m) ? 'text-white/90' : 'text-saffron-700'">
+              <div v-if="fwdName(m)" class="flex items-center gap-1.5 px-3 pt-2 text-xs font-semibold" :class="isMine(m) ? 'text-white/90' : 'text-saffron-700'">
                 <AppIcon name="reply" :size="12" class="-scale-x-100" /> <span>Переслано от</span>
                 <img v-if="fwdAvatar(m)" :src="thumbUrl(fwdAvatar(m))" class="h-4 w-4 shrink-0 rounded-full object-cover" />
                 <span v-else class="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-saffron-500 text-[8px] font-semibold text-white">{{ initials(fwdName(m)) }}</span>

@@ -385,7 +385,7 @@ function quoteText(b) {
   return (b || '')
     .replace(/@\[audio\]\([^)]*\)/g, '🎤 Голосовое')
     .replace(/@\[file\]\([^|)]*\|([^)]*)\)/g, (_m, name) => { try { return '📎 ' + decodeURIComponent(name) } catch { return '📎 файл' } })
-    .replace(/!\[[^\]]*\]\([^)]*\)/g, '🖼 Фото')
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, 'Фото')
     .trim().slice(0, 300)
 }
 function startEdit(m) {
@@ -407,9 +407,17 @@ function snippet(b) {
     .replace(FWD_RE, '')
     .replace(/@\[audio\]\([^)]*\)/g, '🎤 Голосовое')
     .replace(/@\[file\]\([^|)]*\|([^)]*)\)/g, (_m, name) => { try { return '📎 ' + decodeURIComponent(name) } catch { return '📎 файл' } })
-    .replace(/!\[[^\]]*\]\([^)]*\)/g, '🖼 Фото')
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, 'Фото')
     .replace(/\s+/g, ' ').trim().slice(0, 80)
 }
+// первый URL фото из тела (для миниатюры в превью списка/ответа/правки)
+function firstPhotoUrl(b) {
+  const s = (b || '').replace(FWD_RE, '')
+  if (/@\[audio\]|@\[file\]/.test(s)) return null
+  const m = s.match(/!\[[^\]]*\]\(([^)]+)\)/)
+  return m ? m[1] : null
+}
+function lastPhoto(c) { return firstPhotoUrl(c?.last?.body) }
 
 // ── композер: авто-рост, лимит, отправка ───────────────────────────────
 function autoGrow() {
@@ -582,14 +590,23 @@ async function onPaste(e) {
   if (imgs.length) { e.preventDefault(); addComposeItems(imgs) }
 }
 
-// пересылка: маркер «@[fwd](имя)» в начале тела — кто исходный автор
+// пересылка: маркер «@[fwd](имя|аватар)» в начале тела — кто исходный автор
 const FWD_RE = /^@\[fwd\]\(([^)]*)\)\n?/
-function fwdName(m) { const mm = (m?.body || '').match(FWD_RE); if (!mm) return ''; try { return decodeURIComponent(mm[1]) } catch { return mm[1] } }
+function fwdParts(m) {
+  const mm = (m?.body || '').match(FWD_RE); if (!mm) return null
+  const [n, a] = mm[1].split('|')
+  let name = n, avatar = a || ''
+  try { name = decodeURIComponent(n) } catch { /* as is */ }
+  try { avatar = a ? decodeURIComponent(a) : '' } catch { avatar = '' }
+  return { name, avatar }
+}
+function fwdName(m) { return fwdParts(m)?.name || '' }
+function fwdAvatar(m) { return fwdParts(m)?.avatar || '' }
 function contentBody(m) { return (m?.body || '').replace(FWD_RE, '') }
 function fwdWrap(m) {
   const b = m.body || ''
   if (FWD_RE.test(b)) return b            // уже переслано — сохраняем исходного автора
-  return `@[fwd](${encodeURIComponent(nameOf(m))})\n${b}`
+  return `@[fwd](${encodeURIComponent(nameOf(m))}|${encodeURIComponent(avatarOf(m) || '')})\n${b}`
 }
 
 // содержимое сообщения: картинки / подпись / вложения
@@ -1112,7 +1129,10 @@ onBeforeUnmount(() => {
               </span>
             </span>
             <span class="flex items-center justify-between gap-2">
-              <span class="truncate text-sm text-ink-700/60">{{ lastPreview(c) }}</span>
+              <span class="flex min-w-0 items-center gap-1 text-sm text-ink-700/60">
+                <img v-if="lastPhoto(c)" :src="thumbUrl(lastPhoto(c))" class="h-4 w-4 shrink-0 rounded-sm object-cover" />
+                <span class="truncate">{{ lastPreview(c) }}</span>
+              </span>
               <span v-if="c.unread" class="ml-1 inline-flex h-5 min-w-[1.25rem] shrink-0 items-center justify-center rounded-full bg-saffron-500 px-1.5 text-xs font-semibold text-white">{{ c.unread }}</span>
             </span>
           </span>
@@ -1216,8 +1236,11 @@ onBeforeUnmount(() => {
                  :class="[wide ? 'max-w-[420px]' : 'max-w-[80%]', captionText(m) && (isMine(m) ? 'bg-saffron-500 text-white' : 'bg-white text-ink-900 ring-1 ring-parchment-200')]"
                  @contextmenu="onContext($event, m)">
               <div v-if="showAuthor(m, i)" class="px-3 pt-2 text-xs font-semibold text-sage-600">{{ nameOf(m) }}</div>
-              <div v-if="fwdName(m)" class="flex items-center gap-1 px-3 pt-2 text-xs font-semibold" :class="captionText(m) && isMine(m) ? 'text-white/90' : 'text-saffron-700'">
-                <AppIcon name="reply" :size="12" class="-scale-x-100" /> Переслано от {{ fwdName(m) }}
+              <div v-if="fwdName(m)" class="flex items-center gap-1.5 px-3 pt-2 text-xs font-semibold" :class="captionText(m) && isMine(m) ? 'text-white/90' : 'text-saffron-700'">
+                <AppIcon name="reply" :size="12" class="-scale-x-100" /> <span>Переслано от</span>
+                <img v-if="fwdAvatar(m)" :src="thumbUrl(fwdAvatar(m))" class="h-4 w-4 shrink-0 rounded-full object-cover" />
+                <span v-else class="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-saffron-500 text-[8px] font-semibold text-white">{{ initials(fwdName(m)) }}</span>
+                <span class="truncate">{{ fwdName(m) }}</span>
               </div>
               <div v-if="m.reply_preview" class="mx-3 mt-2 flex items-center gap-2 rounded-r-md border-l-2 border-saffron-400 bg-black/5 py-1 pl-2 pr-2 text-xs">
                 <img v-if="replyThumb(m)" :src="replyThumb(m)" class="h-8 w-8 shrink-0 rounded object-cover" />
@@ -1268,8 +1291,11 @@ onBeforeUnmount(() => {
                  :data-audio-label="`${nameOf(m) || 'Голосовое'} · ${fmtTime(m.created_at)}`"
                  @contextmenu="onContext($event, m)">
               <div v-if="showAuthor(m, i)" class="mb-0.5 text-xs font-semibold text-sage-600">{{ nameOf(m) }}</div>
-              <div v-if="fwdName(m)" class="mb-1 flex items-center gap-1 text-xs font-semibold" :class="isMine(m) ? 'text-white/90' : 'text-saffron-700'">
-                <AppIcon name="reply" :size="12" class="-scale-x-100" /> Переслано от {{ fwdName(m) }}
+              <div v-if="fwdName(m)" class="mb-1 flex items-center gap-1.5 text-xs font-semibold" :class="isMine(m) ? 'text-white/90' : 'text-saffron-700'">
+                <AppIcon name="reply" :size="12" class="-scale-x-100" /> <span>Переслано от</span>
+                <img v-if="fwdAvatar(m)" :src="thumbUrl(fwdAvatar(m))" class="h-4 w-4 shrink-0 rounded-full object-cover" />
+                <span v-else class="flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[8px] font-semibold text-white" :class="isMine(m) ? 'bg-white/30' : 'bg-saffron-500'">{{ initials(fwdName(m)) }}</span>
+                <span class="truncate">{{ fwdName(m) }}</span>
               </div>
               <div v-if="m.reply_preview" class="mb-1 flex items-center gap-2 rounded-r-md border-l-2 py-1 pl-2 pr-2 text-xs" :class="isMine(m) ? 'border-white/70 bg-white/10' : 'border-saffron-400 bg-saffron-500/5'">
                 <img v-if="replyThumb(m)" :src="replyThumb(m)" class="h-8 w-8 shrink-0 rounded object-cover" />
@@ -1365,6 +1391,7 @@ onBeforeUnmount(() => {
           </div>
           <div v-else-if="editingMsg" class="mb-2 flex items-center gap-2 rounded-lg border-l-2 border-saffron-400 bg-parchment-100 px-3 py-1.5 text-sm">
             <AppIcon name="edit" :size="14" class="shrink-0 text-saffron-600" />
+            <img v-if="firstPhotoUrl(editingMsg.body)" :src="thumbUrl(firstPhotoUrl(editingMsg.body))" class="h-8 w-8 shrink-0 rounded object-cover" />
             <span class="min-w-0 flex-1 truncate text-ink-700/70"><b class="text-saffron-700">Редактирование</b> · {{ snippet(editingMsg.body) }}</span>
             <button class="text-ink-700/50 hover:text-ink-900" @click="cancelEdit"><AppIcon name="close" :size="15" /></button>
           </div>

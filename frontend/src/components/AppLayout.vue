@@ -59,7 +59,7 @@ const nav = [
   { name: 'conference', label: 'Конференция', icon: 'video', caps: ['conference.view'] },
   { name: 'dictionaries', label: 'Справочники', icon: 'pin', caps: ['dictionaries.manage'] },
   { name: 'users', label: 'Пользователи', icon: 'users', caps: ['users.manage'] },
-  { name: 'roles', label: 'Роли', icon: 'shield', caps: ['roles.manage'] },
+  { name: 'roles', label: 'Роли', icon: 'key', caps: ['roles.manage'] },
   { name: 'settings', label: 'Настройки', icon: 'settings', caps: ['settings.manage'] },
 ]
 

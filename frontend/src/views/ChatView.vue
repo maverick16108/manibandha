@@ -8,7 +8,7 @@ import AudioBar from '../components/AudioBar.vue'
 import { renderMarkdown } from '../lib/markdown'
 import { thumbUrl } from '../lib/format'
 import { player, playAudio, seek } from '../composables/audioPlayer'
-import { openLightbox } from '../composables/lightbox'
+import { openLightbox, closeLightbox, setLightboxActions } from '../composables/lightbox'
 import { showToast } from '../composables/toast'
 import { confirmDialog } from '../composables/confirm'
 import { usePageTitle } from '../composables/pageTitle'
@@ -695,7 +695,7 @@ function isPhoto(m) { return photoUrls(m).length > 0 }
 // все фото чата по порядку — для навигации в лайтбоксе (←/→, свайп)
 const allChatPhotos = computed(() => {
   const out = []
-  for (const m of chatState.messages) if (!m.deleted) for (const u of photoUrls(m)) out.push(u)
+  for (const m of chatState.messages) if (!m.deleted) for (const u of photoUrls(m)) out.push({ url: u, mid: m.id })
   return out
 })
 function photoIndex(m, k) {
@@ -707,7 +707,7 @@ function photoIndex(m, k) {
   }
   return idx
 }
-function openPhoto(m, k) { const i = photoIndex(m, k); openLightbox(allChatPhotos.value[i], allChatPhotos.value, i) }
+function openPhoto(m, k) { const i = photoIndex(m, k); openLightbox(allChatPhotos.value[i]?.url, allChatPhotos.value, i) }
 // сетка-альбом под количество фото (как в мессенджерах)
 function albumCols(n) { return n <= 1 ? '' : (n <= 4 ? 'grid-cols-2' : 'grid-cols-3') }
 function albumItemClass(n, k) { return (n === 3 && k === 0) ? 'col-span-2' : '' } // 3 фото: первое во всю ширину
@@ -1133,6 +1133,12 @@ onMounted(async () => {
   document.addEventListener('keydown', onGlobalKey)
   document.addEventListener('keydown', onDocType)
   document.addEventListener('paste', onPaste)  // вставка картинки — где бы ни был фокус
+  // действия контекстного меню лайтбокса (ПКМ по фото)
+  setLightboxActions({
+    goto: (mid) => { closeLightbox(); if (mid) flashScrollTo(mid) },
+    forward: (mid) => { const m = chatState.messages.find((x) => x.id === mid); closeLightbox(); if (m) openForward([fwdWrap(m)]) },
+    delete: (mid) => { const m = chatState.messages.find((x) => x.id === mid); closeLightbox(); if (m) askDelete(m) },
+  })
   document.addEventListener('visibilitychange', onChatVisible)
   window.addEventListener('focus', onChatVisible)
   if (convEl.value && typeof ResizeObserver !== 'undefined') {

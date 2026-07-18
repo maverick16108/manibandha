@@ -15,7 +15,7 @@ import { usePageTitle } from '../composables/pageTitle'
 import {
   chatState, initChat, openChat, closeChat, sendMessage, sendTyping,
   editMessage, deleteMessage, retryFailed, loadOlder, loadContacts, startDirect, startGroup,
-  reactMessage, REACTION_EMOJIS, updateChat, pinChat, leaveChat, forwardMessages, loadAroundSeq, markActiveRead,
+  reactMessage, REACTION_EMOJIS, updateChat, pinChat, leaveChat, forwardMessages, loadAroundSeq, markActiveRead, imageAspect,
 } from '../chat/store'
 
 usePageTitle('Чат')
@@ -599,6 +599,11 @@ function isPhoto(m) { return photoUrls(m).length > 0 }
 // сетка-альбом под количество фото (как в мессенджерах)
 function albumCols(n) { return n <= 1 ? '' : (n <= 4 ? 'grid-cols-2' : 'grid-cols-3') }
 function albumItemClass(n, k) { return (n === 3 && k === 0) ? 'col-span-2' : '' } // 3 фото: первое во всю ширину
+// резерв места под одиночное фото по известным пропорциям — чтобы лента не «прыгала» при загрузке
+function photoBoxStyle(u) {
+  const r = imageAspect(u)
+  return r ? { aspectRatio: String(r), maxHeight: '400px' } : { minHeight: '140px' }
+}
 
 // ── превью ссылок (OG-карточки) ───────────────────────────────────────────
 // url → объект превью | false (нет/в процессе). Персистим в localStorage, чтобы карточка
@@ -1202,10 +1207,12 @@ onBeforeUnmount(() => {
                   <div class="whitespace-pre-wrap break-words text-ink-700/70">{{ m.reply_preview }}</div>
                 </div>
               </div>
-              <img v-if="photoUrls(m).length === 1" :src="photoUrls(m)[0]"
-                   class="block max-h-[400px] w-full cursor-zoom-in object-cover" @click.stop="openLightbox(photoUrls(m)[0])" />
+              <div v-if="photoUrls(m).length === 1" class="w-full overflow-hidden" :style="photoBoxStyle(photoUrls(m)[0])">
+                <img :src="thumbUrl(photoUrls(m)[0])" @error="imgFull($event, photoUrls(m)[0])"
+                     class="block h-full max-h-[400px] w-full cursor-zoom-in object-cover" @click.stop="openLightbox(photoUrls(m)[0])" />
+              </div>
               <div v-else class="grid gap-0.5" :class="albumCols(photoUrls(m).length)">
-                <img v-for="(u, k) in photoUrls(m).slice(0, 10)" :key="k" :src="u"
+                <img v-for="(u, k) in photoUrls(m).slice(0, 10)" :key="k" :src="thumbUrl(u)" @error="imgFull($event, u)"
                      class="aspect-square w-full cursor-zoom-in object-cover" :class="albumItemClass(photoUrls(m).length, k)"
                      @click.stop="openLightbox(u)" />
               </div>
@@ -1321,6 +1328,14 @@ onBeforeUnmount(() => {
           </div>
           </div>
         </div>
+
+        <!-- кнопка «вниз» (видна, когда прокручено вверх) -->
+        <transition name="fade">
+          <button v-if="activeChat && !stickBottom" @click="stickBottom = true; scrollToBottom()" title="Вниз"
+                  class="absolute bottom-24 right-5 z-20 flex h-11 w-11 items-center justify-center rounded-full bg-white text-ink-700 shadow-lg ring-1 ring-parchment-200 transition hover:bg-parchment-50">
+            <AppIcon name="chevron" :size="22" />
+          </button>
+        </transition>
 
         <!-- Композер -->
         <div class="border-t border-parchment-200 p-3">

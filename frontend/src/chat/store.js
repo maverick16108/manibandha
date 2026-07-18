@@ -92,7 +92,20 @@ function onVisibleResync() { if (document.visibilityState === 'visible') resync(
 // Прогрев миниатюр в кэш браузера: тянем фото из недавних сообщений всех чатов ЗАРАНЕЕ,
 // чтобы при открытии чата картинки показывались мгновенно (не «через секунду»).
 const warmed = new Set();
-function warmImage(url) { if (!url || warmed.has(url)) return; warmed.add(url); try { const i = new Image(); i.decoding = 'async'; i.src = url; } catch { /* ignore */ } }
+// запоминаем пропорции (w/h) миниатюр, чтобы зарезервировать место и лента не «прыгала»
+const IMG_DIMS_KEY = 'chatImgDims';
+let imgDims = {}; try { imgDims = JSON.parse(localStorage.getItem(IMG_DIMS_KEY) || '{}') || {}; } catch { imgDims = {}; }
+let dimsTimer = null;
+function saveDims() { if (dimsTimer) return; dimsTimer = setTimeout(() => { dimsTimer = null; try { localStorage.setItem(IMG_DIMS_KEY, JSON.stringify(imgDims)); } catch { /* ignore */ } }, 800); }
+export function imageAspect(url) { const t = thumbUrl(url); return imgDims[t] || imgDims[url] || null; }
+function warmImage(url) {
+  if (!url || warmed.has(url)) return; warmed.add(url);
+  try {
+    const i = new Image(); i.decoding = 'async';
+    i.onload = () => { if (i.naturalWidth && i.naturalHeight) { imgDims[url] = Math.round((i.naturalWidth / i.naturalHeight) * 1000) / 1000; saveDims(); } };
+    i.src = url;
+  } catch { /* ignore */ }
+}
 async function prefetchPhotos() {
   if (!db) return;
   try {

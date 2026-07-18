@@ -1003,7 +1003,7 @@ onBeforeUnmount(() => {
                 <template v-if="lastStatus(c)">
                   <AppIcon v-if="lastStatus(c) === 'pending'" name="clock" :size="12" />
                   <AppIcon v-else-if="lastStatus(c) === 'failed'" name="close" :size="12" class="text-red-500" />
-                  <span v-else class="text-sky-500"><AppIcon v-if="lastStatus(c) === 'read'" name="check" :size="12" class="-mr-1.5 inline" /><AppIcon name="check" :size="12" class="inline" /></span>
+                  <span v-else class="text-sky-500"><AppIcon :name="lastStatus(c) === 'read' ? 'check-double' : 'check'" :size="lastStatus(c) === 'read' ? 14 : 12" class="inline" /></span>
                 </template>
                 {{ fmtListTime(c.last?.created_at) }}
               </span>
@@ -1107,7 +1107,7 @@ onBeforeUnmount(() => {
                 </div>
                 <div class="flex shrink-0 items-center gap-1 pb-0.5 text-[11px]" :class="isMine(m) ? 'text-white/70' : 'text-ink-700/40'">
                   <span>{{ fmtTime(m.created_at) }}</span>
-                  <template v-if="statusOf(m)"><AppIcon v-if="statusOf(m) === 'pending'" name="clock" :size="15" /><AppIcon v-else-if="statusOf(m) === 'read'" name="check" :size="15" class="-mr-[9px]" /><AppIcon v-if="statusOf(m) === 'read' || statusOf(m) === 'sent'" name="check" :size="15" class="-mr-[3px]" /></template>
+                  <template v-if="statusOf(m)"><AppIcon v-if="statusOf(m) === 'pending'" name="clock" :size="15" /><AppIcon v-else-if="statusOf(m) === 'read'" name="check-double" :size="16" /><AppIcon v-else-if="statusOf(m) === 'sent'" name="check" :size="15" /></template>
                 </div>
               </div>
               <!-- без подписи: реакции слева + время справа, одной линией оверлеем на фото -->
@@ -1119,7 +1119,7 @@ onBeforeUnmount(() => {
                 </div>
                 <div class="pointer-events-auto ml-auto flex shrink-0 items-center gap-1 rounded-full bg-black/45 px-1.5 py-0.5 text-[11px] text-white">
                   <span>{{ fmtTime(m.created_at) }}</span>
-                  <template v-if="statusOf(m)"><AppIcon v-if="statusOf(m) === 'pending'" name="clock" :size="15" /><AppIcon v-else-if="statusOf(m) === 'read'" name="check" :size="15" class="-mr-[9px]" /><AppIcon v-if="statusOf(m) === 'read' || statusOf(m) === 'sent'" name="check" :size="15" class="-mr-[3px]" /></template>
+                  <template v-if="statusOf(m)"><AppIcon v-if="statusOf(m) === 'pending'" name="clock" :size="15" /><AppIcon v-else-if="statusOf(m) === 'read'" name="check-double" :size="16" /><AppIcon v-else-if="statusOf(m) === 'sent'" name="check" :size="15" /></template>
                 </div>
               </div>
             </div>
@@ -1174,8 +1174,8 @@ onBeforeUnmount(() => {
                   <template v-if="statusOf(m)">
                     <AppIcon v-if="statusOf(m) === 'pending'" name="clock" :size="15" />
                     <button v-else-if="statusOf(m) === 'failed'" class="text-red-200" title="Не отправлено — повторить" @click.stop="retryFailed"><AppIcon name="close" :size="15" /></button>
-                    <AppIcon v-else-if="statusOf(m) === 'read'" name="check" :size="15" class="-mr-[9px]" />
-                    <AppIcon v-if="statusOf(m) === 'read' || statusOf(m) === 'sent'" name="check" :size="15" class="-mr-[3px]" />
+                    <AppIcon v-else-if="statusOf(m) === 'read'" name="check-double" :size="16" />
+                    <AppIcon v-else-if="statusOf(m) === 'sent'" name="check" :size="15" />
                   </template>
                 </div>
               </div>

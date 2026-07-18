@@ -162,6 +162,12 @@ defineProps({
       <path d="m5 12.5 4.5 4.5L19 7" />
     </template>
 
+    <!-- check-double / прочитано (две галочки с наездом, как в Telegram) -->
+    <template v-else-if="name === 'check-double'">
+      <path d="m1.5 12.5 4.5 4.5L15.5 7" />
+      <path d="m8.5 12.5 4.5 4.5L22.5 7" />
+    </template>
+
     <!-- search -->
     <template v-else-if="name === 'search'">
       <circle cx="11" cy="11" r="7" />

@@ -84,6 +84,8 @@ watch(activeId, async (id, oldId) => {
     stickBottom.value = true
     nextTick(() => inputEl.value?.focus()) // фокус сразу, не ждём загрузки истории
     await openChat(id); scrollToBottom()
+    // досводим к низу по мере поздней загрузки картинок — убирает «прыжок» при открытии
+    ;[60, 180, 400].forEach((d) => setTimeout(() => { if (stickBottom.value) scrollToBottom() }, d))
     setTimeout(() => { openSettled.value = true }, 500) // после открытия — авто-читаем живые входящие
   } else closeChat()
   nextTick(autoGrow)
@@ -1090,7 +1092,7 @@ onBeforeUnmount(() => {
         <p v-else-if="!filteredChats.length" class="p-4 text-sm text-ink-700/50">Чатов пока нет. Нажмите «плюс», чтобы начать.</p>
         <button v-for="c in filteredChats" :key="c.id"
                 class="flex w-full items-center gap-3 border-b border-parchment-100 px-3 py-2.5 text-left hover:bg-parchment-50"
-                :class="c.id === activeId && 'bg-saffron-500/10'" @click="selectChat(c)" @contextmenu="onListContext($event, c)">
+                :class="c.id === activeId && 'bg-saffron-500/10'" @mousedown.prevent @click="selectChat(c)" @contextmenu="onListContext($event, c)">
           <img v-if="c.avatar_url" :src="thumbUrl(c.avatar_url)" @error="imgFull($event, c.avatar_url)" class="photo-bw h-11 w-11 shrink-0 rounded-full object-cover" />
           <span v-else class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-base font-semibold text-white"
                 :class="c.type === 'group' ? 'bg-gradient-to-br from-sage-400 to-sage-600' : 'bg-gradient-to-br from-saffron-400 to-saffron-600'">{{ initials(c.title) }}</span>
@@ -1200,8 +1202,8 @@ onBeforeUnmount(() => {
                @mousedown="selDragStart($event, m, i)" @mouseenter="selDragEnter(i)">
             <!-- аватар (в группах, слева от сообщения — и у чужих, и у своих) -->
             <template v-if="isGroup && !isMine(m)">
-              <img v-if="avatarOf(m) && isRunEnd(m, i)" :src="thumbUrl(avatarOf(m))" @error="imgFull($event, avatarOf(m))" class="photo-bw h-10 w-10 shrink-0 rounded-full object-cover" />
-              <span v-else-if="isRunEnd(m, i)" class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-sage-400 to-sage-600 text-sm font-semibold text-white">{{ initials(nameOf(m)) }}</span>
+              <img v-if="avatarOf(m) && isRunEnd(m, i)" :src="thumbUrl(avatarOf(m))" @error="imgFull($event, avatarOf(m))" class="photo-bw sticky bottom-1.5 h-10 w-10 shrink-0 rounded-full object-cover" />
+              <span v-else-if="isRunEnd(m, i)" class="sticky bottom-1.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-sage-400 to-sage-600 text-sm font-semibold text-white">{{ initials(nameOf(m)) }}</span>
               <span v-else class="h-10 w-10 shrink-0"></span>
             </template>
             <template v-else-if="isGroup && isMine(m)">

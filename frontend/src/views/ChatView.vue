@@ -1107,7 +1107,7 @@ onBeforeUnmount(() => {
                 </div>
                 <div class="flex shrink-0 items-center gap-1 pb-0.5 text-[11px]" :class="isMine(m) ? 'text-white/70' : 'text-ink-700/40'">
                   <span>{{ fmtTime(m.created_at) }}</span>
-                  <template v-if="statusOf(m)"><AppIcon v-if="statusOf(m) === 'pending'" name="clock" :size="15" /><AppIcon v-else-if="statusOf(m) === 'read'" name="check" :size="15" class="-mr-2" /><AppIcon v-if="statusOf(m) === 'read' || statusOf(m) === 'sent'" name="check" :size="15" /></template>
+                  <template v-if="statusOf(m)"><AppIcon v-if="statusOf(m) === 'pending'" name="clock" :size="15" /><AppIcon v-else-if="statusOf(m) === 'read'" name="check" :size="15" class="-mr-[9px]" /><AppIcon v-if="statusOf(m) === 'read' || statusOf(m) === 'sent'" name="check" :size="15" /></template>
                 </div>
               </div>
               <!-- без подписи: реакции слева + время справа, одной линией оверлеем на фото -->
@@ -1119,7 +1119,7 @@ onBeforeUnmount(() => {
                 </div>
                 <div class="pointer-events-auto ml-auto flex shrink-0 items-center gap-1 rounded-full bg-black/45 px-1.5 py-0.5 text-[11px] text-white">
                   <span>{{ fmtTime(m.created_at) }}</span>
-                  <template v-if="statusOf(m)"><AppIcon v-if="statusOf(m) === 'pending'" name="clock" :size="15" /><AppIcon v-else-if="statusOf(m) === 'read'" name="check" :size="15" class="-mr-2" /><AppIcon v-if="statusOf(m) === 'read' || statusOf(m) === 'sent'" name="check" :size="15" /></template>
+                  <template v-if="statusOf(m)"><AppIcon v-if="statusOf(m) === 'pending'" name="clock" :size="15" /><AppIcon v-else-if="statusOf(m) === 'read'" name="check" :size="15" class="-mr-[9px]" /><AppIcon v-if="statusOf(m) === 'read' || statusOf(m) === 'sent'" name="check" :size="15" /></template>
                 </div>
               </div>
             </div>
@@ -1174,7 +1174,7 @@ onBeforeUnmount(() => {
                   <template v-if="statusOf(m)">
                     <AppIcon v-if="statusOf(m) === 'pending'" name="clock" :size="15" />
                     <button v-else-if="statusOf(m) === 'failed'" class="text-red-200" title="Не отправлено — повторить" @click.stop="retryFailed"><AppIcon name="close" :size="15" /></button>
-                    <AppIcon v-else-if="statusOf(m) === 'read'" name="check" :size="15" class="-mr-2" />
+                    <AppIcon v-else-if="statusOf(m) === 'read'" name="check" :size="15" class="-mr-[9px]" />
                     <AppIcon v-if="statusOf(m) === 'read' || statusOf(m) === 'sent'" name="check" :size="15" />
                   </template>
                 </div>

@@ -980,7 +980,10 @@ onBeforeUnmount(() => {
       <div class="flex items-center gap-2 border-b border-parchment-200 p-3">
         <div class="relative flex-1">
           <AppIcon name="search" :size="16" class="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-700/40" />
-          <input v-model="search" class="input h-9 w-full pl-8 text-sm" placeholder="Поиск" @keydown.esc.prevent.stop />
+          <input v-model="search" class="input h-9 w-full pl-8 pr-8 text-sm" placeholder="Поиск"
+                 @keydown.esc.prevent.stop="search = ''" @keydown.down.stop.prevent @keydown.up.stop.prevent />
+          <button v-if="search" @click="search = ''" title="Очистить"
+                  class="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-700/40 hover:text-ink-700"><AppIcon name="close" :size="15" /></button>
         </div>
         <button class="btn-primary h-9 shrink-0 px-3" title="Новый чат" @click="openNew"><AppIcon name="plus" :size="18" /></button>
       </div>
@@ -1003,7 +1006,7 @@ onBeforeUnmount(() => {
                 <template v-if="lastStatus(c)">
                   <AppIcon v-if="lastStatus(c) === 'pending'" name="clock" :size="12" />
                   <AppIcon v-else-if="lastStatus(c) === 'failed'" name="close" :size="12" class="text-red-500" />
-                  <span v-else class="text-sky-500"><AppIcon :name="lastStatus(c) === 'read' ? 'check-double' : 'check'" :size="lastStatus(c) === 'read' ? 14 : 12" class="inline" /></span>
+                  <span v-else class="text-sky-500"><AppIcon :name="lastStatus(c) === 'read' ? 'check-double' : 'check'" :size="lastStatus(c) === 'read' ? 17 : 15" class="inline" /></span>
                 </template>
                 {{ fmtListTime(c.last?.created_at) }}
               </span>

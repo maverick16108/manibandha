@@ -580,6 +580,82 @@ func (s *Server) markChatRead(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// GET /api/chats/{id}/info — карточка чата: собеседник (direct) или участники (group)
+func (s *Server) chatInfo(w http.ResponseWriter, r *http.Request) {
+	id, _ := strconv.Atoi(chi.URLParam(r, "id"))
+	u := currentUser(r)
+	if _, code := s.requireMembership(u.ID, id); code != http.StatusOK {
+		httpErr(w, code, membershipMsg(code))
+		return
+	}
+	var chat models.Chat
+	if err := s.DB.Preload("Members.User").First(&chat, id).Error; err != nil {
+		httpErr(w, http.StatusNotFound, "Чат не найден")
+		return
+	}
+
+	if chat.Type == "direct" {
+		var peer *models.ChatMember
+		for i := range chat.Members {
+			if chat.Members[i].UserID != u.ID {
+				peer = &chat.Members[i]
+				break
+			}
+		}
+		info := map[string]any{"type": "direct"}
+		if peer != nil && peer.User != nil {
+			info["peer"] = s.userCard(peer.User)
+		}
+		writeJSON(w, http.StatusOK, info)
+		return
+	}
+
+	mems := make([]map[string]any, 0, len(chat.Members))
+	for i := range chat.Members {
+		mem := &chat.Members[i]
+		var name, av any
+		if mem.User != nil {
+			name = mem.User.FullName
+			av = mem.User.AvatarURL
+		}
+		mems = append(mems, map[string]any{
+			"id": mem.UserID, "name": name, "avatar": av, "role": mem.Role,
+			"is_owner": chat.CreatedBy != nil && *chat.CreatedBy == mem.UserID,
+			"online":   chatH.isOnline(mem.UserID),
+		})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"type": "group", "title": chat.Title, "photo": chat.PhotoURL,
+		"created_by": chat.CreatedBy, "members": mems,
+	})
+}
+
+// карточка пользователя (телефон/город/семейное — из анкеты ученика, если есть)
+func (s *Server) userCard(pu *models.User) map[string]any {
+	m := map[string]any{
+		"id": pu.ID, "name": pu.FullName, "avatar": pu.AvatarURL,
+		"phone": pu.Phone, "online": chatH.isOnline(pu.ID),
+	}
+	if pu.DiscipleID != nil {
+		var d models.Disciple
+		if s.DB.First(&d, *pu.DiscipleID).Error == nil {
+			if pu.AvatarURL == nil {
+				m["avatar"] = d.PhotoURL
+			}
+			if pu.Phone == nil {
+				m["phone"] = d.Phone
+			}
+			m["city"] = d.City
+			m["region"] = d.Region
+			m["country"] = d.Country
+			m["marital_status"] = d.MaritalStatus
+			m["gender"] = d.Gender
+			m["spiritual_name"] = d.SpiritualName
+		}
+	}
+	return m
+}
+
 // GET /api/chats/{id}/search?q=... — поиск по тексту сообщений внутри чата
 func (s *Server) searchChatMessages(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.Atoi(chi.URLParam(r, "id"))

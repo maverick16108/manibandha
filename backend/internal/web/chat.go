@@ -607,6 +607,26 @@ func (s *Server) chatInfo(w http.ResponseWriter, r *http.Request) {
 		info := map[string]any{"type": "direct"}
 		if peer != nil && peer.User != nil {
 			info["peer"] = s.userCard(peer.User)
+			// счётчики медиа в этом чате + общие группы (как в Telegram)
+			var c struct {
+				Photos, Videos, Files, Voice, Links int64
+			}
+			s.DB.Raw(`SELECT
+				count(*) FILTER (WHERE body LIKE '%![](%') AS photos,
+				count(*) FILTER (WHERE body LIKE '%@[video]%') AS videos,
+				count(*) FILTER (WHERE body LIKE '%@[file]%') AS files,
+				count(*) FILTER (WHERE body LIKE '%@[audio]%') AS voice,
+				count(*) FILTER (WHERE body LIKE '%http%' AND body NOT LIKE '%](%') AS links
+				FROM chat_messages WHERE chat_id = ? AND deleted = false`, id).Scan(&c)
+			var common int64
+			s.DB.Raw(`SELECT count(DISTINCT c.id) FROM chats c
+				JOIN chat_members a ON a.chat_id = c.id AND a.user_id = ?
+				JOIN chat_members b ON b.chat_id = c.id AND b.user_id = ?
+				WHERE c.type = 'group'`, u.ID, peer.UserID).Scan(&common)
+			info["counts"] = map[string]any{
+				"photos": c.Photos, "videos": c.Videos, "files": c.Files,
+				"voice": c.Voice, "links": c.Links, "common_groups": common,
+			}
 		}
 		writeJSON(w, http.StatusOK, info)
 		return

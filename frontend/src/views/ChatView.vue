@@ -464,7 +464,14 @@ function snippet(b) {
 // видео: маркер @[video](url|poster|bytes)
 const VIDEO_RE = /@\[video\]\(([^|)\s]+)\|([^|)]*)\|?([^)]*)\)/
 const VIDEO_AUTO_MAX = 10 * 1024 * 1024 // ≤10МБ авто-проигрываем, крупнее — постер с кнопкой
-const videoLoaded = reactive({})        // id видео, которые пользователь запустил вручную
+// уже просмотренные (скачанные) видео авто-проигрываются всегда, независимо от размера — храним в localStorage
+const VIDEO_LOADED_KEY = 'chatVideoLoaded'
+function loadVideoLoaded() { try { const o = {}; for (const id of JSON.parse(localStorage.getItem(VIDEO_LOADED_KEY) || '[]')) o[id] = true; return o } catch { return {} } }
+const videoLoaded = reactive(loadVideoLoaded())
+function markVideoLoaded(id) {
+  videoLoaded[id] = true
+  try { const ids = Object.keys(videoLoaded).map(Number); localStorage.setItem(VIDEO_LOADED_KEY, JSON.stringify(ids.slice(-300))) } catch { /* ignore */ }
+}
 function videoAuto(m) {
   const v = videoOf(m)
   if (!v) return false
@@ -749,14 +756,20 @@ function openVideoLightbox(m) { const i = mediaIndex(m, 0); openLightbox(allChat
 // сетка-альбом под количество фото (как в мессенджерах)
 function albumCols(n) { return n <= 1 ? '' : (n <= 4 ? 'grid-cols-2' : 'grid-cols-3') }
 function albumItemClass(n, k) { return (n === 3 && k === 0) ? 'col-span-2' : '' } // 3 фото: первое во всю ширину
-// резерв места под одиночное фото. ВСЕГДА задаём aspect-ratio (запомненный или дефолт),
-// картинка внутри — object-cover: место занято заранее, лента НИКОГДА не «прыгает».
+// пропорции по факту загрузки (реактивно) — бокс корректируется СРАЗУ при загрузке миниатюры,
+// а не через несколько секунд на следующей перерисовке
+const imgAspects = reactive({})
+function onImgLoad(e, u) {
+  const el = e.target
+  if (u && el.naturalWidth && el.naturalHeight && !imgAspects[u]) imgAspects[u] = el.naturalWidth / el.naturalHeight
+}
+// резерв места под одиночное фото — object-cover, лента не «прыгает».
 function photoBoxStyle(u) {
-  return { aspectRatio: String(imageAspect(u) || 1.4), maxHeight: '400px' }
+  return { aspectRatio: String(imgAspects[u] || imageAspect(u) || 1.4), maxHeight: '400px' }
 }
 // резерв места под видео (по постеру) — крупнее фото, до 70vh
 function videoBoxStyle(u) {
-  return { aspectRatio: String(imageAspect(u) || 0.7), maxHeight: '70vh' }
+  return { aspectRatio: String(imgAspects[u] || imageAspect(u) || 0.7), maxHeight: '70vh' }
 }
 
 // ── превью ссылок (OG-карточки) ───────────────────────────────────────────
@@ -1067,6 +1080,25 @@ function maritalLabel(v) {
 }
 const infoAvatar = computed(() => { const p = infoData.value?.peer; return p ? (p.avatar || null) : null })
 const cityLine = computed(() => { const p = infoData.value?.peer; return p ? [p.city, p.region].filter(Boolean).join(', ') : '' })
+function pluralWord(n, forms) { const a = n % 10, b = n % 100; if (a === 1 && b !== 11) return forms[0]; if (a >= 2 && a <= 4 && (b < 10 || b >= 20)) return forms[1]; return forms[2] }
+const infoCountRows = computed(() => {
+  const c = infoData.value?.counts; if (!c) return []
+  const rows = []
+  const add = (n, icon, forms) => { if (n > 0) rows.push({ n, icon, label: pluralWord(n, forms) }) }
+  add(c.photos, 'image', ['фотография', 'фотографии', 'фотографий'])
+  add(c.videos, 'video', ['видео', 'видео', 'видео'])
+  add(c.files, 'paperclip', ['файл', 'файла', 'файлов'])
+  add(c.links, 'link', ['ссылка', 'ссылки', 'ссылок'])
+  add(c.voice, 'mic', ['голосовое', 'голосовых', 'голосовых'])
+  add(c.common_groups, 'users', ['общая группа', 'общие группы', 'общих групп'])
+  return rows
+})
+function shareContact() {
+  const p = infoData.value?.peer; if (!p) return
+  const parts = [`👤 ${p.name || 'Контакт'}`]
+  if (p.phone) parts.push(`📞 ${p.phone}`)
+  closeInfo(); openForward([parts.join('\n')])
+}
 
 const showGroupEdit = ref(false)
 const gTitle = ref('')
@@ -1367,6 +1399,19 @@ onBeforeUnmount(() => {
                   <div v-if="infoData?.peer?.spiritual_name" class="px-6 py-3"><div class="text-[15px] text-ink-900">{{ infoData.peer.spiritual_name }}</div><div class="text-xs text-ink-700/50">Духовное имя</div></div>
                   <div v-if="cityLine" class="px-6 py-3"><div class="text-[15px] text-ink-900">{{ cityLine }}</div><div class="text-xs text-ink-700/50">Город</div></div>
                 </div>
+                <!-- счётчики медиа (как в Telegram) -->
+                <div v-if="infoCountRows.length" class="divide-y divide-parchment-100 border-t border-parchment-200">
+                  <div v-for="row in infoCountRows" :key="row.icon" class="flex items-center gap-3 px-6 py-3">
+                    <AppIcon :name="row.icon" :size="20" class="shrink-0 text-ink-700/50" />
+                    <span class="text-[15px] text-ink-900"><b class="tabular-nums">{{ row.n }}</b> {{ row.label }}</span>
+                  </div>
+                </div>
+                <!-- поделиться контактом -->
+                <div class="border-t border-parchment-200 p-2">
+                  <button class="flex w-full items-center gap-3 rounded-lg px-4 py-2.5 text-left text-[15px] text-saffron-700 hover:bg-parchment-100" @click="shareContact">
+                    <AppIcon name="reply" :size="19" class="-scale-x-100" /> Поделиться контактом
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -1424,8 +1469,8 @@ onBeforeUnmount(() => {
                   </span>
                 </template>
                 <template v-else>
-                  <img :src="thumbUrl(videoOf(m)?.poster || '')" @error="imgFull($event, videoOf(m)?.poster)" class="block h-full w-full object-cover" />
-                  <button class="absolute inset-0 flex items-center justify-center" @click.stop="videoLoaded[m.id] = true; openVideoLightbox(m)" title="Смотреть видео">
+                  <img :src="thumbUrl(videoOf(m)?.poster || '')" @error="imgFull($event, videoOf(m)?.poster)" @load="onImgLoad($event, videoOf(m)?.poster)" class="block h-full w-full object-cover" />
+                  <button class="absolute inset-0 flex items-center justify-center" @click.stop="markVideoLoaded(m.id); openVideoLightbox(m)" title="Смотреть видео">
                     <span class="flex h-14 w-14 items-center justify-center rounded-full bg-black/50 text-white ring-2 ring-white/40"><AppIcon name="play" :size="26" /></span>
                   </button>
                 </template>
@@ -1435,7 +1480,7 @@ onBeforeUnmount(() => {
                 <div class="flex flex-wrap gap-1">
                   <button v-for="r in parseReactions(m)" :key="r.emoji" @click.stop="onChip(m, r.emoji)" @contextmenu.prevent.stop="openWho($event, r)" title="ПКМ — кто поставил"
                           class="flex items-center gap-1 rounded-full px-2 py-0.5 leading-none ring-1 transition"
-                          :class="m.my_reaction === r.emoji ? 'bg-saffron-500/25 text-saffron-800 ring-saffron-400' : 'bg-saffron-500/10 text-ink-700 ring-transparent hover:bg-saffron-500/20'"><span class="text-lg leading-none">{{ r.emoji }}</span><span v-if="r.count < 4 && r.who && r.who.length" class="flex items-center"><template v-for="(w, wi) in r.who" :key="wi"><img v-if="w.avatar" :src="thumbUrl(w.avatar)" class="block h-[18px] w-[18px] rounded-full object-cover ring-2 ring-white" :class="wi > 0 && '-ml-2'" /><span v-else class="flex h-[18px] w-[18px] items-center justify-center rounded-full bg-sage-500 text-[8px] font-semibold text-white ring-2 ring-white" :class="wi > 0 && '-ml-2'">{{ initials(w.name) }}</span></template></span><span v-else-if="r.count > 1" class="text-sm font-semibold tabular-nums">{{ r.count }}</span></button>
+                          :class="m.my_reaction === r.emoji ? 'bg-saffron-500/25 text-saffron-800 ring-saffron-400' : 'bg-saffron-500/10 text-ink-700 ring-transparent hover:bg-saffron-500/20'"><span class="text-lg leading-none">{{ r.emoji }}</span><span v-if="r.count < 4 && r.who && r.who.length" class="flex items-center"><template v-for="(w, wi) in r.who" :key="wi"><img v-if="w.avatar" :src="thumbUrl(w.avatar)" class="block h-[17px] w-[17px] rounded-full object-cover" :class="wi > 0 && '-ml-1.5'" /><span v-else class="flex h-[17px] w-[17px] items-center justify-center rounded-full bg-sage-500 text-[8px] font-semibold text-white" :class="wi > 0 && '-ml-1.5'">{{ initials(w.name) }}</span></template></span><span v-else-if="r.count > 1" class="text-sm font-semibold tabular-nums">{{ r.count }}</span></button>
                 </div>
                 <div class="flex shrink-0 items-center gap-1 pb-0.5 text-[11px]" :class="isMine(m) ? 'text-white/70' : 'text-ink-700/40'">
                   <span>{{ fmtTime(m.created_at) }}</span>
@@ -1462,7 +1507,7 @@ onBeforeUnmount(() => {
                 </div>
               </div>
               <div v-if="photoUrls(m).length === 1" class="w-full overflow-hidden" :style="photoBoxStyle(photoUrls(m)[0])">
-                <img :src="thumbUrl(photoUrls(m)[0])" @error="imgFull($event, photoUrls(m)[0])"
+                <img :src="thumbUrl(photoUrls(m)[0])" @error="imgFull($event, photoUrls(m)[0])" @load="onImgLoad($event, photoUrls(m)[0])"
                      class="block h-full max-h-[400px] w-full cursor-zoom-in object-cover" @click.stop="openPhoto(m, 0)" />
               </div>
               <div v-else class="grid gap-0.5" :class="albumCols(photoUrls(m).length)">
@@ -1476,7 +1521,7 @@ onBeforeUnmount(() => {
                 <div class="flex flex-wrap gap-1">
                   <button v-for="r in parseReactions(m)" :key="r.emoji" @click.stop="onChip(m, r.emoji)" @contextmenu.prevent.stop="openWho($event, r)" title="ПКМ — кто поставил"
                           class="flex items-center gap-1 rounded-full px-2 py-0.5 leading-none ring-1 transition"
-                          :class="m.my_reaction === r.emoji ? 'bg-saffron-500/25 text-saffron-800 ring-saffron-400' : 'bg-saffron-500/10 text-ink-700 ring-transparent hover:bg-saffron-500/20'"><span class="text-lg leading-none">{{ r.emoji }}</span><span v-if="r.count < 4 && r.who && r.who.length" class="flex items-center"><template v-for="(w, wi) in r.who" :key="wi"><img v-if="w.avatar" :src="thumbUrl(w.avatar)" class="block h-[18px] w-[18px] rounded-full object-cover ring-2 ring-white" :class="wi > 0 && '-ml-2'" /><span v-else class="flex h-[18px] w-[18px] items-center justify-center rounded-full bg-sage-500 text-[8px] font-semibold text-white ring-2 ring-white" :class="wi > 0 && '-ml-2'">{{ initials(w.name) }}</span></template></span><span v-else-if="r.count > 1" class="text-sm font-semibold tabular-nums">{{ r.count }}</span></button>
+                          :class="m.my_reaction === r.emoji ? 'bg-saffron-500/25 text-saffron-800 ring-saffron-400' : 'bg-saffron-500/10 text-ink-700 ring-transparent hover:bg-saffron-500/20'"><span class="text-lg leading-none">{{ r.emoji }}</span><span v-if="r.count < 4 && r.who && r.who.length" class="flex items-center"><template v-for="(w, wi) in r.who" :key="wi"><img v-if="w.avatar" :src="thumbUrl(w.avatar)" class="block h-[17px] w-[17px] rounded-full object-cover" :class="wi > 0 && '-ml-1.5'" /><span v-else class="flex h-[17px] w-[17px] items-center justify-center rounded-full bg-sage-500 text-[8px] font-semibold text-white" :class="wi > 0 && '-ml-1.5'">{{ initials(w.name) }}</span></template></span><span v-else-if="r.count > 1" class="text-sm font-semibold tabular-nums">{{ r.count }}</span></button>
                 </div>
                 <div class="flex shrink-0 items-center gap-1 pb-0.5 text-[11px]" :class="isMine(m) ? 'text-white/70' : 'text-ink-700/40'">
                   <span>{{ fmtTime(m.created_at) }}</span>
@@ -1488,7 +1533,7 @@ onBeforeUnmount(() => {
                 <div class="pointer-events-auto flex flex-wrap gap-1">
                   <button v-for="r in parseReactions(m)" :key="r.emoji" @click.stop="onChip(m, r.emoji)" @contextmenu.prevent.stop="openWho($event, r)" title="ПКМ — кто поставил"
                           class="inline-flex items-center gap-1 rounded-full bg-black/45 px-1.5 py-0.5 text-white ring-1 ring-white/20"
-                          :class="m.my_reaction === r.emoji && 'ring-2 ring-white/70'"><span class="text-base leading-none">{{ r.emoji }}</span><span v-if="r.count < 4 && r.who && r.who.length" class="flex items-center"><template v-for="(w, wi) in r.who" :key="wi"><img v-if="w.avatar" :src="thumbUrl(w.avatar)" class="block h-4 w-4 rounded-full object-cover ring-2 ring-black/40" :class="wi > 0 && '-ml-2'" /><span v-else class="flex h-4 w-4 items-center justify-center rounded-full bg-sage-500 text-[7px] font-semibold text-white ring-2 ring-black/40" :class="wi > 0 && '-ml-2'">{{ initials(w.name) }}</span></template></span><span v-else-if="r.count > 1" class="text-xs font-semibold tabular-nums">{{ r.count }}</span></button>
+                          :class="m.my_reaction === r.emoji && 'ring-2 ring-white/70'"><span class="text-base leading-none">{{ r.emoji }}</span><span v-if="r.count < 4 && r.who && r.who.length" class="flex items-center"><template v-for="(w, wi) in r.who" :key="wi"><img v-if="w.avatar" :src="thumbUrl(w.avatar)" class="block h-4 w-4 rounded-full object-cover ring-1 ring-black/20" :class="wi > 0 && '-ml-1.5'" /><span v-else class="flex h-4 w-4 items-center justify-center rounded-full bg-sage-500 text-[7px] font-semibold text-white ring-1 ring-black/20" :class="wi > 0 && '-ml-1.5'">{{ initials(w.name) }}</span></template></span><span v-else-if="r.count > 1" class="text-xs font-semibold tabular-nums">{{ r.count }}</span></button>
                 </div>
                 <div class="pointer-events-auto ml-auto flex shrink-0 items-center gap-1 rounded-full bg-black/45 px-1.5 py-0.5 text-[11px] text-white">
                   <span>{{ fmtTime(m.created_at) }}</span>
@@ -1543,7 +1588,7 @@ onBeforeUnmount(() => {
                           :class="isMine(m)
                             ? (m.my_reaction === r.emoji ? 'bg-white/25 ring-white/60' : 'bg-white/15 ring-white/20 hover:bg-white/25')
                             : (m.my_reaction === r.emoji ? 'bg-saffron-500/25 text-saffron-800 ring-saffron-400' : 'bg-saffron-500/10 text-ink-700 ring-transparent hover:bg-saffron-500/20')">
-                    <span class="text-lg leading-none">{{ r.emoji }}</span><span v-if="r.count < 4 && r.who && r.who.length" class="flex items-center"><template v-for="(w, wi) in r.who" :key="wi"><img v-if="w.avatar" :src="thumbUrl(w.avatar)" class="block h-[18px] w-[18px] rounded-full object-cover ring-2 ring-white" :class="wi > 0 && '-ml-2'" /><span v-else class="flex h-[18px] w-[18px] items-center justify-center rounded-full bg-sage-500 text-[8px] font-semibold text-white ring-2 ring-white" :class="wi > 0 && '-ml-2'">{{ initials(w.name) }}</span></template></span><span v-else-if="r.count > 1" class="text-sm font-semibold tabular-nums">{{ r.count }}</span>
+                    <span class="text-lg leading-none">{{ r.emoji }}</span><span v-if="r.count < 4 && r.who && r.who.length" class="flex items-center"><template v-for="(w, wi) in r.who" :key="wi"><img v-if="w.avatar" :src="thumbUrl(w.avatar)" class="block h-[17px] w-[17px] rounded-full object-cover" :class="wi > 0 && '-ml-1.5'" /><span v-else class="flex h-[17px] w-[17px] items-center justify-center rounded-full bg-sage-500 text-[8px] font-semibold text-white" :class="wi > 0 && '-ml-1.5'">{{ initials(w.name) }}</span></template></span><span v-else-if="r.count > 1" class="text-sm font-semibold tabular-nums">{{ r.count }}</span>
                   </button>
                 </div>
                 <span v-else></span>

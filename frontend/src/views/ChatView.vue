@@ -13,7 +13,7 @@ import { showToast } from '../composables/toast'
 import { confirmDialog } from '../composables/confirm'
 import { usePageTitle } from '../composables/pageTitle'
 import {
-  chatState, initChat, openChat, closeChat, sendMessage, sendTyping,
+  chatState, initChat, openChat, closeChat, sendMessage, sendMessageTo, sendTyping,
   editMessage, deleteMessage, retryFailed, loadOlder, loadContacts, startDirect, startGroup,
   reactMessage, REACTION_EMOJIS, updateChat, pinChat, leaveChat, forwardMessages, loadAroundSeq, markActiveRead, imageAspect, expandWindow, reorderPins,
   pinMessageInChat, unpinMessageInChat,
@@ -345,7 +345,7 @@ async function confirmDelete() {
   await deleteMessage(m.id, everyone)
 }
 function cleanBody(b) {
-  return (b || '').replace(/@\[audio\]\([^)]*\)/g, '🎤 Голосовое сообщение').replace(/!\[[^\]]*\]\([^)]*\)/g, '').trim()
+  return (b || '').replace(/@\[audio\]\([^)]*\)/g, '🎤 Голосовое сообщение').replace(/@\[videonote\]\([^)]*\)/g, '📹 Видеосообщение').replace(/!\[[^\]]*\]\([^)]*\)/g, '').trim()
 }
 
 // ── выделение нескольких сообщений (переслать / удалить) ───────────────────
@@ -447,7 +447,7 @@ async function confirmDeleteSelected() {
 // копировать можно только когда есть текст (голосовое/фото — нечего копировать)
 function canCopy(m) {
   if (!m) return false
-  const t = (m.body || '').replace(/@\[audio\]\([^)]*\)/g, '').replace(/!\[[^\]]*\]\([^)]*\)/g, '').trim()
+  const t = (m.body || '').replace(/@\[audio\]\([^)]*\)/g, '').replace(/@\[videonote\]\([^)]*\)/g, '').replace(/!\[[^\]]*\]\([^)]*\)/g, '').trim()
   return !!t
 }
 
@@ -468,6 +468,7 @@ function replyThumb(m) {
 function quoteText(b) {
   return (b || '')
     .replace(/@\[audio\]\([^)]*\)/g, '🎤 Голосовое')
+    .replace(/@\[videonote\]\([^)]*\)/g, '📹 Видеосообщение')
     .replace(/@\[video\]\([^)]*\)/g, 'Видео')
     .replace(/@\[file\]\([^|)]*\|([^)]*)\)/g, (_m, name) => { try { return '📎 ' + decodeURIComponent(name) } catch { return '📎 файл' } })
     .replace(/!\[[^\]]*\]\([^)]*\)/g, 'Фото')
@@ -491,6 +492,7 @@ function snippet(b) {
   return (b || '')
     .replace(FWD_RE, '')
     .replace(/@\[audio\]\([^)]*\)/g, '🎤 Голосовое')
+    .replace(/@\[videonote\]\([^)]*\)/g, '📹 Видеосообщение')
     .replace(/@\[video\]\([^)]*\)/g, 'Видео')
     .replace(/@\[file\]\([^|)]*\|([^)]*)\)/g, (_m, name) => { try { return '📎 ' + decodeURIComponent(name) } catch { return '📎 файл' } })
     .replace(/!\[[^\]]*\]\([^)]*\)/g, 'Фото')
@@ -515,6 +517,7 @@ function videoAuto(m) {
 // первый URL медиа-миниатюры (фото или постер видео) — для превью списка/ответа/правки
 function firstPhotoUrl(b) {
   const s = (b || '').replace(FWD_RE, '')
+  const vn = s.match(VIDEONOTE_RE); if (vn) return vn[2] || null
   const vm = s.match(VIDEO_RE); if (vm) return vm[2] || null
   if (/@\[audio\]|@\[file\]/.test(s)) return null
   const m = s.match(/!\[[^\]]*\]\(([^)]+)\)/)
@@ -641,7 +644,10 @@ function capturePoster(file) {
       const v = document.createElement('video')
       v.preload = 'metadata'; v.muted = true; v.playsInline = true
       const src = URL.createObjectURL(file); v.src = src
-      const done = (blob) => { URL.revokeObjectURL(src); resolve(blob ? { blob, url: URL.createObjectURL(blob) } : null) }
+      let settled = false
+      const done = (blob) => { if (settled) return; settled = true; clearTimeout(guard); URL.revokeObjectURL(src); resolve(blob ? { blob, url: URL.createObjectURL(blob) } : null) }
+      // некоторые кодеки не дают ни seeked, ни error — не ждём вечно
+      const guard = setTimeout(() => done(null), 3000)
       v.onloadeddata = () => { try { v.currentTime = Math.min(0.1, (v.duration || 1) / 2) } catch { done(null) } }
       v.onseeked = () => {
         try {
@@ -674,7 +680,7 @@ async function uploadOne(file) {
 }
 async function runUpload(pu) {
   pu.failed = false
-  const { cap, imgs, vids, files } = pu
+  const { cap, imgs, vids, files, chatId } = pu
   try {
     let capUsed = false
     // альбом изображений — одним сообщением
@@ -682,7 +688,7 @@ async function runUpload(pu) {
       const urls = await Promise.all(imgs.map((it) => uploadOne(it.file)))
       let body = urls.map((u) => `![](${u})`).join('')
       if (cap && !vids.length && !files.length) { body += `\n${cap}`; capUsed = true }
-      await sendMessage(body)
+      await sendMessageTo(chatId, body)
     }
     // видео — каждое отдельным сообщением (видео + постер)
     for (const it of vids) {
@@ -691,7 +697,7 @@ async function runUpload(pu) {
       if (it.posterBlob) { try { purl = await uploadOne(new File([it.posterBlob], 'poster.jpg', { type: 'image/jpeg' })) } catch { purl = '' } }
       let s = `@[video](${vurl}|${purl}|${it.file.size || 0})`
       if (cap && !capUsed && !files.length) { s += `\n${cap}`; capUsed = true }
-      await sendMessage(s)
+      await sendMessageTo(chatId, s)
     }
     // прочие файлы
     for (const it of files) {
@@ -699,7 +705,7 @@ async function runUpload(pu) {
       const name = (it.file.name || 'файл').replace(/[|)(]/g, '_')
       let s = `@[file](${url}|${encodeURIComponent(name)})`
       if (cap && !capUsed) { s += `\n${cap}`; capUsed = true }
-      await sendMessage(s)
+      await sendMessageTo(chatId, s)
       if (it.url) URL.revokeObjectURL(it.url)
     }
     removePending(pu)
@@ -715,9 +721,12 @@ async function sendCompose() {
   const imgs = compress ? items.filter((it) => it.isImage) : []       // «сжать» → альбом ![]
   const files = items.filter((it) => !it.isVideo && !imgs.includes(it)) // остальное — файлами
   composeItems.value = []; composeCaption.value = ''; composeCompress.value = true
+  // постер видео мог не успеть сняться к моменту нажатия «Отправить» — дожимаем (с таймаутом),
+  // иначе в превью попадал бы blob самого видео и <img> ломался в «точку».
+  await Promise.all(vids.map(async (it) => { if (!it.posterBlob) { const r = await capturePoster(it.file); if (r) { it.posterBlob = r.blob; it.poster = r.url } } }))
   const previews = [
     ...imgs.map((it) => ({ url: it.url })),
-    ...vids.map((it) => ({ url: it.poster || it.url, isVideo: true })),
+    ...vids.map((it) => ({ url: it.poster || null, isVideo: true })),
   ]
   const pu = reactive({ id: `up-${uploadSeq++}`, chatId, cap, imgs, vids, files, failed: false, previews })
   if (previews.length) { pendingUploads.push(pu); nextTick(scrollToBottom) }
@@ -763,7 +772,7 @@ function photoUrls(m) {
   if (m.deleted || /@\[audio\]|@\[file\]/.test(b)) return []
   const urls = []; b.replace(/!\[[^\]]*\]\(([^)]+)\)/g, (_x, u) => { urls.push(u); return '' }); return urls
 }
-function captionText(m) { return contentBody(m).replace(/!\[[^\]]*\]\([^)]*\)/g, '').replace(VIDEO_RE, '').trim() }
+function captionText(m) { return contentBody(m).replace(/!\[[^\]]*\]\([^)]*\)/g, '').replace(VIDEO_RE, '').replace(VIDEONOTE_RE, '').trim() }
 function isPhoto(m) { return photoUrls(m).length > 0 }
 // все фото чата по порядку — для навигации в лайтбоксе (←/→, свайп)
 // все медиа чата (фото и видео) по порядку — для навигации в лайтбоксе
@@ -788,6 +797,7 @@ function mediaIndex(m, k) {
 }
 function openPhoto(m, k) { const i = mediaIndex(m, k); openLightbox(allChatMedia.value[i]?.url, allChatMedia.value, i) }
 function openVideoLightbox(m) { const i = mediaIndex(m, 0); openLightbox(allChatMedia.value[i]?.url, allChatMedia.value, i) }
+function openVideoNote(m) { const v = videoNoteOf(m); if (v) openLightbox(v.url, [{ url: v.url, mid: m.id, video: true, poster: v.poster }], 0) }
 // сетка-альбом под количество фото (как в мессенджерах)
 function albumCols(n) { return n <= 1 ? '' : (n <= 4 ? 'grid-cols-2' : 'grid-cols-3') }
 function albumItemClass(n, k) { return (n === 3 && k === 0) ? 'col-span-2' : '' } // 3 фото: первое во всю ширину
@@ -921,6 +931,65 @@ async function onRecStop() {
 }
 function stopRec() { if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop() }
 function cancelRec() { recCanceled = true; stopRec() }
+
+// ── кружки (видео-записи с камеры) ─────────────────────────────────────────
+const vnRecording = ref(false)
+const vnSeconds = ref(0)
+const vnPreview = ref(null)
+let vnRecorder = null; let vnChunks = []; let vnStream = null; let vnTimer = null; let vnStart = 0; let vnCanceled = false
+function pickVideoMime() {
+  for (const c of ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4']) {
+    if (window.MediaRecorder && MediaRecorder.isTypeSupported(c)) return c
+  }
+  return ''
+}
+async function startVideoNote() {
+  if (vnRecording.value || recording.value) return
+  if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) { alert('Запись не поддерживается'); return }
+  try { vnStream = await navigator.mediaDevices.getUserMedia({ video: { width: 480, height: 480, facingMode: 'user' }, audio: true }) }
+  catch { alert('Нет доступа к камере'); return }
+  vnChunks = []; vnCanceled = false
+  vnRecording.value = true; vnSeconds.value = 0; vnStart = Date.now()
+  await nextTick()
+  if (vnPreview.value) { vnPreview.value.srcObject = vnStream; vnPreview.value.muted = true; vnPreview.value.play().catch(() => {}) }
+  const mime = pickVideoMime()
+  vnRecorder = new MediaRecorder(vnStream, mime ? { mimeType: mime } : undefined)
+  vnRecorder.ondataavailable = (e) => { if (e.data && e.data.size) vnChunks.push(e.data) }
+  vnRecorder.onstop = onVideoNoteStop
+  vnRecorder.start()
+  clearInterval(vnTimer)
+  vnTimer = setInterval(() => { vnSeconds.value = Math.floor((Date.now() - vnStart) / 1000); if (vnSeconds.value >= 60) stopVideoNote() }, 250)
+}
+function cleanupVN() {
+  clearInterval(vnTimer); vnTimer = null; vnRecording.value = false
+  if (vnStream) { vnStream.getTracks().forEach((t) => t.stop()); vnStream = null }
+}
+async function onVideoNoteStop() {
+  const mime = vnRecorder?.mimeType || 'video/webm'
+  // постер снимаем с последнего кадра превью ДО остановки стрима
+  let posterBlob = null
+  try {
+    const v = vnPreview.value
+    if (v && v.videoWidth) { const c = document.createElement('canvas'); c.width = v.videoWidth; c.height = v.videoHeight; c.getContext('2d').drawImage(v, 0, 0); posterBlob = await new Promise((r) => c.toBlob(r, 'image/jpeg', 0.82)) }
+  } catch { /* ignore */ }
+  cleanupVN()
+  if (vnCanceled || !vnChunks.length) { vnChunks = []; return }
+  const blob = new Blob(vnChunks, { type: mime }); vnChunks = []
+  uploading.value = true
+  try {
+    const ext = mime.includes('mp4') ? 'mp4' : 'webm'
+    const vurl = await uploadOne(new File([blob], `videonote.${ext}`, { type: mime }))
+    let purl = ''
+    if (posterBlob) { try { purl = await uploadOne(new File([posterBlob], 'poster.jpg', { type: 'image/jpeg' })) } catch { purl = '' } }
+    await sendMessage(`@[videonote](${vurl}|${purl})`); scrollToBottom()
+  } catch { showToast('Не удалось отправить кружок') } finally { uploading.value = false }
+}
+function stopVideoNote() { if (vnRecorder && vnRecorder.state !== 'inactive') vnRecorder.stop() }
+function cancelVideoNote() { vnCanceled = true; stopVideoNote() }
+// маркер кружка @[videonote](url|poster)
+const VIDEONOTE_RE = /@\[videonote\]\(([^|)\s]+)\|([^)]*)\)/
+function isVideoNote(m) { return VIDEONOTE_RE.test(m?.body || '') }
+function videoNoteOf(m) { const mm = contentBody(m).match(VIDEONOTE_RE); return mm ? { url: mm[1], poster: mm[2] || '' } : null }
 
 // ── участники / статусы ───────────────────────────────────────────────────
 const isMine = (m) => m.author_id === chatState.meId
@@ -1504,8 +1573,30 @@ onBeforeUnmount(() => {
               <span v-else class="h-10 w-10 shrink-0"></span>
             </template>
             <!-- ФОТО-сообщение: без «полей» пузыря (как в телеге) -->
+            <!-- кружок (видео-запись) — круглый плеер, авто muted+loop, клик → на весь экран -->
+            <div v-if="isVideoNote(m)" class="flex flex-col gap-1" @contextmenu="onContext($event, m)">
+              <div class="relative h-52 w-52 overflow-hidden rounded-full bg-black shadow-sm">
+                <video :src="videoNoteOf(m).url" :poster="thumbUrl(videoNoteOf(m).poster || '')" autoplay muted loop playsinline
+                       class="h-full w-full -scale-x-100 object-cover" @timeupdate="onVideoTime($event, m)"></video>
+                <div class="absolute inset-0 cursor-pointer rounded-full" @click.stop="openVideoNote(m)"></div>
+                <span class="pointer-events-none absolute bottom-2.5 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-full bg-black/55 px-2.5 py-0.5 text-xs text-white">
+                  <AppIcon name="volume-x" :size="13" /><span class="tabular-nums">{{ videoState[m.id]?.remain || '' }}</span>
+                </span>
+              </div>
+              <div class="flex items-center gap-2 px-1" :class="isMine(m) ? 'justify-end' : ''">
+                <div class="flex flex-wrap gap-1">
+                  <button v-for="r in parseReactions(m)" :key="r.emoji" @click.stop="onChip(m, r.emoji)" @contextmenu.prevent.stop="openWho($event, r)"
+                          class="flex items-center gap-1 rounded-full px-2 py-0.5 leading-none ring-1 transition"
+                          :class="m.my_reaction === r.emoji ? 'bg-saffron-500/25 text-saffron-800 ring-saffron-400' : 'bg-saffron-500/10 text-ink-700 ring-transparent hover:bg-saffron-500/20'"><span class="text-base leading-none">{{ r.emoji }}</span><span v-if="r.count > 1" class="text-sm font-semibold tabular-nums">{{ r.count }}</span></button>
+                </div>
+                <div class="flex shrink-0 items-center gap-1 text-[11px] text-ink-700/40">
+                  <span>{{ fmtTime(m.created_at) }}</span>
+                  <template v-if="statusOf(m)"><AppIcon v-if="statusOf(m) === 'pending'" name="clock" :size="15" /><AppIcon v-else-if="statusOf(m) === 'read'" name="check-double" :size="16" /><AppIcon v-else-if="statusOf(m) === 'sent'" name="check" :size="15" /></template>
+                </div>
+              </div>
+            </div>
             <!-- видео-сообщение -->
-            <div v-if="isVideoMsg(m)" class="relative overflow-hidden rounded-2xl shadow-sm"
+            <div v-else-if="isVideoMsg(m)" class="relative overflow-hidden rounded-2xl shadow-sm"
                  :class="[wide ? 'max-w-[420px]' : 'max-w-[80%]', isMine(m) ? 'bg-saffron-500 text-white' : 'bg-white text-ink-900 ring-1 ring-parchment-200']"
                  @contextmenu="onContext($event, m)">
               <div v-if="showAuthor(m, i)" class="cursor-pointer px-3 pt-2 text-sm font-semibold text-sage-600 hover:underline" @click.stop="openUserInfo(m.author_id)">{{ nameOf(m) }}</div>
@@ -1676,7 +1767,8 @@ onBeforeUnmount(() => {
             <div class="relative max-w-[78%] overflow-hidden rounded-2xl bg-saffron-500 shadow-sm">
               <div class="grid gap-0.5" :class="albumCols(pu.previews.length)">
                 <div v-for="(p, k) in pu.previews" :key="k" class="relative" :class="albumItemClass(pu.previews.length, k)">
-                  <img :src="p.url" class="w-full object-cover" :class="pu.previews.length === 1 ? 'max-h-[400px]' : 'aspect-square'" />
+                  <img v-if="p.url" :src="p.url" class="w-full object-cover" :class="pu.previews.length === 1 ? 'max-h-[400px]' : 'aspect-square'" />
+                  <div v-else class="flex w-full items-center justify-center bg-ink-900/80" :class="pu.previews.length === 1 ? 'h-64' : 'aspect-square'"><AppIcon name="play" :size="30" class="text-white/70" /></div>
                   <div class="absolute inset-0 flex items-center justify-center bg-black/30">
                     <span v-if="!pu.failed" class="h-7 w-7 animate-spin rounded-full border-2 border-white/40 border-t-white"></span>
                     <button v-else class="flex items-center gap-1 rounded-full bg-black/55 px-3 py-1.5 text-xs font-medium text-white" @click="retryPending(pu)"><AppIcon name="reply" :size="14" class="-scale-x-100" /> Повторить</button>
@@ -1744,9 +1836,33 @@ onBeforeUnmount(() => {
             <button v-if="body.trim()" class="mb-0.5 shrink-0 rounded-full bg-saffron-500 p-2 text-white hover:bg-saffron-600" title="Отправить" @click="send">
               <AppIcon name="send" :size="20" />
             </button>
-            <button v-else class="mb-0.5 shrink-0 rounded-full p-2 text-ink-700/60 hover:bg-parchment-100 hover:text-saffron-600" title="Голосовое" :disabled="uploading" @click="startRec">
-              <AppIcon name="mic" :size="24" />
-            </button>
+            <template v-else>
+              <button class="mb-0.5 shrink-0 rounded-full p-2 text-ink-700/60 hover:bg-parchment-100 hover:text-saffron-600" title="Кружок (видео)" :disabled="uploading" @click="startVideoNote">
+                <AppIcon name="video" :size="24" />
+              </button>
+              <button class="mb-0.5 shrink-0 rounded-full p-2 text-ink-700/60 hover:bg-parchment-100 hover:text-saffron-600" title="Голосовое" :disabled="uploading" @click="startRec">
+                <AppIcon name="mic" :size="24" />
+              </button>
+            </template>
+          </div>
+
+          <!-- запись кружка: круглое превью с камеры + таймер + отправить/отмена -->
+          <div v-if="vnRecording" class="absolute inset-0 z-40 flex flex-col items-center justify-center gap-5 bg-parchment-100/95 backdrop-blur-sm">
+            <div class="relative h-64 w-64 overflow-hidden rounded-full bg-black shadow-xl ring-4 ring-saffron-400">
+              <video ref="vnPreview" class="h-full w-full -scale-x-100 object-cover" muted playsinline></video>
+              <span class="absolute left-1/2 top-3 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-black/55 px-3 py-1 text-sm text-white">
+                <span class="h-2 w-2 animate-pulse rounded-full bg-red-500"></span>
+                <span class="tabular-nums">{{ fmtRec(vnSeconds) }}</span>
+              </span>
+            </div>
+            <div class="flex items-center gap-4">
+              <button class="flex h-12 w-12 items-center justify-center rounded-full bg-white text-ink-700 shadow ring-1 ring-parchment-200 hover:bg-parchment-50" title="Отмена" @click="cancelVideoNote">
+                <AppIcon name="close" :size="24" />
+              </button>
+              <button class="flex h-14 w-14 items-center justify-center rounded-full bg-saffron-500 text-white shadow-lg hover:bg-saffron-600" title="Отправить кружок" @click="stopVideoNote">
+                <AppIcon name="send" :size="24" />
+              </button>
+            </div>
           </div>
         </div>
       </template>

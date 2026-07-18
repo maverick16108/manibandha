@@ -283,6 +283,13 @@ export async function sendMessage(body, replyToId = null, replyQuote = null) {
   await markReadNow();
 }
 
+// Отправка в КОНКРЕТНЫЙ чат (для фоновых загрузок: активный чат мог смениться,
+// пока грузилось видео/файл — сообщение должно уйти в свой чат, а не в текущий).
+export async function sendMessageTo(chatId, body) {
+  if (!chatId || !(body || '').trim()) return;
+  await engine?.send(chatId, body);
+}
+
 export async function updateChat(chatId, payload) {
   await engine?.updateChat(chatId, payload);
 }

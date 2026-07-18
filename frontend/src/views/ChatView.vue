@@ -511,27 +511,57 @@ function addComposeItems(files, compress) {
 function removeComposeItem(it) { const i = composeItems.value.indexOf(it); if (i < 0) return; if (it.url) URL.revokeObjectURL(it.url); composeItems.value.splice(i, 1) }
 function cancelCompose() { composeItems.value.forEach((it) => it.url && URL.revokeObjectURL(it.url)); composeItems.value = []; composeCaption.value = ''; composeCompress.value = true }
 function onComposeAdd(ev) { addComposeItems(ev.target.files || []); if (composeInput.value) composeInput.value.value = '' }
+// оптимистичная отправка вложений: диалог закрывается мгновенно, фото сразу видно в чате
+// с лоадером, загрузка идёт в фоне, затем сообщение уходит на сервер.
+const pendingUploads = reactive([])
+let uploadSeq = 0
+function removePending(pu) {
+  const i = pendingUploads.indexOf(pu); if (i >= 0) pendingUploads.splice(i, 1)
+  pu.previews.forEach((p) => p.url && URL.revokeObjectURL(p.url))
+}
+async function uploadOne(file) {
+  const fd = new FormData(); fd.append('files', file)
+  const { data } = await client.post('/uploads', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+  const url = data.urls?.[0]; if (!url) throw new Error('no url')
+  return url
+}
+async function runUpload(pu) {
+  pu.failed = false
+  const { compress, cap, imgs, files } = pu
+  try {
+    if (imgs.length) {
+      const urls = await Promise.all(imgs.map((it) => uploadOne(it.file)))
+      let body = urls.map((u) => `![](${u})`).join('')
+      if (cap && !files.length) body += `\n${cap}`
+      await sendMessage(body)
+      removePending(pu)
+    }
+    let first = !imgs.length
+    for (const it of files) {
+      const url = await uploadOne(it.file)
+      const name = (it.file.name || 'файл').replace(/[|)(]/g, '_')
+      let s = `@[file](${url}|${encodeURIComponent(name)})`
+      if (first && cap) { s += `\n${cap}`; first = false }
+      await sendMessage(s)
+      if (it.url) URL.revokeObjectURL(it.url)
+    }
+    scrollToBottom()
+  } catch { pu.failed = true }
+}
+function retryPending(pu) { runUpload(pu) }
 async function sendCompose() {
   const items = [...composeItems.value]; const cap = composeCaption.value.trim(); const compress = composeCompress.value
   if (!items.length) return
-  uploading.value = true
-  try {
-    let first = true
-    for (const it of items) {
-      const fd = new FormData(); fd.append('files', it.file)
-      let data
-      try { ({ data } = await client.post('/uploads', fd, { headers: { 'Content-Type': 'multipart/form-data' } })) }
-      catch (e) { showToast(e.response?.data?.detail || 'Не удалось загрузить'); continue }
-      const url = data.urls?.[0]; if (!url) continue
-      let bodyStr
-      if (it.isImage && compress) bodyStr = `![](${url})`
-      else { const name = (it.file.name || 'файл').replace(/[|)(]/g, '_'); bodyStr = `@[file](${url}|${encodeURIComponent(name)})` }
-      if (first && cap) bodyStr += `\n${cap}`
-      first = false
-      await sendMessage(bodyStr)
-    }
-    scrollToBottom()
-  } finally { uploading.value = false; cancelCompose() }
+  const chatId = activeId.value
+  // с «сжать» — картинки идут альбомом (![]); без сжатия — всё как файлы
+  const imgs = compress ? items.filter((it) => it.isImage) : []
+  const files = compress ? items.filter((it) => !it.isImage) : items
+  // закрываем диалог мгновенно, blob-превью переносим в pending (НЕ revoke)
+  composeItems.value = []; composeCaption.value = ''; composeCompress.value = true
+  const pu = reactive({ id: `up-${uploadSeq++}`, chatId, compress, cap, imgs, files, failed: false,
+    previews: imgs.map((it) => ({ url: it.url })) })
+  if (imgs.length) { pendingUploads.push(pu); nextTick(scrollToBottom) }
+  runUpload(pu)
 }
 
 async function onPickFile(ev) {
@@ -566,6 +596,9 @@ function photoUrls(m) {
 }
 function captionText(m) { return contentBody(m).replace(/!\[[^\]]*\]\([^)]*\)/g, '').trim() }
 function isPhoto(m) { return photoUrls(m).length > 0 }
+// сетка-альбом под количество фото (как в мессенджерах)
+function albumCols(n) { return n <= 1 ? '' : (n <= 4 ? 'grid-cols-2' : 'grid-cols-3') }
+function albumItemClass(n, k) { return (n === 3 && k === 0) ? 'col-span-2' : '' } // 3 фото: первое во всю ширину
 
 // ── превью ссылок (OG-карточки) ───────────────────────────────────────────
 // url → объект превью | false (нет/в процессе). Ключ `url in linkPreviews` — «уже запрашивали».
@@ -1098,8 +1131,13 @@ onBeforeUnmount(() => {
                   <div class="whitespace-pre-wrap break-words text-ink-700/70">{{ m.reply_preview }}</div>
                 </div>
               </div>
-              <img v-for="(u, k) in photoUrls(m)" :key="k" :src="u" loading="lazy"
-                   class="block max-h-[400px] w-full cursor-zoom-in object-cover" @click.stop="openLightbox(u)" />
+              <img v-if="photoUrls(m).length === 1" :src="photoUrls(m)[0]" loading="lazy"
+                   class="block max-h-[400px] w-full cursor-zoom-in object-cover" @click.stop="openLightbox(photoUrls(m)[0])" />
+              <div v-else class="grid gap-0.5" :class="albumCols(photoUrls(m).length)">
+                <img v-for="(u, k) in photoUrls(m).slice(0, 10)" :key="k" :src="u" loading="lazy"
+                     class="aspect-square w-full cursor-zoom-in object-cover" :class="albumItemClass(photoUrls(m).length, k)"
+                     @click.stop="openLightbox(u)" />
+              </div>
               <div v-if="captionText(m)" class="markdown-body break-words px-3.5 pt-1.5 text-[15px]" :class="isMine(m) && 'markdown-on-accent'" v-html="renderChatBody(captionText(m))"></div>
               <!-- реакции + время в одной строке (с подписью) -->
               <div v-if="captionText(m)" class="flex items-end justify-between gap-2 px-2.5 pb-1.5 pt-1">
@@ -1190,6 +1228,22 @@ onBeforeUnmount(() => {
             </div>
           </div>
           </template>
+
+          <!-- оптимистичные загрузки фото (мгновенно, с лоадером; уходят на сервер в фоне) -->
+          <div v-for="pu in pendingUploads.filter((p) => p.chatId === activeId && p.previews.length)" :key="pu.id" class="flex justify-end px-1">
+            <div class="relative max-w-[78%] overflow-hidden rounded-2xl bg-saffron-500 shadow-sm">
+              <div class="grid gap-0.5" :class="albumCols(pu.previews.length)">
+                <div v-for="(p, k) in pu.previews" :key="k" class="relative" :class="albumItemClass(pu.previews.length, k)">
+                  <img :src="p.url" class="w-full object-cover" :class="pu.previews.length === 1 ? 'max-h-[400px]' : 'aspect-square'" />
+                  <div class="absolute inset-0 flex items-center justify-center bg-black/30">
+                    <span v-if="!pu.failed" class="h-7 w-7 animate-spin rounded-full border-2 border-white/40 border-t-white"></span>
+                    <button v-else class="flex items-center gap-1 rounded-full bg-black/55 px-3 py-1.5 text-xs font-medium text-white" @click="retryPending(pu)"><AppIcon name="reply" :size="14" class="-scale-x-100" /> Повторить</button>
+                  </div>
+                </div>
+              </div>
+              <div v-if="pu.cap" class="px-3.5 py-1.5 text-[15px] text-white">{{ pu.cap }}</div>
+            </div>
+          </div>
           </div>
         </div>
 
@@ -1406,7 +1460,7 @@ onBeforeUnmount(() => {
         </div>
         <div class="flex items-center justify-end gap-2 border-t border-parchment-200 p-3">
           <button class="btn-ghost" @click="cancelCompose">Отмена</button>
-          <button class="btn-primary" :disabled="uploading || !composeItems.length" @click="sendCompose">{{ uploading ? 'Отправка…' : 'Отправить' }}</button>
+          <button class="btn-primary" :disabled="!composeItems.length" @click="sendCompose">Отправить</button>
         </div>
       </div>
     </div>

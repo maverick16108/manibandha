@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Deploy / update Manibandha on patita.
 #
-# Прод работает на Go-бэкенде (systemd: manibandha-go, порт :8020).
-# Схему БД по-прежнему ведёт Alembic (Python) — поэтому держим venv для миграций,
-# а Python-сервис (manibandha-api, :8010) остаётся запущенным как мгновенный откат.
+# Прод полностью на Go (systemd: manibandha-go, порт :8020). Python удалён.
+# Миграции схемы БД применяет сам Go-бинарь при старте (internal/migrate).
+# .env и uploads лежат в корне приложения ($APP_DIR), не в репозитории.
 #
-# Идемпотентно: git pull → миграции → сборка Go-бинаря → сборка фронта → рестарт.
+# Идемпотентно: git pull → сборка Go-бинаря → сборка фронта → рестарт.
 set -euo pipefail
 
 APP_DIR=/var/www/manibandha.prema.su
@@ -14,12 +14,6 @@ cd "$APP_DIR"
 
 echo ">>> git pull"
 git pull --ff-only
-
-# Миграции схемы БД — Alembic (Python). Venv держим ради них и ради отката.
-echo ">>> backend (Python) deps + migrations"
-cd "$APP_DIR/backend"
-.venv/bin/pip install -q -r requirements.txt
-.venv/bin/alembic upgrade head
 
 # Go-бэкенд — собираем бинарь (чистый Go, без cgo). cwebp нужен для пережатия фото.
 echo ">>> build Go backend"
@@ -34,10 +28,10 @@ cd "$APP_DIR/frontend"
 npm ci
 npm run build
 
-echo ">>> restart services + reload nginx"
-systemctl restart manibandha-go             # боевой бэкенд (:8020)
-systemctl restart manibandha-api || true    # Python (:8010) — idle, держим для отката
+echo ">>> restart service + reload nginx"
+systemctl restart manibandha-go          # боевой бэкенд (:8020); миграции применит при старте
 nginx -t && systemctl reload nginx
 
-chown -R www-data:www-data "$APP_DIR"
+# uploads (в корне) не трогаем chown-ом рекурсивно ниже по ошибке — они уже www-data
+chown -R www-data:www-data "$APP_DIR/mani-go" "$APP_DIR/backend-go" "$APP_DIR/frontend/dist"
 echo ">>> done (backend: Go on :8020)"

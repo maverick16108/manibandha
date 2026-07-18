@@ -11,9 +11,9 @@ Wants=postgresql.service
 Type=simple
 User=www-data
 Group=www-data
-WorkingDirectory=/var/www/manibandha.prema.su/backend
-# Читает те же переменные, что и Python (.env): DATABASE_URL, SECRET_KEY, LIVEKIT_*, ...
-Environment=ENV_FILE=/var/www/manibandha.prema.su/backend/.env
+WorkingDirectory=/var/www/manibandha.prema.su
+# .env и uploads вынесены в корень приложения (backend/ с Python удалён).
+Environment=ENV_FILE=/var/www/manibandha.prema.su/.env
 Environment=PORT=8020
 ExecStart=/var/www/manibandha.prema.su/mani-go
 Restart=on-failure

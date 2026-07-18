@@ -2,6 +2,8 @@
 .env
 /uploads/
 *.sqlite
+# compiled Go binary produced by deploy.sh at the app root
+/mani-go
 
 # Node / frontend
 frontend/node_modules/

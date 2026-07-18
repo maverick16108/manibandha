@@ -5,6 +5,7 @@ import { openDatabase } from './db/adapter.js';
 import { chatApi } from './sync/api.js';
 import { ChatEngine } from './sync/engine.js';
 import { ChatSocket } from './sync/ws.js';
+import { thumbUrl } from '../lib/format';
 
 let db = null;
 let engine = null;
@@ -56,6 +57,7 @@ export async function initChat({ meId, getToken }) {
     try { await engine.bootstrap(); } catch (e) { console.warn('[chat] bootstrap failed', e); }
     socket.connect();
     try { await refreshChats(); } catch (e) { console.warn('[chat] refreshChats failed', e); }
+    prefetchPhotos(); // прогреть миниатюры фото в кэш — мгновенный показ при открытии чата
     chatState.ready = true; // показываем список даже если что-то пошло не так
     // страховочная сверка: догон по глобальному pts + авторитетная сверка ХВОСТА
     // открытого чата (закрывает любые расхождения, даже без разрыва связи) + дошлём outbox
@@ -83,8 +85,25 @@ function resync() {
   engine.catchUp();
   engine.flushOutbox();
   if (chatState.activeChatId) engine.ensureChatMessages(chatState.activeChatId);
+  prefetchPhotos();
 }
 function onVisibleResync() { if (document.visibilityState === 'visible') resync(); }
+
+// Прогрев миниатюр в кэш браузера: тянем фото из недавних сообщений всех чатов ЗАРАНЕЕ,
+// чтобы при открытии чата картинки показывались мгновенно (не «через секунду»).
+const warmed = new Set();
+function warmImage(url) { if (!url || warmed.has(url)) return; warmed.add(url); try { const i = new Image(); i.decoding = 'async'; i.src = url; } catch { /* ignore */ } }
+async function prefetchPhotos() {
+  if (!db) return;
+  try {
+    const rows = await db.all(
+      "SELECT body FROM messages WHERE deleted=0 AND body LIKE '%![]%' ORDER BY (seq IS NULL), seq DESC LIMIT 400",
+    );
+    for (const r of rows) {
+      (r.body || '').replace(/!\[[^\]]*\]\(([^)]+)\)/g, (_x, u) => { warmImage(thumbUrl(u)); return ''; });
+    }
+  } catch { /* ignore */ }
+}
 
 export function teardownChat() {
   try { socket?.close(); } catch { /* ignore */ }

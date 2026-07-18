@@ -867,6 +867,21 @@ async function createGroup() {
 }
 
 // ── настройки группы (название + фото) ─────────────────────────────────
+// панель информации о собеседнике (личный чат)
+const showInfo = ref(false)
+const infoData = ref(null)
+async function openInfo() {
+  showInfo.value = true; infoData.value = null
+  try { const { data } = await client.get(`/chats/${activeId.value}/info`); infoData.value = data } catch { infoData.value = null }
+}
+function closeInfo() { showInfo.value = false; infoData.value = null }
+function maritalLabel(v) {
+  const m = { single: 'Не в браке', married: 'В браке', widowed: 'Вдова / вдовец', divorced: 'В разводе', unmarried: 'Не в браке' }
+  return m[v] || v
+}
+const infoAvatar = computed(() => { const p = infoData.value?.peer; return p ? (p.avatar || null) : null })
+const cityLine = computed(() => { const p = infoData.value?.peer; return p ? [p.city, p.region].filter(Boolean).join(', ') : '' })
+
 const showGroupEdit = ref(false)
 const gTitle = ref('')
 const gPhoto = ref('')
@@ -1101,7 +1116,7 @@ onBeforeUnmount(() => {
         </header>
         <header v-else class="flex items-center gap-3 border-b border-parchment-200 px-4 py-2.5">
           <button class="rounded-lg p-1.5 text-ink-700/60 hover:bg-parchment-100 sm:hidden" @click="backToList"><AppIcon name="chevron" :size="18" class="rotate-90" /></button>
-          <div class="flex min-w-0 flex-1 items-center gap-3" :class="isGroup && 'cursor-pointer'" @click="isGroup && openGroupEdit()">
+          <div class="flex min-w-0 flex-1 cursor-pointer items-center gap-3" @click="isGroup ? openGroupEdit() : openInfo()">
             <img v-if="activeChat.avatar_url" :src="thumbUrl(activeChat.avatar_url)" @error="imgFull($event, activeChat.avatar_url)" class="photo-bw h-9 w-9 shrink-0 rounded-full object-cover" />
             <span v-else class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-semibold text-white"
                   :class="activeChat.type === 'group' ? 'bg-gradient-to-br from-sage-400 to-sage-600' : 'bg-gradient-to-br from-saffron-400 to-saffron-600'">{{ initials(activeChat.title) }}</span>
@@ -1115,6 +1130,35 @@ onBeforeUnmount(() => {
             </div>
           </div>
         </header>
+
+        <!-- Панель информации о собеседнике (личный чат) -->
+        <transition name="info-slide">
+          <div v-if="showInfo" class="absolute inset-0 z-30 flex">
+            <div class="absolute inset-0 bg-ink-900/30" @click="closeInfo"></div>
+            <div class="relative ml-auto flex h-full w-full flex-col bg-white shadow-2xl sm:max-w-sm">
+              <header class="flex items-center gap-3 border-b border-parchment-200 px-4 py-3">
+                <button class="rounded-lg p-1.5 text-ink-700/60 hover:bg-parchment-100" title="Закрыть" @click="closeInfo"><AppIcon name="close" :size="18" /></button>
+                <div class="font-medium text-ink-900">Информация</div>
+              </header>
+              <div class="flex-1 overflow-y-auto">
+                <div class="flex flex-col items-center gap-3 p-6">
+                  <img v-if="infoAvatar" :src="infoAvatar" class="h-28 w-28 cursor-zoom-in rounded-full object-cover ring-1 ring-parchment-200" @click="openLightbox(infoAvatar)" />
+                  <span v-else class="flex h-28 w-28 items-center justify-center rounded-full bg-gradient-to-br from-saffron-400 to-saffron-600 text-3xl font-semibold text-white">{{ initials(activeChat.title) }}</span>
+                  <div class="text-center">
+                    <div class="text-lg font-semibold text-ink-900">{{ infoData?.peer?.name || activeChat.title }}</div>
+                    <div class="text-sm" :class="infoData?.peer?.online ? 'text-saffron-600' : 'text-ink-700/50'">{{ infoData?.peer?.online ? 'в сети' : 'не в сети' }}</div>
+                  </div>
+                </div>
+                <div class="divide-y divide-parchment-100 border-t border-parchment-200">
+                  <div v-if="infoData?.peer?.phone" class="px-6 py-3"><div class="text-[15px] text-ink-900">{{ infoData.peer.phone }}</div><div class="text-xs text-ink-700/50">Телефон</div></div>
+                  <div v-if="infoData?.peer?.spiritual_name" class="px-6 py-3"><div class="text-[15px] text-ink-900">{{ infoData.peer.spiritual_name }}</div><div class="text-xs text-ink-700/50">Духовное имя</div></div>
+                  <div v-if="cityLine" class="px-6 py-3"><div class="text-[15px] text-ink-900">{{ cityLine }}</div><div class="text-xs text-ink-700/50">Город</div></div>
+                  <div v-if="infoData?.peer?.marital_status" class="px-6 py-3"><div class="text-[15px] text-ink-900">{{ maritalLabel(infoData.peer.marital_status) }}</div><div class="text-xs text-ink-700/50">Семейное положение</div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </transition>
 
         <AudioBar />
 
@@ -1158,10 +1202,10 @@ onBeforeUnmount(() => {
                   <div class="whitespace-pre-wrap break-words text-ink-700/70">{{ m.reply_preview }}</div>
                 </div>
               </div>
-              <img v-if="photoUrls(m).length === 1" :src="photoUrls(m)[0]" loading="lazy"
+              <img v-if="photoUrls(m).length === 1" :src="photoUrls(m)[0]"
                    class="block max-h-[400px] w-full cursor-zoom-in object-cover" @click.stop="openLightbox(photoUrls(m)[0])" />
               <div v-else class="grid gap-0.5" :class="albumCols(photoUrls(m).length)">
-                <img v-for="(u, k) in photoUrls(m).slice(0, 10)" :key="k" :src="u" loading="lazy"
+                <img v-for="(u, k) in photoUrls(m).slice(0, 10)" :key="k" :src="u"
                      class="aspect-square w-full cursor-zoom-in object-cover" :class="albumItemClass(photoUrls(m).length, k)"
                      @click.stop="openLightbox(u)" />
               </div>
@@ -1215,13 +1259,13 @@ onBeforeUnmount(() => {
               <a v-if="linkCard(m)" :href="firstLink(m)" target="_blank" rel="noopener noreferrer"
                  class="mt-1.5 block overflow-hidden rounded-lg border-l-[3px] no-underline"
                  :class="isMine(m) ? 'border-white/70 bg-white/10' : 'border-saffron-400 bg-saffron-500/5'">
-                <img v-if="linkCard(m).image" :src="linkCard(m).image" loading="lazy"
-                     class="max-h-52 w-full object-cover" @error="$event.target.style.display='none'" />
-                <div class="px-2.5 py-1.5">
+                <div class="px-2.5 pb-1.5 pt-1">
                   <div v-if="linkCard(m).site_name" class="text-[11px] font-semibold uppercase tracking-wide" :class="isMine(m) ? 'text-white/70' : 'text-saffron-700'">{{ linkCard(m).site_name }}</div>
                   <div v-if="linkCard(m).title" class="line-clamp-2 text-sm font-semibold leading-snug" :class="isMine(m) ? 'text-white' : 'text-ink-900'">{{ linkCard(m).title }}</div>
                   <div v-if="linkCard(m).description" class="mt-0.5 line-clamp-2 text-xs leading-snug" :class="isMine(m) ? 'text-white/80' : 'text-ink-700/70'">{{ linkCard(m).description }}</div>
                 </div>
+                <img v-if="linkCard(m).image" :src="linkCard(m).image"
+                     class="block max-h-[360px] w-full object-cover" @error="$event.target.style.display='none'" />
               </a>
 
               <div class="mt-1 flex items-end justify-between gap-2">
@@ -1303,7 +1347,7 @@ onBeforeUnmount(() => {
 
             <textarea ref="inputEl" v-model="body" rows="1" :maxlength="MAX_LEN"
                       class="chat-input min-h-[2.75rem] flex-1 resize-none rounded-2xl border border-parchment-300 bg-parchment-50 px-4 py-2.5 text-base leading-6 focus:border-saffron-400 focus:outline-none focus:ring-1 focus:ring-saffron-400"
-                      placeholder="Сообщение…" @input="onInput" @keydown="onKeydown" @paste="onPaste"></textarea>
+                      placeholder="Сообщение…" @input="onInput" @keydown="onKeydown"></textarea>
 
             <div class="relative mb-0.5 shrink-0">
               <button class="rounded-full p-2 text-ink-700/60 hover:bg-parchment-100 hover:text-saffron-600" title="Эмодзи" @click="showEmoji = !showEmoji">

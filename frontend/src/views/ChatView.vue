@@ -610,10 +610,10 @@ function openPhoto(u) { openLightbox(u, allChatPhotos.value) }
 // сетка-альбом под количество фото (как в мессенджерах)
 function albumCols(n) { return n <= 1 ? '' : (n <= 4 ? 'grid-cols-2' : 'grid-cols-3') }
 function albumItemClass(n, k) { return (n === 3 && k === 0) ? 'col-span-2' : '' } // 3 фото: первое во всю ширину
-// резерв места под одиночное фото по известным пропорциям — чтобы лента не «прыгала» при загрузке
+// резерв места под одиночное фото. ВСЕГДА задаём aspect-ratio (запомненный или дефолт),
+// картинка внутри — object-cover: место занято заранее, лента НИКОГДА не «прыгает».
 function photoBoxStyle(u) {
-  const r = imageAspect(u)
-  return r ? { aspectRatio: String(r), maxHeight: '400px' } : { minHeight: '140px' }
+  return { aspectRatio: String(imageAspect(u) || 1.4), maxHeight: '400px' }
 }
 
 // ── превью ссылок (OG-карточки) ───────────────────────────────────────────
@@ -1290,10 +1290,9 @@ onBeforeUnmount(() => {
                   <div v-if="linkCard(m).title" class="line-clamp-2 text-sm font-semibold leading-snug" :class="isMine(m) ? 'text-white' : 'text-ink-900'">{{ linkCard(m).title }}</div>
                   <div v-if="linkCard(m).description" class="mt-0.5 line-clamp-2 text-xs leading-snug" :class="isMine(m) ? 'text-white/80' : 'text-ink-700/70'">{{ linkCard(m).description }}</div>
                 </div>
-                <!-- YouTube-миниатюра hqdefault — 4:3 с чёрными полями; кадрируем до 16:9 -->
-                <div v-if="linkCard(m).image" class="overflow-hidden" :class="linkCard(m).image.includes('ytimg') && 'aspect-video'">
-                  <img :src="linkCard(m).image" class="block w-full object-cover"
-                       :class="linkCard(m).image.includes('ytimg') ? 'h-full' : 'max-h-[360px]'"
+                <!-- 16:9-бокс: место занято заранее (без «прыжка»), YouTube-полосы 4:3 тоже кадрируются -->
+                <div v-if="linkCard(m).image" class="aspect-video overflow-hidden">
+                  <img :src="linkCard(m).image" class="block h-full w-full object-cover"
                        @error="$event.target.parentElement.style.display='none'" />
                 </div>
               </a>

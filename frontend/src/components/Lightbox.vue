@@ -52,34 +52,28 @@ onBeforeUnmount(() => {
 
 <template>
   <transition name="lb">
-    <div v-if="lightboxSrc" class="fixed inset-0 z-[70] flex items-center justify-center bg-black/85 p-4" @click="closeLightbox">
-      <img :src="lightboxSrc" :style="{ transform: `rotate(${rot}deg)` }"
-           class="lb-img max-h-full max-w-full select-none rounded-lg object-contain shadow-2xl"
-           @click.stop @mousedown="down" @mouseup="up" @touchstart.passive="down" @touchend="up" />
-
-      <!-- счётчик -->
-      <div v-if="lbHasList" class="absolute left-1/2 top-4 -translate-x-1/2 rounded-full bg-white/10 px-3 py-1 text-sm text-white">
-        {{ lb.index + 1 }} из {{ lb.list.length }}
+    <div v-if="lightboxSrc" class="fixed inset-0 z-[70] flex flex-col bg-black/90" @click="closeLightbox">
+      <!-- верхняя панель: счётчик + действия (не перекрывают фото) -->
+      <div class="flex shrink-0 items-center justify-between px-4 py-3 text-white" @click.stop>
+        <div class="text-sm tabular-nums text-white/90">{{ lbHasList ? `${lb.index + 1} из ${lb.list.length}` : '' }}</div>
+        <div class="flex items-center gap-2">
+          <button class="rounded-full bg-white/10 p-2 text-white transition hover:bg-white/20" title="Повернуть" @click="rotate"><AppIcon name="rotate" :size="22" /></button>
+          <button class="rounded-full bg-white/10 p-2 text-white transition hover:bg-white/20" title="Скачать" @click="download"><AppIcon name="download" :size="22" /></button>
+          <button class="rounded-full bg-white/10 p-2 text-white transition hover:bg-white/20" title="Закрыть (Esc)" @click="closeLightbox"><AppIcon name="close" :size="24" /></button>
+        </div>
       </div>
 
-      <!-- стрелки -->
-      <button v-if="lbHasList && lb.index > 0" class="absolute left-3 top-1/2 -translate-y-1/2 rounded-full bg-white/10 p-2.5 text-white transition hover:bg-white/20" title="Назад (←)" @click.stop="lbPrev">
-        <AppIcon name="chevron" :size="28" class="rotate-90" />
-      </button>
-      <button v-if="lbHasList && lb.index < lb.list.length - 1" class="absolute right-3 top-1/2 -translate-y-1/2 rounded-full bg-white/10 p-2.5 text-white transition hover:bg-white/20" title="Вперёд (→)" @click.stop="lbNext">
-        <AppIcon name="chevron" :size="28" class="-rotate-90" />
-      </button>
+      <!-- область фото -->
+      <div class="relative flex min-h-0 flex-1 items-center justify-center px-16 pb-4" @click="closeLightbox">
+        <img :src="lightboxSrc" :style="{ transform: `rotate(${rot}deg)` }"
+             class="lb-img max-h-full max-w-full select-none rounded-lg object-contain shadow-2xl"
+             @click.stop @mousedown="down" @mouseup="up" @touchstart.passive="down" @touchend="up" />
 
-      <!-- панель действий -->
-      <div class="absolute right-3 top-3 flex items-center gap-2">
-        <button class="rounded-full bg-white/10 p-2 text-white transition hover:bg-white/20" title="Повернуть" @click.stop="rotate">
-          <AppIcon name="rotate" :size="22" />
+        <button v-if="lbHasList && lb.index > 0" class="absolute left-3 top-1/2 -translate-y-1/2 rounded-full bg-white/10 p-2.5 text-white transition hover:bg-white/20" title="Назад (←)" @click.stop="lbPrev">
+          <AppIcon name="chevron" :size="28" class="rotate-90" />
         </button>
-        <button class="rounded-full bg-white/10 p-2 text-white transition hover:bg-white/20" title="Скачать" @click.stop="download">
-          <AppIcon name="download" :size="22" />
-        </button>
-        <button class="rounded-full bg-white/10 p-2 text-white transition hover:bg-white/20" title="Закрыть (Esc)" @click.stop="closeLightbox">
-          <AppIcon name="close" :size="24" />
+        <button v-if="lbHasList && lb.index < lb.list.length - 1" class="absolute right-3 top-1/2 -translate-y-1/2 rounded-full bg-white/10 p-2.5 text-white transition hover:bg-white/20" title="Вперёд (→)" @click.stop="lbNext">
+          <AppIcon name="chevron" :size="28" class="-rotate-90" />
         </button>
       </div>
     </div>

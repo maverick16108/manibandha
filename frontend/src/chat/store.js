@@ -199,18 +199,24 @@ async function refreshMessages() {
 }
 
 export async function openChat(chatId) {
-  chatState.activeChatId = Number(chatId);
+  const id = Number(chatId);
+  chatState.activeChatId = id;
+  // не показываем сообщения прежнего чата в новом контексте (иначе «прыжок» и пропажа аватарок)
+  chatState.messages = [];
+  chatState.members = [];
   // граница непрочитанного ДО отметки о прочтении (для разделителя «Непрочитанные»)
   try {
-    const row = await db.get('SELECT my_last_read_seq FROM chats WHERE id=?', [chatState.activeChatId]);
+    const row = await db.get('SELECT my_last_read_seq FROM chats WHERE id=?', [id]);
     chatState.unreadBeforeSeq = row ? (row.my_last_read_seq || 0) : 0;
   } catch { chatState.unreadBeforeSeq = 0; }
   // сразу гасим бейдж непрочитанного в списке (оптимистично, до синка)
-  const c = chatState.chats.find((x) => x.id === chatState.activeChatId);
+  const c = chatState.chats.find((x) => x.id === id);
   if (c) c.unread = 0;
-  await refreshMessages();
-  await engine?.ensureChatMessages(chatState.activeChatId);
-  await markReadNow();
+  await refreshMessages();   // локально — чат виден мгновенно
+  prefetchPhotos();          // прогрев миниатюр открытого чата
+  markReadNow();
+  // авторитетная сверка с сервером — в ФОНЕ, не блокируем показ (перерисует, только если изменилось)
+  engine?.ensureChatMessages(id).then(() => { if (chatState.activeChatId === id) markReadNow(); });
 }
 
 export async function pinChat(chatId, pinned) {

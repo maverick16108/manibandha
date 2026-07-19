@@ -967,6 +967,55 @@ async function onRecStop() {
 function stopRec() { if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop() }
 function cancelRec() { recCanceled = true; stopRec() }
 
+// ── единая механика записи по удержанию (голос ↔ кружок), как в Telegram ────
+const recMode = ref('voice') // 'voice' | 'video'
+const holdRec = reactive({ active: false, locked: false, seconds: 0, willCancel: false })
+let holdArmTimer = null; let holdDispTimer = null; let holdStartX = 0; let holdStartY = 0; let holdStartTs = 0; let holdArmed = false; let holdMoved = false
+function fmtRecMs(s) { const mm = Math.floor(s / 60); const ss = Math.floor(s % 60); const t = Math.floor((s * 10) % 10); return `${mm}:${String(ss).padStart(2, '0')},${t}` }
+function recPointerDown(e) {
+  if (uploading.value || holdRec.active || holdRec.locked) return
+  if (e.pointerType === 'mouse' && e.button !== 0) return
+  holdStartX = e.clientX; holdStartY = e.clientY; holdMoved = false; holdArmed = true
+  window.addEventListener('pointermove', recPointerMove)
+  window.addEventListener('pointerup', recPointerUp)
+  clearTimeout(holdArmTimer)
+  holdArmTimer = setTimeout(() => { if (holdArmed) beginHoldRec() }, 220) // отличаем короткий тап от удержания
+}
+async function beginHoldRec() {
+  holdRec.active = true; holdRec.locked = false; holdRec.willCancel = false; holdRec.seconds = 0
+  holdStartTs = Date.now()
+  clearInterval(holdDispTimer)
+  holdDispTimer = setInterval(() => { holdRec.seconds = (Date.now() - holdStartTs) / 1000 }, 100)
+  if (recMode.value === 'video') await startVideoNote(); else await startRec()
+}
+function recPointerMove(e) {
+  const dx = e.clientX - holdStartX, dy = e.clientY - holdStartY
+  if (!holdRec.active) { if (Math.abs(dx) > 6 || Math.abs(dy) > 6) holdMoved = true; return }
+  if (holdRec.locked) return
+  if (dy < -70) { holdRec.locked = true; holdRec.willCancel = false; return } // тянем вверх → закрепить
+  holdRec.willCancel = dx < -60 // уводим влево → отмена
+}
+function recPointerUp() {
+  clearTimeout(holdArmTimer); holdArmed = false
+  window.removeEventListener('pointermove', recPointerMove)
+  window.removeEventListener('pointerup', recPointerUp)
+  if (!holdRec.active) { // короткий тап без удержания → переключить режим голос/кружок
+    if (!holdMoved) recMode.value = recMode.value === 'voice' ? 'video' : 'voice'
+    return
+  }
+  if (holdRec.locked) return // закреплено — ждём явной отправки/отмены кнопками
+  finishHoldRec(!holdRec.willCancel)
+}
+function finishHoldRec(send) {
+  clearInterval(holdDispTimer)
+  const wasVideo = recMode.value === 'video'
+  holdRec.active = false; holdRec.locked = false
+  if (send) { if (wasVideo) stopVideoNote(); else stopRec() }
+  else { if (wasVideo) cancelVideoNote(); else cancelRec() }
+}
+function lockedSend() { finishHoldRec(true) }
+function lockedCancel() { finishHoldRec(false) }
+
 // ── кружки (видео-записи с камеры) ─────────────────────────────────────────
 const vnRecording = ref(false)
 const vnReady = ref(false)
@@ -1424,11 +1473,15 @@ watch(() => [searchChat.q, searchChat.scope], runChatSearch)
 watch(activeId, () => { if (searchChat.open && searchChat.scope === 'this') closeChatSearch() })
 // клик по результату: переходим к сообщению, поиск НЕ закрываем
 async function jumpToMessage(m) {
+  // «Мои чаты»: переходим в нужный чат и ДОЖИДАЕМСЯ его открытия (фикс. таймаут ненадёжен —
+  // иногда чат ещё не успевал открыться и переход к сообщению не срабатывал)
   if (searchChat.scope === 'all' && m.chat_id && m.chat_id !== activeId.value) {
     router.push({ name: 'chat', params: { id: String(m.chat_id) } })
-    await nextTick(); setTimeout(() => jumpToId(m.id), 450); return
+    for (let i = 0; i < 60 && activeId.value !== m.chat_id; i++) await new Promise((r) => setTimeout(r, 50))
+    await nextTick()
   }
-  if (!chatState.messages.some((x) => x.id === m.id)) {
+  // грузим окрестности сообщения с сервера, если его нет в текущем окне, затем прыгаем
+  if (m.seq && !chatState.messages.some((x) => x.id === m.id)) {
     try { await loadAroundSeq(m.seq) } catch { /* ignore */ }
   }
   await flashScrollTo(m.id)
@@ -1456,7 +1509,9 @@ async function flashScrollTo(id) {
   const el = document.getElementById(`msg-${id}`)
   if (el) {
     el.scrollIntoView({ block: 'center', behavior: 'smooth' })
-    el.classList.add('msg-flash'); setTimeout(() => el.classList.remove('msg-flash'), 1600)
+    // держим подсветку дольше: при поиске сначала открывается чат и мотает к сообщению,
+    // короткий флеш успевал погаснуть до того, как пользователь увидит сообщение
+    el.classList.add('msg-flash'); setTimeout(() => el.classList.remove('msg-flash'), 3000)
   }
 }
 
@@ -1823,8 +1878,8 @@ onBeforeUnmount(() => {
              @scroll="onScroll" @click="onScrollerClick" @mousedown="onScrollerDown" @touchstart="onScrollerDown">
           <div ref="listWrap" class="mt-auto space-y-1">
           <template v-for="(m, i) in chatState.messages" :key="m.client_uuid">
-          <div v-if="showDaySep(m, i)" class="sticky top-1 z-[1] my-2 flex justify-center">
-            <span class="rounded-full bg-ink-900/55 px-3 py-1 text-xs font-semibold text-white shadow-sm backdrop-blur-sm">{{ dayLabel(m.created_at) }}</span>
+          <div v-if="showDaySep(m, i)" class="my-2 flex justify-center">
+            <span class="rounded-full bg-ink-900/55 px-3 py-1 text-xs font-semibold text-white shadow-sm">{{ dayLabel(m.created_at) }}</span>
           </div>
           <div v-if="m.client_uuid === firstUnreadKey" class="my-3 flex items-center gap-2 px-2">
             <span class="h-px flex-1 bg-saffron-400/60"></span>
@@ -1851,7 +1906,7 @@ onBeforeUnmount(() => {
             <!-- кружок (видео-запись) — круглый плеер: авто muted+loop, клик → звук + кольцо прогресса -->
             <div v-if="isVideoNote(m)" class="flex flex-col gap-1" @contextmenu="onContext($event, m)">
               <div class="relative h-[19.5rem] w-[19.5rem]">
-                <div class="h-full w-full overflow-hidden rounded-full bg-black shadow-sm">
+                <div class="h-full w-full overflow-hidden rounded-full shadow-sm">
                   <video :ref="(el) => setVnEl(m.id, el)" :src="videoNoteOf(m).url" :poster="thumbUrl(videoNoteOf(m).poster || '')"
                          autoplay muted loop playsinline disablepictureinpicture controlslist="nodownload noremoteplayback nofullscreen"
                          class="pointer-events-none h-full w-full -scale-x-100 object-cover"
@@ -1864,12 +1919,12 @@ onBeforeUnmount(() => {
                           :stroke-dasharray="304.7" :stroke-dashoffset="304.7 * (1 - (videoState[m.id]?.progress || 0))" />
                 </svg>
                 <div class="absolute inset-0 cursor-pointer rounded-full" @click.stop="toggleVnSound(m)" title="Включить звук"></div>
-                <!-- отсчёт + звук: тёмная плашка снизу-слева, поверх кружка -->
-                <span class="pointer-events-none absolute bottom-3 left-3 flex items-center gap-1.5 rounded-full bg-black/55 px-3 py-1 text-[15px] text-white">
+                <!-- отсчёт + звук: тёмная плашка у ЛЕВОГО края квадрата кружка -->
+                <span class="pointer-events-none absolute bottom-2 left-0 flex items-center gap-1.5 rounded-full bg-black/55 px-3 py-1 text-[15px] text-white">
                   <AppIcon :name="vnSound[m.id] ? 'volume' : 'volume-x'" :size="19" /><span class="tabular-nums">{{ videoState[m.id]?.remain || '' }}</span>
                 </span>
-                <!-- время + статус: тёмная плашка снизу-справа (не сливается с фоном) -->
-                <span class="pointer-events-none absolute bottom-3 right-3 flex items-center gap-1 rounded-full bg-black/55 px-2.5 py-1 text-[13px] text-white">
+                <!-- время + статус: тёмная плашка у ПРАВОГО края квадрата кружка -->
+                <span class="pointer-events-none absolute bottom-2 right-0 flex items-center gap-1 rounded-full bg-black/55 px-2.5 py-1 text-[13px] text-white">
                   <span class="tabular-nums">{{ fmtTime(m.created_at) }}</span>
                   <template v-if="statusOf(m)"><AppIcon v-if="statusOf(m) === 'pending'" name="clock" :size="15" /><AppIcon v-else-if="statusOf(m) === 'read'" name="check-double" :size="16" /><AppIcon v-else-if="statusOf(m) === 'sent'" name="check" :size="15" /></template>
                 </span>
@@ -2067,7 +2122,7 @@ onBeforeUnmount(() => {
 
           <!-- оптимистичный кружок (появляется мгновенно с лоадером) -->
           <div v-for="pn in pendingNotes.filter((p) => p.chatId === activeId)" :key="pn.id" class="flex justify-end px-1">
-            <div class="relative h-[19.5rem] w-[19.5rem] overflow-hidden rounded-full bg-black shadow-sm">
+            <div class="relative h-[19.5rem] w-[19.5rem] overflow-hidden rounded-full shadow-sm">
               <img v-if="pn.poster" :src="pn.poster" class="h-full w-full -scale-x-100 object-cover" />
               <div class="absolute inset-0 flex items-center justify-center bg-black/30">
                 <span v-if="!pn.failed" class="h-9 w-9 animate-spin rounded-full border-2 border-white/40 border-t-white"></span>
@@ -2101,11 +2156,28 @@ onBeforeUnmount(() => {
             <button class="text-ink-700/50 hover:text-ink-900" @click="cancelEdit"><AppIcon name="close" :size="15" /></button>
           </div>
 
-          <div v-if="recording" class="flex items-center gap-3 rounded-2xl bg-red-500/10 px-4 py-3 ring-1 ring-red-300">
-            <span class="h-2.5 w-2.5 animate-pulse rounded-full bg-red-500"></span>
-            <span class="flex-1 text-sm text-red-700">Идёт запись… <span class="tabular-nums">{{ fmtRec(recSeconds) }}</span></span>
-            <button class="btn-ghost text-sm text-ink-700/60" @click="cancelRec">Отмена</button>
-            <button class="btn-primary h-9 px-4" @click="stopRec">Отправить</button>
+          <!-- ЗАПИСЬ по удержанию (голос ↔ кружок), как в Telegram -->
+          <div v-if="holdRec.active" class="relative flex items-center gap-3 rounded-2xl px-4 py-3 ring-1 transition"
+               :class="holdRec.willCancel ? 'bg-red-500/10 ring-red-300' : 'bg-parchment-100 ring-parchment-300'">
+            <span class="h-3 w-3 shrink-0 animate-pulse rounded-full bg-red-500"></span>
+            <span class="shrink-0 tabular-nums text-sm text-ink-800">{{ fmtRecMs(holdRec.seconds) }}</span>
+            <span class="flex-1 truncate text-center text-sm" :class="holdRec.willCancel ? 'font-medium text-red-600' : 'text-ink-700/50'">
+              {{ holdRec.willCancel ? 'Отпустите для отмены' : (holdRec.locked ? (recMode === 'video' ? 'Кружок закреплён' : 'Голосовое закреплено') : 'Для отмены отпустите курсор вне поля') }}
+            </span>
+            <template v-if="holdRec.locked">
+              <button class="rounded-lg px-3 py-1.5 text-sm text-ink-700/60 hover:bg-parchment-200" @click="lockedCancel">Отмена</button>
+              <button class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-saffron-500 text-white hover:bg-saffron-600" title="Отправить" @click="lockedSend"><AppIcon name="send" :size="20" /></button>
+            </template>
+            <template v-else>
+              <!-- подсказка «тяни вверх, чтобы закрепить» -->
+              <div class="pointer-events-none absolute -top-24 right-4 flex flex-col items-center gap-1.5 rounded-full bg-ink-900/70 px-2.5 py-3 text-white/90 shadow-lg">
+                <AppIcon name="lock" :size="18" />
+                <AppIcon name="chevron" :size="15" class="animate-bounce rotate-180" />
+              </div>
+              <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-red-500 text-white shadow-lg">
+                <AppIcon :name="recMode === 'video' ? 'video' : 'mic'" :size="22" />
+              </span>
+            </template>
           </div>
 
           <div v-else class="relative flex items-end gap-2">
@@ -2133,25 +2205,22 @@ onBeforeUnmount(() => {
             <button v-if="body.trim()" class="mb-0.5 shrink-0 rounded-full bg-saffron-500 p-2 text-white hover:bg-saffron-600" title="Отправить" @click="send">
               <AppIcon name="send" :size="20" />
             </button>
-            <template v-else>
-              <button class="mb-0.5 shrink-0 rounded-full p-2 text-ink-700/60 hover:bg-parchment-100 hover:text-saffron-600" title="Кружок (видео)" :disabled="uploading" @click="startVideoNote">
-                <AppIcon name="video" :size="24" />
-              </button>
-              <button class="mb-0.5 shrink-0 rounded-full p-2 text-ink-700/60 hover:bg-parchment-100 hover:text-saffron-600" title="Голосовое" :disabled="uploading" @click="startRec">
-                <AppIcon name="mic" :size="24" />
-              </button>
-            </template>
+            <button v-else class="mb-0.5 shrink-0 touch-none select-none rounded-full p-2 text-ink-700/60 transition hover:bg-parchment-100 hover:text-saffron-600"
+                    :title="recMode === 'video' ? 'Кружок — удерживайте; коротко — голосовое' : 'Голосовое — удерживайте; коротко — кружок'"
+                    :disabled="uploading" @pointerdown="recPointerDown" @contextmenu.prevent>
+              <AppIcon :name="recMode === 'video' ? 'video' : 'mic'" :size="24" />
+            </button>
           </div>
 
-          <!-- запись кружка: круглое превью с камеры + таймер + отправить/отмена -->
-          <div v-if="vnRecording" class="absolute inset-0 z-40 flex flex-col items-center justify-center gap-5 bg-parchment-100/95 backdrop-blur-sm">
+          <!-- запись кружка: круглое превью с камеры (без фона), таймер; управление — жестами -->
+          <div v-if="vnRecording" class="pointer-events-none absolute inset-0 z-40 flex flex-col items-center justify-center gap-5">
             <div class="relative h-96 w-96">
-              <div class="h-full w-full overflow-hidden rounded-full bg-black shadow-xl">
+              <div class="h-full w-full overflow-hidden rounded-full shadow-2xl">
                 <video ref="vnPreview" muted playsinline disablepictureinpicture controlslist="nodownload noremoteplayback nofullscreen" class="pointer-events-none h-full w-full -scale-x-100 object-cover"></video>
               </div>
               <!-- кольцо прогресса записи (до 1 минуты) -->
               <svg class="pointer-events-none absolute inset-0 h-full w-full -rotate-90" viewBox="0 0 100 100">
-                <circle cx="50" cy="50" r="48.5" fill="none" stroke="rgba(0,0,0,0.15)" stroke-width="2.5" />
+                <circle cx="50" cy="50" r="48.5" fill="none" stroke="rgba(0,0,0,0.12)" stroke-width="2.5" />
                 <circle cx="50" cy="50" r="48.5" fill="none" :stroke="vnReady ? '#e0902a' : 'rgba(224,144,42,0.4)'" stroke-width="3" stroke-linecap="round"
                         :stroke-dasharray="304.7" :stroke-dashoffset="304.7 * (1 - vnFrac)" style="transition: stroke-dashoffset .12s linear" />
               </svg>
@@ -2160,7 +2229,8 @@ onBeforeUnmount(() => {
                 <span class="tabular-nums">{{ vnReady ? fmtRec(vnSeconds) : 'подготовка…' }}</span>
               </span>
             </div>
-            <div class="flex items-center gap-4">
+            <!-- запасные кнопки (если запись не через удержание) -->
+            <div v-if="!holdRec.active" class="pointer-events-auto flex items-center gap-4">
               <button class="flex h-12 w-12 items-center justify-center rounded-full bg-white text-ink-700 shadow ring-1 ring-parchment-200 hover:bg-parchment-50" title="Отмена" @click="cancelVideoNote">
                 <AppIcon name="close" :size="24" />
               </button>

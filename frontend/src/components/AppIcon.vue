@@ -355,6 +355,18 @@ defineProps({
       <path d="M8 11V7a4 4 0 0 1 8 0v4" />
     </template>
 
+    <!-- phone (телефон) -->
+    <template v-else-if="name === 'phone'">
+      <path d="M6.5 3.5h3l1.5 4-2 1.5a11 11 0 0 0 4.5 4.5l1.5-2 4 1.5v3a2 2 0 0 1-2.2 2A16.5 16.5 0 0 1 4.5 5.7 2 2 0 0 1 6.5 3.5z" />
+    </template>
+
+    <!-- info (информация) -->
+    <template v-else-if="name === 'info'">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 11v5" />
+      <path d="M12 7.5v.5" />
+    </template>
+
     <!-- reply (ответить) -->
     <template v-else-if="name === 'reply'">
       <path d="M9 8 4 12.5 9 17" />

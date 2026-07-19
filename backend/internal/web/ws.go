@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/gorilla/websocket"
@@ -32,11 +33,12 @@ func (c *wsConn) writeJSON(v any) error {
 // ── Хаб чата: один пользователь → набор сокетов ──────────────────────────────
 
 type chatHubT struct {
-	mu      sync.RWMutex
-	sockets map[int]map[*wsConn]bool
+	mu       sync.RWMutex
+	sockets  map[int]map[*wsConn]bool
+	lastSeen map[int]time.Time // время последнего отключения (для «был(а) недавно»)
 }
 
-var chatH = &chatHubT{sockets: map[int]map[*wsConn]bool{}}
+var chatH = &chatHubT{sockets: map[int]map[*wsConn]bool{}, lastSeen: map[int]time.Time{}}
 
 func (h *chatHubT) add(uid int, c *wsConn) {
 	h.mu.Lock()
@@ -54,8 +56,16 @@ func (h *chatHubT) remove(uid int, c *wsConn) {
 		delete(m, c)
 		if len(m) == 0 {
 			delete(h.sockets, uid)
+			h.lastSeen[uid] = time.Now()
 		}
 	}
+}
+
+// lastSeenAt возвращает время последнего отключения (нулевое, если неизвестно/онлайн)
+func (h *chatHubT) lastSeenAt(uid int) time.Time {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.lastSeen[uid]
 }
 
 func (h *chatHubT) sendToUsers(uids []int, data any) {

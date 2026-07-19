@@ -57,6 +57,17 @@ const editingMsg = ref(null)
 const scroller = ref(null)
 const listWrap = ref(null)
 const stickBottom = ref(true)          // держимся ли у нижнего края (иначе не дёргаем при подгрузке)
+const floatDate = reactive({ label: '', show: false }) // плавающая дата при скролле
+let floatHideTimer = null
+function updateFloatingDate() {
+  const el = scroller.value; if (!el) return
+  const top = el.getBoundingClientRect().top
+  const seps = el.querySelectorAll('[data-daysep]')
+  let label = ''
+  for (const s of seps) { if (s.getBoundingClientRect().top <= top + 28) label = s.getAttribute('data-daysep'); else break }
+  if (!label && seps.length) label = seps[0].getAttribute('data-daysep')
+  if (label) { floatDate.label = label; floatDate.show = true; clearTimeout(floatHideTimer); floatHideTimer = setTimeout(() => { floatDate.show = false }, 1500) }
+}
 let listObs = null
 // Пока пользователь у нижнего края — прижимаем ленту к низу при любом росте высоты
 // (догрузка картинок/файлов и т.п.), чтобы не было «прыжка» после открытия чата.
@@ -343,10 +354,43 @@ async function confirmDelete() {
   if (!m?.id) return
   const isDir = activeChat.value?.type === 'direct'
   const everyone = !isDir ? true : (isMine(m) ? deleteForAll.value : false)
-  // эффект «растворения» для одиночного удаления, затем убираем
+  // эффект «расщепления на частицы» для одиночного удаления, затем убираем
   const el = document.getElementById(`msg-${m.id}`)
-  if (el) { el.classList.add('msg-dissolve'); await new Promise((r) => setTimeout(r, 340)) }
+  if (el) { particleBurst(el.querySelector('.max-w-\\[78\\%\\], .max-w-\\[80\\%\\], .max-w-\\[600px\\], .max-w-\\[420px\\]') || el); el.classList.add('msg-dissolve'); await new Promise((r) => setTimeout(r, 380)) }
   await deleteMessage(m.id, everyone)
+}
+// расщепление элемента на множество частиц, разлетающихся во все стороны
+function particleBurst(el) {
+  try {
+    const rect = el.getBoundingClientRect()
+    if (!rect.width || !rect.height) return
+    const bg = getComputedStyle(el).backgroundColor
+    const color = (bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent') ? bg : '#e0902a'
+    const layer = document.createElement('div')
+    layer.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:60;overflow:hidden'
+    const cols = Math.max(6, Math.min(22, Math.round(rect.width / 22)))
+    const rows = Math.max(4, Math.min(16, Math.round(rect.height / 22)))
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const p = document.createElement('div')
+        const px = rect.left + (c + 0.5) / cols * rect.width
+        const py = rect.top + (r + 0.5) / rows * rect.height
+        const cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2
+        const size = 4 + Math.floor((px * py) % 4)
+        // разлёт от центра наружу + немного вверх
+        const dx = (px - cx) * (1.4 + ((c * 7 + r * 3) % 10) / 10) + ((c % 3) - 1) * 24
+        const dy = (py - cy) * (1.2 + ((c * 3 + r * 5) % 10) / 10) - 30 - (r % 4) * 10
+        p.style.cssText = `position:absolute;left:${px}px;top:${py}px;width:${size}px;height:${size}px;border-radius:50%;background:${color};will-change:transform,opacity`
+        layer.appendChild(p)
+        p.animate(
+          [{ transform: 'translate(0,0) scale(1)', opacity: 1 }, { transform: `translate(${dx}px,${dy}px) scale(0.2)`, opacity: 0 }],
+          { duration: 520 + ((c * r) % 260), easing: 'cubic-bezier(.25,.7,.35,1)', fill: 'forwards' },
+        )
+      }
+    }
+    document.body.appendChild(layer)
+    setTimeout(() => layer.remove(), 900)
+  } catch { /* эффект необязателен */ }
 }
 function cleanBody(b) {
   return (b || '').replace(/@\[audio\]\([^)]*\)/g, '🎤 Голосовое сообщение').replace(/@\[videonote\]\([^)]*\)/g, '📹 Видеосообщение').replace(/!\[[^\]]*\]\([^)]*\)/g, '').trim()
@@ -950,26 +994,47 @@ function cleanupRec() {
   clearInterval(recTimer); recTimer = null; recording.value = false
   if (recStream) { recStream.getTracks().forEach((t) => t.stop()); recStream = null }
 }
+// голосовое: оптимистично показываем с индикатором загрузки на сервер (кольцо + × отмена),
+// т.к. длинное голосовое может грузиться долго
+const pendingVoice = reactive([])
 async function onRecStop() {
   const mime = mediaRecorder?.mimeType || 'audio/webm'
+  const secs = recSeconds.value
   cleanupRec()
   if (recCanceled || !recChunks.length) { recChunks = []; return }
   const blob = new Blob(recChunks, { type: mime }); recChunks = []
-  uploading.value = true
-  try {
-    const ext = mime.includes('mp4') ? 'm4a' : mime.includes('ogg') ? 'ogg' : 'webm'
-    const fd = new FormData(); fd.append('files', blob, `voice.${ext}`)
-    const { data } = await client.post('/uploads', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
-    const url = data.urls?.[0]
-    if (url) { await sendMessage(`@[audio](${url})`); scrollToBottom() }
-  } finally { uploading.value = false }
+  const ext = mime.includes('mp4') ? 'm4a' : mime.includes('ogg') ? 'ogg' : 'webm'
+  const pv = reactive({ id: `pv-${uploadSeq++}`, chatId: activeId.value, seconds: secs, sent: 0, total: blob.size || 1, failed: false, blob, ext, ctrl: null })
+  pendingVoice.push(pv); nextTick(scrollToBottom)
+  uploadVoice(pv)
 }
+async function uploadVoice(pv) {
+  pv.failed = false; pv.sent = 0
+  pv.ctrl = new AbortController()
+  try {
+    const fd = new FormData(); fd.append('files', new File([pv.blob], `voice.${pv.ext}`, { type: pv.blob.type }))
+    const { data } = await client.post('/uploads', fd, {
+      headers: { 'Content-Type': 'multipart/form-data' }, signal: pv.ctrl.signal,
+      onUploadProgress: (e) => { pv.sent = e.loaded; if (e.total) pv.total = e.total },
+    })
+    const url = data.urls?.[0]
+    if (url) await sendMessageTo(pv.chatId, `@[audio](${url})`)
+    removeVoice(pv); scrollToBottom()
+  } catch {
+    if (pv.ctrl?.signal.aborted) removeVoice(pv) // отменено пользователем
+    else pv.failed = true
+  }
+}
+function removeVoice(pv) { const i = pendingVoice.indexOf(pv); if (i >= 0) pendingVoice.splice(i, 1) }
+function cancelVoice(pv) { try { pv.ctrl?.abort() } catch { /* ignore */ } removeVoice(pv) }
+function retryVoice(pv) { uploadVoice(pv) }
+function fmtKB(b) { return `${(b / 1024).toFixed(b < 1024 * 1024 ? 1 : 0)} KB` }
 function stopRec() { if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop() }
 function cancelRec() { recCanceled = true; stopRec() }
 
 // ── единая механика записи по удержанию (голос ↔ кружок), как в Telegram ────
 const recMode = ref('voice') // 'voice' | 'video'
-const holdRec = reactive({ active: false, locked: false, seconds: 0, willCancel: false })
+const holdRec = reactive({ active: false, locked: false, seconds: 0, willCancel: false, upProgress: 0 })
 let holdArmTimer = null; let holdDispTimer = null; let holdStartX = 0; let holdStartY = 0; let holdStartTs = 0; let holdArmed = false; let holdMoved = false
 function fmtRecMs(s) { const mm = Math.floor(s / 60); const ss = Math.floor(s % 60); const t = Math.floor((s * 10) % 10); return `${mm}:${String(ss).padStart(2, '0')},${t}` }
 function recPointerDown(e) {
@@ -982,7 +1047,7 @@ function recPointerDown(e) {
   holdArmTimer = setTimeout(() => { if (holdArmed) beginHoldRec() }, 220) // отличаем короткий тап от удержания
 }
 async function beginHoldRec() {
-  holdRec.active = true; holdRec.locked = false; holdRec.willCancel = false; holdRec.seconds = 0
+  holdRec.active = true; holdRec.locked = false; holdRec.willCancel = false; holdRec.seconds = 0; holdRec.upProgress = 0
   holdStartTs = Date.now()
   clearInterval(holdDispTimer)
   holdDispTimer = setInterval(() => { holdRec.seconds = (Date.now() - holdStartTs) / 1000 }, 100)
@@ -992,8 +1057,10 @@ function recPointerMove(e) {
   const dx = e.clientX - holdStartX, dy = e.clientY - holdStartY
   if (!holdRec.active) { if (Math.abs(dx) > 6 || Math.abs(dy) > 6) holdMoved = true; return }
   if (holdRec.locked) return
-  if (dy < -70) { holdRec.locked = true; holdRec.willCancel = false; return } // тянем вверх → закрепить
-  holdRec.willCancel = dx < -60 // уводим влево → отмена
+  // приближение к замку (0..1) — для подсветки; закрепляем только у самого замка
+  holdRec.upProgress = Math.max(0, Math.min(1, -dy / 110))
+  if (dy < -110) { holdRec.locked = true; holdRec.willCancel = false; holdRec.upProgress = 1; return }
+  holdRec.willCancel = dx < -60 && dy > -30 // уводим вбок → отмена (но не при движении вверх)
 }
 function recPointerUp() {
   clearTimeout(holdArmTimer); holdArmed = false
@@ -1263,6 +1330,7 @@ async function onScroll() {
   if (ctx.open) closeCtx()
   const el = scroller.value
   if (!el) return
+  updateFloatingDate()
   stickBottom.value = (el.scrollHeight - el.scrollTop - el.clientHeight) < 60
   if (el.scrollTop < 40 && !loadingOlder) {
     loadingOlder = true
@@ -1304,6 +1372,42 @@ const showInfo = ref(false)
 const infoData = ref(null)
 let infoCache = {}
 try { infoCache = JSON.parse(localStorage.getItem('chatInfoCache') || '{}') || {} } catch { infoCache = {} }
+// статус собеседника в личном чате (в сети / был(а) …)
+const peerStatus = ref(null) // { online, last_seen, id }
+let peerStatusTimer = null
+async function refreshPeerStatus() {
+  if (!activeChat.value || activeChat.value.type !== 'direct' || !activeId.value) { peerStatus.value = null; return }
+  const id = activeId.value
+  try {
+    const { data } = await client.get(`/chats/${id}/info`)
+    if (activeId.value !== id) return
+    if (data?.peer) { peerStatus.value = { online: data.peer.online, last_seen: data.peer.last_seen, id: data.peer.id }; infoCache[id] = data }
+  } catch { /* оставляем как есть */ }
+}
+const peerStatusText = computed(() => {
+  const p = peerStatus.value; if (!p) return ''
+  if (p.online) return 'в сети'
+  if (!p.last_seen) return 'не в сети'
+  const d = new Date(p.last_seen); if (isNaN(d.getTime())) return 'не в сети'
+  const now = new Date(); const diff = (now - d) / 1000
+  if (diff < 90) return 'был(а) недавно'
+  if (diff < 3600) return `был(а) ${Math.floor(diff / 60)} мин назад`
+  if (d.toDateString() === now.toDateString()) return `был(а) в ${d.toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })}`
+  const y = new Date(now); y.setDate(now.getDate() - 1)
+  if (d.toDateString() === y.toDateString()) return `был(а) вчера в ${d.toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })}`
+  return `был(а) ${d.toLocaleDateString('ru', { day: 'numeric', month: 'short' })}`
+})
+watch(activeId, () => { clearInterval(peerStatusTimer); peerStatus.value = null; refreshPeerStatus(); peerStatusTimer = setInterval(refreshPeerStatus, 30000) }, { immediate: true })
+
+// ── звонок (окно вызова) ───────────────────────────────────────────────────
+const call = reactive({ open: false, name: '', avatar: '', video: false, status: 'idle' })
+function startCall(withVideo) {
+  if (!activeChat.value || activeChat.value.type !== 'direct') return
+  call.name = activeChat.value.title || ''
+  call.avatar = activeChat.value.avatar_url || ''
+  call.video = !!withVideo; call.status = 'calling'; call.open = true
+}
+function endCall() { call.open = false; call.status = 'idle' }
 async function openInfo() {
   const id = activeId.value
   showInfo.value = true
@@ -1750,12 +1854,24 @@ onBeforeUnmount(() => {
                   :class="activeChat.type === 'group' ? 'bg-gradient-to-br from-sage-400 to-sage-600' : 'bg-gradient-to-br from-saffron-400 to-saffron-600'">{{ initials(activeChat.title) }}</span>
             <div class="min-w-0 flex-1">
               <div class="truncate font-medium text-ink-900">{{ activeChat.title }}</div>
-              <div class="truncate text-xs text-ink-700/50">
+              <div class="truncate text-xs">
                 <span v-if="typingLabel" class="text-saffron-600">{{ typingLabel }}</span>
-                <span v-else-if="activeChat.type === 'group'">{{ activeChat.members.length }} участников</span>
-                <span v-else>{{ chatState.connection === 'online' ? 'в сети' : 'не в сети' }}</span>
+                <span v-else-if="activeChat.type === 'group'" class="text-ink-700/50">{{ activeChat.members.length }} участников</span>
+                <span v-else :class="peerStatus?.online ? 'text-saffron-600' : 'text-ink-700/50'">{{ peerStatusText || (chatState.connection === 'online' ? 'в сети' : 'не в сети') }}</span>
               </div>
             </div>
+          </div>
+          <!-- действия: поиск / звонок / информация -->
+          <div class="flex shrink-0 items-center gap-0.5">
+            <button class="rounded-full p-2 text-ink-700/55 transition hover:bg-parchment-100 hover:text-saffron-600" title="Поиск в чате" @click.stop="openChatSearch">
+              <AppIcon name="search" :size="21" />
+            </button>
+            <button v-if="activeChat.type === 'direct'" class="rounded-full p-2 text-ink-700/55 transition hover:bg-parchment-100 hover:text-saffron-600" title="Позвонить" @click.stop="startCall(false)">
+              <AppIcon name="phone" :size="21" />
+            </button>
+            <button class="rounded-full p-2 text-ink-700/55 transition hover:bg-parchment-100 hover:text-saffron-600" title="Информация" @click.stop="isGroup ? openGroupEdit() : openInfo()">
+              <AppIcon name="info" :size="21" />
+            </button>
           </div>
         </header>
 
@@ -1872,13 +1988,15 @@ onBeforeUnmount(() => {
           <button class="rounded-lg p-1.5 text-ink-700/50 hover:bg-parchment-100" title="Открепить" @click.stop="unpinMessageInChat(activeId)"><AppIcon name="close" :size="16" /></button>
         </div>
 
-        <AudioBar />
+        <!-- плеер оверлеем поверх верха ленты — не сдвигает чат вниз при появлении -->
+        <div class="relative flex min-h-0 flex-1 flex-col">
+        <div class="pointer-events-none absolute inset-x-0 top-0 z-20 [&>*]:pointer-events-auto"><AudioBar /></div>
 
         <div ref="scroller" class="chat-bg flex flex-1 flex-col overflow-y-auto p-4"
              @scroll="onScroll" @click="onScrollerClick" @mousedown="onScrollerDown" @touchstart="onScrollerDown">
           <div ref="listWrap" class="mt-auto space-y-1">
           <template v-for="(m, i) in chatState.messages" :key="m.client_uuid">
-          <div v-if="showDaySep(m, i)" class="my-2 flex justify-center">
+          <div v-if="showDaySep(m, i)" :data-daysep="dayLabel(m.created_at)" class="my-2 flex justify-center">
             <span class="rounded-full bg-ink-900/55 px-3 py-1 text-xs font-semibold text-white shadow-sm">{{ dayLabel(m.created_at) }}</span>
           </div>
           <div v-if="m.client_uuid === firstUnreadKey" class="my-3 flex items-center gap-2 px-2">
@@ -1887,10 +2005,14 @@ onBeforeUnmount(() => {
             <span class="h-px flex-1 bg-saffron-400/60"></span>
           </div>
           <div :id="`msg-${m.id}`"
-               class="group flex items-end gap-2 rounded-xl px-1 transition-colors"
-               :class="[selectMode ? 'cursor-pointer select-none justify-start' : rowJustify(m), selectMode && selected.has(m.id) && 'bg-saffron-500/10']"
+               class="group relative flex items-end gap-2 rounded-xl px-1 transition-colors"
+               :class="[rowJustify(m), selectMode && 'cursor-pointer select-none pr-10', selectMode && selected.has(m.id) && 'bg-saffron-500/10']"
                @click.capture="onRowClick($event, m)"
                @mousedown="selDragStart($event, m, i)" @mouseenter="selDragEnter(i)">
+            <!-- чекбокс выбора: у ПРАВОГО края (сообщения остаются на своих сторонах) -->
+            <div v-if="selectMode" class="absolute right-1.5 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full border-2 transition" :class="selected.has(m.id) ? 'border-saffron-500 bg-saffron-500 text-white' : 'border-ink-700/25 bg-white/50'">
+              <AppIcon v-if="selected.has(m.id)" name="check" :size="14" />
+            </div>
             <!-- аватар (в группах, слева от сообщения — и у чужих, и у своих) -->
             <template v-if="isGroup && !isMine(m)">
               <img v-if="avatarOf(m) && isRunEnd(m, i)" :src="thumbUrl(avatarOf(m))" @error="imgFull($event, avatarOf(m))" class="photo-bw sticky bottom-1.5 h-10 w-10 shrink-0 rounded-full object-cover" />
@@ -2120,6 +2242,24 @@ onBeforeUnmount(() => {
             </div>
           </div>
 
+          <!-- оптимистичное голосовое: индикатор загрузки на сервер (кольцо + × отмена) -->
+          <div v-for="pv in pendingVoice.filter((p) => p.chatId === activeId)" :key="pv.id" class="flex justify-end px-1">
+            <div class="flex max-w-[78%] items-center gap-3 rounded-2xl bg-saffron-500 px-3 py-2.5 text-white shadow-sm">
+              <button class="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/25 transition hover:bg-white/35" :title="pv.failed ? 'Повторить' : 'Отменить'" @click="pv.failed ? retryVoice(pv) : cancelVoice(pv)">
+                <svg v-if="!pv.failed" class="absolute inset-0 h-full w-full -rotate-90" viewBox="0 0 44 44">
+                  <circle cx="22" cy="22" r="20" fill="none" stroke="rgba(255,255,255,0.35)" stroke-width="2.5" />
+                  <circle cx="22" cy="22" r="20" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" :stroke-dasharray="125.6" :stroke-dashoffset="125.6 * (1 - pv.sent / pv.total)" style="transition: stroke-dashoffset .2s linear" />
+                </svg>
+                <AppIcon :name="pv.failed ? 'reply' : 'close'" :size="18" :class="pv.failed && '-scale-x-100'" />
+              </button>
+              <div class="min-w-0">
+                <div class="text-sm tabular-nums">{{ fmtRec(pv.seconds) }}</div>
+                <div class="text-xs text-white/75">{{ pv.failed ? 'Ошибка загрузки' : `${fmtKB(pv.sent)} / ${fmtKB(pv.total)}` }}</div>
+              </div>
+              <AppIcon name="clock" :size="14" class="ml-1 shrink-0 self-end text-white/70" />
+            </div>
+          </div>
+
           <!-- оптимистичный кружок (появляется мгновенно с лоадером) -->
           <div v-for="pn in pendingNotes.filter((p) => p.chatId === activeId)" :key="pn.id" class="flex justify-end px-1">
             <div class="relative h-[19.5rem] w-[19.5rem] overflow-hidden rounded-full shadow-sm">
@@ -2131,6 +2271,12 @@ onBeforeUnmount(() => {
             </div>
           </div>
           </div>
+        </div>
+
+        <!-- единая плавающая дата при скролле (не накладывается, в отличие от sticky-плашек) -->
+        <div class="pointer-events-none absolute inset-x-0 top-2 z-[6] flex justify-center transition-opacity duration-300" :class="floatDate.show ? 'opacity-100' : 'opacity-0'">
+          <span class="rounded-full bg-ink-900/55 px-3 py-1 text-xs font-semibold text-white shadow-sm backdrop-blur-sm">{{ floatDate.label }}</span>
+        </div>
         </div>
 
         <!-- кнопка «вниз» (видна, когда прокручено вверх) -->
@@ -2156,25 +2302,26 @@ onBeforeUnmount(() => {
             <button class="text-ink-700/50 hover:text-ink-900" @click="cancelEdit"><AppIcon name="close" :size="15" /></button>
           </div>
 
-          <!-- ЗАПИСЬ по удержанию (голос ↔ кружок), как в Telegram -->
-          <div v-if="holdRec.active" class="relative flex items-center gap-3 rounded-2xl px-4 py-3 ring-1 transition"
-               :class="holdRec.willCancel ? 'bg-red-500/10 ring-red-300' : 'bg-parchment-100 ring-parchment-300'">
-            <span class="h-3 w-3 shrink-0 animate-pulse rounded-full bg-red-500"></span>
+          <!-- ЗАПИСЬ по удержанию (голос ↔ кружок): та же высота строки, кнопка справа -->
+          <div v-if="holdRec.active" class="relative flex min-h-[2.75rem] items-center gap-3">
+            <span class="ml-1 h-3 w-3 shrink-0 animate-pulse rounded-full bg-red-500"></span>
             <span class="shrink-0 tabular-nums text-sm text-ink-800">{{ fmtRecMs(holdRec.seconds) }}</span>
-            <span class="flex-1 truncate text-center text-sm" :class="holdRec.willCancel ? 'font-medium text-red-600' : 'text-ink-700/50'">
+            <span class="flex-1 truncate text-center text-sm" :class="holdRec.willCancel ? 'font-medium text-red-600' : 'text-ink-700/45'">
               {{ holdRec.willCancel ? 'Отпустите для отмены' : (holdRec.locked ? (recMode === 'video' ? 'Кружок закреплён' : 'Голосовое закреплено') : 'Для отмены отпустите курсор вне поля') }}
             </span>
             <template v-if="holdRec.locked">
-              <button class="rounded-lg px-3 py-1.5 text-sm text-ink-700/60 hover:bg-parchment-200" @click="lockedCancel">Отмена</button>
-              <button class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-saffron-500 text-white hover:bg-saffron-600" title="Отправить" @click="lockedSend"><AppIcon name="send" :size="20" /></button>
+              <button class="rounded-lg px-3 py-1.5 text-sm text-ink-700/60 hover:bg-parchment-100" @click="lockedCancel">Отмена</button>
+              <button class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-saffron-500 text-white hover:bg-saffron-600" title="Отправить" @click="lockedSend"><AppIcon name="send" :size="20" /></button>
             </template>
             <template v-else>
-              <!-- подсказка «тяни вверх, чтобы закрепить» -->
-              <div class="pointer-events-none absolute -top-24 right-4 flex flex-col items-center gap-1.5 rounded-full bg-ink-900/70 px-2.5 py-3 text-white/90 shadow-lg">
+              <!-- подсказка «тяни вверх, чтобы закрепить» — над кнопкой; подсвечивается при приближении -->
+              <div class="pointer-events-none absolute right-1 flex flex-col items-center gap-1.5 rounded-full px-2.5 py-3 shadow-lg transition-colors"
+                   :class="holdRec.upProgress > 0.6 ? 'bg-saffron-500 text-white' : 'bg-ink-900/70 text-white/90'"
+                   :style="{ bottom: (56 + holdRec.upProgress * 26) + 'px', transform: `scale(${1 + holdRec.upProgress * 0.18})` }">
                 <AppIcon name="lock" :size="18" />
-                <AppIcon name="chevron" :size="15" class="animate-bounce rotate-180" />
+                <AppIcon name="chevron" :size="15" :class="holdRec.upProgress > 0.05 ? '' : 'animate-bounce'" class="rotate-180" />
               </div>
-              <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-red-500 text-white shadow-lg">
+              <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-red-500 text-white shadow-lg ring-4 ring-red-500/25">
                 <AppIcon :name="recMode === 'video' ? 'video' : 'mic'" :size="22" />
               </span>
             </template>
@@ -2359,6 +2506,33 @@ onBeforeUnmount(() => {
           </button>
           <div v-if="!forwardList.length" class="px-2 py-4 text-center text-sm text-ink-700/50">Ничего не найдено</div>
         </div>
+      </div>
+    </div>
+
+    <!-- Окно звонка (исходящий вызов) -->
+    <div v-if="call.open" class="fixed inset-0 z-[80] flex flex-col items-center justify-between bg-ink-900 p-10 text-white">
+      <div class="pt-6 text-center text-white/50">{{ call.video ? 'Видеозвонок' : 'Аудиозвонок' }}</div>
+      <div class="flex flex-1 flex-col items-center justify-center gap-6">
+        <img v-if="call.avatar" :src="thumbUrl(call.avatar)" class="h-44 w-44 rounded-full object-cover shadow-2xl" />
+        <span v-else class="flex h-44 w-44 items-center justify-center rounded-full bg-gradient-to-br from-saffron-400 to-saffron-600 text-6xl font-semibold shadow-2xl">{{ initials(call.name) }}</span>
+        <div class="text-center">
+          <div class="text-3xl font-semibold">{{ call.name }}</div>
+          <div class="mt-3 text-white/55">Если Вы хотите начать видеозвонок,<br>нажмите на значок камеры.</div>
+        </div>
+      </div>
+      <div class="flex items-end gap-10 pb-6">
+        <button class="flex flex-col items-center gap-2" @click="call.video = !call.video">
+          <span class="flex h-16 w-16 items-center justify-center rounded-full text-white transition" :class="call.video ? 'bg-sky-600' : 'bg-sky-500 hover:bg-sky-600'"><AppIcon name="video" :size="28" /></span>
+          <span class="text-sm text-white/70">Вкл. видео</span>
+        </button>
+        <button class="flex flex-col items-center gap-2" @click="endCall">
+          <span class="flex h-16 w-16 items-center justify-center rounded-full bg-white text-ink-900 transition hover:bg-white/90"><AppIcon name="close" :size="28" /></span>
+          <span class="text-sm text-white/70">Отменить</span>
+        </button>
+        <button class="flex flex-col items-center gap-2" @click="endCall">
+          <span class="flex h-16 w-16 items-center justify-center rounded-full bg-sky-500 text-white transition hover:bg-sky-600"><AppIcon name="phone" :size="28" /></span>
+          <span class="text-sm text-white/70">Позвонить</span>
+        </button>
       </div>
     </div>
 

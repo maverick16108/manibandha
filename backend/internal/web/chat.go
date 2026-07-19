@@ -705,6 +705,9 @@ func (s *Server) userCard(pu *models.User) map[string]any {
 		"id": pu.ID, "name": pu.FullName, "avatar": pu.AvatarURL,
 		"phone": pu.Phone, "online": chatH.isOnline(pu.ID),
 	}
+	if ls := chatH.lastSeenAt(pu.ID); !ls.IsZero() {
+		m["last_seen"] = ls.UTC()
+	}
 	if pu.DiscipleID != nil {
 		var d models.Disciple
 		if s.DB.First(&d, *pu.DiscipleID).Error == nil {

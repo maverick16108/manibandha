@@ -1306,7 +1306,8 @@ async function saveGroup() {
 }
 
 // ── поиск по сообщениям внутри чата (Ctrl+F) ──────────────────────────────
-const searchChat = reactive({ open: false, q: '', results: [], loading: false })
+// scope: 'this' — по открытому чату, 'all' — по всем моим чатам (комбобокс)
+const searchChat = reactive({ open: false, q: '', results: [], loading: false, scope: 'this', comboOpen: false, sel: -1 })
 const searchChatInput = ref(null)
 let searchChatTimer = null
 function openChatSearch() {
@@ -1314,28 +1315,43 @@ function openChatSearch() {
   searchChat.open = true
   nextTick(() => { searchChatInput.value?.focus(); searchChatInput.value?.select?.() })
 }
-function closeChatSearch() { searchChat.open = false; searchChat.q = ''; searchChat.results = []; searchChat.loading = false }
-watch(() => searchChat.q, (q) => {
+function closeChatSearch() { Object.assign(searchChat, { open: false, q: '', results: [], loading: false, comboOpen: false, sel: -1 }) }
+function setSearchScope(s) { searchChat.scope = s; searchChat.comboOpen = false; searchChat.sel = -1 }
+function runChatSearch() {
   clearTimeout(searchChatTimer)
-  const term = (q || '').trim()
+  searchChat.sel = -1
+  const term = (searchChat.q || '').trim()
   if (term.length < 2) { searchChat.results = []; searchChat.loading = false; return }
   searchChat.loading = true
+  const scope = searchChat.scope; const cid = activeId.value
   searchChatTimer = setTimeout(async () => {
-    const cid = activeId.value
     try {
-      const { data } = await client.get(`/chats/${cid}/search`, { params: { q: term } })
-      if (activeId.value === cid && searchChat.open) searchChat.results = data
+      const url = scope === 'all' ? '/chats/search' : `/chats/${cid}/search`
+      const { data } = await client.get(url, { params: { q: term } })
+      if (searchChat.open && searchChat.scope === scope) searchChat.results = Array.isArray(data) ? data : []
     } catch { searchChat.results = [] } finally { searchChat.loading = false }
   }, 300)
-})
-watch(activeId, () => { if (searchChat.open) closeChatSearch() })
+}
+watch(() => [searchChat.q, searchChat.scope], runChatSearch)
+// «этот чат» привязан к открытому чату — при ручной смене чата закрываем; «мои чаты» оставляем
+watch(activeId, () => { if (searchChat.open && searchChat.scope === 'this') closeChatSearch() })
+// клик по результату: переходим к сообщению, поиск НЕ закрываем
 async function jumpToMessage(m) {
-  closeChatSearch()
+  if (searchChat.scope === 'all' && m.chat_id && m.chat_id !== activeId.value) {
+    router.push({ name: 'chat', params: { id: String(m.chat_id) } })
+    await nextTick(); setTimeout(() => jumpToId(m.id), 450); return
+  }
   if (!chatState.messages.some((x) => x.id === m.id)) {
     try { await loadAroundSeq(m.seq) } catch { /* ignore */ }
   }
   await flashScrollTo(m.id)
 }
+function searchNav(dir) {
+  const n = searchChat.results.length; if (!n) return
+  searchChat.sel = (searchChat.sel + dir + n) % n
+  nextTick(() => document.getElementById('sres-' + searchChat.sel)?.scrollIntoView({ block: 'nearest' }))
+}
+function searchEnter() { const m = searchChat.results[searchChat.sel] || searchChat.results[0]; if (m) jumpToMessage(m) }
 // переход к процитированному сообщению по клику на блок цитаты
 async function jumpToId(id) {
   if (!id) return
@@ -1441,26 +1457,63 @@ onBeforeUnmount(() => {
            :style="isDesktop ? { width: listWidth + 'px' } : null">
       <!-- Панель поиска по открытому чату (Ctrl+F) -->
       <template v-if="searchChat.open">
-        <div class="flex items-center gap-2 border-b border-parchment-200 p-3">
-          <div class="relative flex-1">
+        <div class="border-b border-parchment-200 p-3">
+          <div class="relative">
             <AppIcon name="search" :size="16" class="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-700/40" />
-            <input ref="searchChatInput" v-model="searchChat.q" class="input h-9 w-full pl-8 pr-8 text-sm" placeholder="Поиск в этом чате" />
+            <input ref="searchChatInput" v-model="searchChat.q" class="input h-9 w-full pl-8 pr-8 text-sm" placeholder="Поиск"
+                   @keydown.down.prevent="searchNav(1)" @keydown.up.prevent="searchNav(-1)" @keydown.enter.prevent="searchEnter" @keydown.esc.prevent.stop="closeChatSearch" />
             <button v-if="searchChat.q" @click="searchChat.q = ''" title="Очистить"
                     class="absolute right-2 top-1/2 -translate-y-1/2 text-ink-700/40 hover:text-ink-700"><AppIcon name="close" :size="15" /></button>
           </div>
-          <button class="rounded-lg p-1.5 text-ink-700/60 hover:bg-parchment-100" title="Закрыть поиск" @click="closeChatSearch"><AppIcon name="close" :size="18" /></button>
         </div>
-        <div class="border-b border-parchment-200 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-ink-700/50">Поиск в чате</div>
+        <!-- строка «Поиск в чате:» + комбобокс выбора области + крестик закрытия -->
+        <div class="border-b border-parchment-200 px-3 pb-2 pt-2">
+          <div class="mb-1 text-xs font-semibold text-ink-700/40">Поиск в чате:</div>
+          <div class="relative flex items-center gap-2">
+            <button class="flex flex-1 items-center gap-2 rounded-lg px-1 py-1 text-left hover:bg-parchment-50" @click="searchChat.comboOpen = !searchChat.comboOpen">
+              <template v-if="searchChat.scope === 'this'">
+                <img v-if="activeChat?.avatar_url" :src="thumbUrl(activeChat.avatar_url)" class="h-6 w-6 shrink-0 rounded-full object-cover" />
+                <span v-else class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-saffron-400 to-saffron-600 text-[10px] font-semibold text-white">{{ initials(activeChat?.title) }}</span>
+                <span class="truncate text-sm font-semibold text-ink-900">Этот чат</span>
+              </template>
+              <template v-else>
+                <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-sage-500 text-white"><AppIcon name="chat" :size="14" /></span>
+                <span class="truncate text-sm font-semibold text-ink-900">Мои чаты</span>
+              </template>
+              <AppIcon name="chevron" :size="14" class="shrink-0 text-ink-700/40 transition" :class="searchChat.comboOpen && 'rotate-180'" />
+            </button>
+            <button class="rounded-lg p-1.5 text-ink-700/60 hover:bg-parchment-100" title="Закрыть поиск" @click="closeChatSearch"><AppIcon name="close" :size="18" /></button>
+            <!-- выпадающий список области -->
+            <template v-if="searchChat.comboOpen">
+              <div class="fixed inset-0 z-20" @click="searchChat.comboOpen = false"></div>
+              <div class="absolute left-0 top-full z-30 mt-1 w-56 overflow-hidden rounded-xl bg-white py-1 shadow-lg ring-1 ring-parchment-200">
+                <button class="flex w-full items-center gap-2.5 px-3 py-2 text-left hover:bg-parchment-50" @click="setSearchScope('this')">
+                  <img v-if="activeChat?.avatar_url" :src="thumbUrl(activeChat.avatar_url)" class="h-6 w-6 shrink-0 rounded-full object-cover" />
+                  <span v-else class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-saffron-400 to-saffron-600 text-[10px] font-semibold text-white">{{ initials(activeChat?.title) }}</span>
+                  <span class="flex-1 truncate text-sm font-medium text-ink-900">Этот чат</span>
+                  <AppIcon v-if="searchChat.scope === 'this'" name="check" :size="16" class="text-saffron-600" />
+                </button>
+                <button class="flex w-full items-center gap-2.5 px-3 py-2 text-left hover:bg-parchment-50" @click="setSearchScope('all')">
+                  <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-sage-500 text-white"><AppIcon name="chat" :size="14" /></span>
+                  <span class="flex-1 truncate text-sm font-medium text-ink-900">Мои чаты</span>
+                  <AppIcon v-if="searchChat.scope === 'all'" name="check" :size="16" class="text-saffron-600" />
+                </button>
+              </div>
+            </template>
+          </div>
+        </div>
         <div class="flex-1 overflow-y-auto">
           <p v-if="searchChat.q.trim().length < 2" class="p-8 text-center text-sm text-ink-700/40">Введите минимум 2 символа</p>
           <p v-else-if="searchChat.loading && !searchChat.results.length" class="p-4 text-sm text-ink-700/50">Идёт поиск…</p>
           <p v-else-if="!searchChat.results.length" class="p-8 text-center text-sm text-ink-700/50">Ничего не найдено</p>
-          <button v-for="m in searchChat.results" :key="m.id" @click="jumpToMessage(m)"
-                  class="flex w-full flex-col gap-0.5 border-b border-parchment-100 px-3 py-2.5 text-left hover:bg-parchment-50">
+          <button v-for="(m, mi) in searchChat.results" :id="'sres-' + mi" :key="m.id" @click="jumpToMessage(m)"
+                  class="flex w-full flex-col gap-0.5 border-b border-parchment-100 px-3 py-2.5 text-left hover:bg-parchment-50"
+                  :class="mi === searchChat.sel && 'bg-saffron-500/10'">
             <span class="flex items-center justify-between gap-2">
-              <span class="truncate text-sm font-medium text-ink-900">{{ m.author_name || 'Без имени' }}</span>
+              <span class="truncate text-sm font-medium text-ink-900">{{ searchChat.scope === 'all' ? chatTitleById(m.chat_id) : (m.author_name || 'Без имени') }}</span>
               <span class="shrink-0 text-[11px] text-ink-700/40">{{ fmtListTime(m.created_at) }}</span>
             </span>
+            <span v-if="searchChat.scope === 'all' && m.author_name" class="text-xs text-ink-700/50">{{ m.author_name }}</span>
             <span class="line-clamp-2 text-sm text-ink-700/70">{{ snippet(m.body) }}</span>
           </button>
         </div>
@@ -1646,7 +1699,7 @@ onBeforeUnmount(() => {
             <!-- ФОТО-сообщение: без «полей» пузыря (как в телеге) -->
             <!-- кружок (видео-запись) — круглый плеер: авто muted+loop, клик → звук + кольцо прогресса -->
             <div v-if="isVideoNote(m)" class="flex flex-col gap-1" @contextmenu="onContext($event, m)">
-              <div class="relative h-52 w-52">
+              <div class="relative h-[19.5rem] w-[19.5rem]">
                 <div class="h-full w-full overflow-hidden rounded-full bg-black shadow-sm">
                   <video :ref="(el) => setVnEl(m.id, el)" :src="videoNoteOf(m).url" :poster="thumbUrl(videoNoteOf(m).poster || '')"
                          autoplay muted loop playsinline disablepictureinpicture controlslist="nodownload noremoteplayback nofullscreen"
@@ -1932,7 +1985,7 @@ onBeforeUnmount(() => {
           <div v-if="vnRecording" class="absolute inset-0 z-40 flex flex-col items-center justify-center gap-5 bg-parchment-100/95 backdrop-blur-sm">
             <div class="relative h-64 w-64">
               <div class="h-full w-full overflow-hidden rounded-full bg-black shadow-xl">
-                <video ref="vnPreview" class="pointer-events-none h-full w-full -scale-x-100 object-cover" muted playsinline></video>
+                <video ref="vnPreview" muted playsinline disablepictureinpicture controlslist="nodownload noremoteplayback nofullscreen" class="pointer-events-none h-full w-full -scale-x-100 object-cover"></video>
               </div>
               <!-- кольцо прогресса записи (до 1 минуты) -->
               <svg class="pointer-events-none absolute inset-0 h-full w-full -rotate-90" viewBox="0 0 100 100">

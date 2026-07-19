@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
+defineOptions({ name: 'ConferenceView' })
 import { useRouter } from 'vue-router'
 import client from '../api/client'
 import { useAuthStore } from '../stores/auth'

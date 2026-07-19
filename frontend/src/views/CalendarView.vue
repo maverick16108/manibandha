@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
+defineOptions({ name: 'CalendarView' })
 import { RouterLink } from 'vue-router'
 import client from '../api/client'
 import { useAuthStore } from '../stores/auth'

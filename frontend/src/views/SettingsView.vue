@@ -1,5 +1,6 @@
 <script setup>
 import { ref, onMounted } from 'vue'
+defineOptions({ name: 'SettingsView' })
 import client from '../api/client'
 import AppIcon from '../components/AppIcon.vue'
 import AppSkeleton from '../components/AppSkeleton.vue'

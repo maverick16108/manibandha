@@ -1,5 +1,6 @@
 <script setup>
 import { ref, reactive, onMounted, watch } from 'vue'
+defineOptions({ name: 'ReportsView' })
 import { RouterLink } from 'vue-router'
 import client from '../api/client'
 import AppSelect from '../components/AppSelect.vue'

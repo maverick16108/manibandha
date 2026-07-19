@@ -1,5 +1,6 @@
 <script setup>
 import { ref } from 'vue'
+defineOptions({ name: 'DictionariesView' })
 import DictionaryPanel from '../components/DictionaryPanel.vue'
 import { usePageTitle } from '../composables/pageTitle'
 

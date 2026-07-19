@@ -1,5 +1,6 @@
 <script setup>
 import { reactive, ref, computed, onMounted } from 'vue'
+defineOptions({ name: 'ProfileView' })
 import { useAuthStore } from '../stores/auth'
 import { usePageTitle } from '../composables/pageTitle'
 import { ROLE_LABELS, formatPhone, MARITAL_LABELS, thumbUrl, imgFull } from '../lib/format'

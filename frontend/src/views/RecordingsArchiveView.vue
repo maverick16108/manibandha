@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
+defineOptions({ name: 'RecordingsArchiveView' })
 import client from '../api/client'
 import { useAuthStore } from '../stores/auth'
 import AppIcon from '../components/AppIcon.vue'

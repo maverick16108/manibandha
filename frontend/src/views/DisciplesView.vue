@@ -1,5 +1,6 @@
 <script setup>
 import { ref, reactive, onMounted, onBeforeUnmount, onActivated, watch, computed } from 'vue'
+defineOptions({ name: 'DisciplesView' })
 import { RouterLink, useRoute } from 'vue-router'
 import client from '../api/client'
 import { useAuthStore } from '../stores/auth'

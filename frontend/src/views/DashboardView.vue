@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+defineOptions({ name: 'DashboardView' })
 import { useRouter } from 'vue-router'
 import client from '../api/client'
 import AppSkeleton from '../components/AppSkeleton.vue'

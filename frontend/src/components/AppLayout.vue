@@ -11,6 +11,18 @@ import { toastState } from '../composables/toast'
 import { backTarget } from '../composables/backTarget'
 import AppIcon from './AppIcon.vue'
 
+// Разделы, кешируемые keep-alive (по имени компонента). Чат и детальные страницы — не кешируем.
+const KEEP_ALIVE_VIEWS = [
+  'DashboardView', 'CalendarView', 'DisciplesView', 'ThreadsView', 'ForumView', 'ConferenceView',
+  'RecordingsArchiveView', 'DictionariesView', 'ReportsView', 'UsersView', 'RolesView', 'SettingsView',
+  'ProfileView', 'ApprovalsView',
+]
+function viewKey(r) {
+  if (r.name === 'chat' || r.name === 'chat-home') return 'chat' // чат — один инстанс, параметр обрабатывает сам
+  if (r.meta && r.meta.keepAlive) return r.name                  // раздел — один инстанс на раздел (вопросы/отчёты раздельно)
+  return r.fullPath                                              // детальные/param — свежий инстанс на каждый параметр
+}
+
 const auth = useAuthStore()
 const router = useRouter()
 const route = useRoute()
@@ -221,13 +233,13 @@ function logout() {
       </header>
 
       <main class="p-4 sm:p-6 lg:p-8">
-        <!-- Разделы с meta.keepAlive кешируются (SPA-навигация не перерисовывает их: нет скелетонов,
-             позиция сохраняется). Чат и детальные/param-страницы рендерятся вне кеша. -->
+        <!-- Разделы из KEEP_ALIVE_VIEWS кешируются по ИМЕНИ компонента (надёжно, без двойного
+             монтажа). SPA-навигация не перерисовывает их: нет скелетонов, позиция сохраняется.
+             Чат и детальные/param-страницы не кешируются; полная перезагрузка — всё с нуля. -->
         <RouterView v-slot="{ Component, route }">
-          <keep-alive :max="8">
-            <component v-if="route.meta.keepAlive" :is="Component" :key="route.name" />
+          <keep-alive :include="KEEP_ALIVE_VIEWS" :max="20">
+            <component :is="Component" :key="viewKey(route)" />
           </keep-alive>
-          <component v-if="!route.meta.keepAlive" :is="Component" :key="route.fullPath" />
         </RouterView>
       </main>
     </div>

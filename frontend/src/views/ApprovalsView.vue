@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+defineOptions({ name: 'ApprovalsView' })
 import { useRouter } from 'vue-router'
 import client from '../api/client'
 import AppIcon from '../components/AppIcon.vue'

@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount, onActivated, onDeactivated } from 'vue'
+defineOptions({ name: 'ForumView' })
 import { RouterLink } from 'vue-router'
 import client from '../api/client'
 import { useAuthStore } from '../stores/auth'

@@ -975,16 +975,23 @@ function onImgLoad(e, u) {
   const el = e.target
   if (u && el.naturalWidth && el.naturalHeight && !imgAspects[u]) imgAspects[u] = el.naturalWidth / el.naturalHeight
 }
-// резерв места под одиночное фото — object-cover, лента не «прыгает».
-function photoBoxStyle(u) {
-  return { aspectRatio: String(imgAspects[u] || imageAspect(u) || 1.4), maxHeight: '400px' }
+// ЯВНЫЕ ширина+высота бокса из соотношения сторон — бокс НЕ зависит от загрузки медиа
+// (иначе пузырь схлопывается по intrinsic-размеру пустого <video>/<img> и потом «прыгает»).
+function boxWH(aspect, maxW, maxH) {
+  let w = maxW, h = Math.round(w / aspect)
+  if (h > maxH) { h = maxH; w = Math.round(h * aspect) }
+  return { width: w + 'px', height: h + 'px' }
 }
-// резерв места под видео. Приоритет — размеры из маркера (@[video](...|ШxВ)): бокс сразу
-// правильного размера, БЕЗ ожидания загрузки постера → нет рывка. Иначе — по постеру.
+// резерв места под одиночное фото.
+function photoBoxStyle(u) {
+  const aspect = imgAspects[u] || imageAspect(u) || 1.4
+  return boxWH(aspect, wide.value ? 420 : 300, 400)
+}
+// резерв места под видео. Приоритет — размеры из маркера (@[video](...|ШxВ)), иначе — по постеру.
 function videoBoxStyle(v) {
   const u = v?.poster || ''
   const aspect = (v && v.w && v.h) ? (v.w / v.h) : (imgAspects[u] || imageAspect(u) || 0.7)
-  return { aspectRatio: String(aspect), maxHeight: '70vh' }
+  return boxWH(aspect, wide.value ? 420 : 300, 460)
 }
 
 // ── превью ссылок (OG-карточки) ───────────────────────────────────────────

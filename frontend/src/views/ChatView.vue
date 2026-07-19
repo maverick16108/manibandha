@@ -420,15 +420,15 @@ function particleBurst(el) {
     const color = (bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent') ? bg : '#e0902a'
     const layer = document.createElement('div')
     layer.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:60;overflow:hidden'
-    const cols = Math.max(6, Math.min(22, Math.round(rect.width / 22)))
-    const rows = Math.max(4, Math.min(16, Math.round(rect.height / 22)))
+    const cols = Math.max(10, Math.min(40, Math.round(rect.width / 12)))
+    const rows = Math.max(6, Math.min(30, Math.round(rect.height / 12)))
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
         const p = document.createElement('div')
         const px = rect.left + (c + 0.5) / cols * rect.width
         const py = rect.top + (r + 0.5) / rows * rect.height
         const cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2
-        const size = 4 + Math.floor((px * py) % 4)
+        const size = 3 + Math.floor((px * py) % 3)
         // разлёт от центра наружу + немного вверх
         const dx = (px - cx) * (1.4 + ((c * 7 + r * 3) % 10) / 10) + ((c % 3) - 1) * 24
         const dy = (py - cy) * (1.2 + ((c * 3 + r * 5) % 10) / 10) - 30 - (r % 4) * 10
@@ -599,7 +599,7 @@ function snippet(b) {
     .replace(/\s+/g, ' ').trim().slice(0, 80)
 }
 // видео: маркер @[video](url|poster|bytes)
-const VIDEO_RE = /@\[video\]\(([^|)\s]+)\|([^|)]*)\|?([^)]*)\)/
+const VIDEO_RE = /@\[video\]\(([^|)\s]+)\|([^|)]*)\|?([^|)]*)\|?([^)]*)\)/
 const VIDEO_AUTO_MAX = 10 * 1024 * 1024 // ≤10МБ авто-проигрываем, крупнее — постер с кнопкой
 // уже просмотренные (скачанные) видео авто-проигрываются всегда, независимо от размера — храним в localStorage
 const VIDEO_LOADED_KEY = 'chatVideoLoaded'
@@ -624,7 +624,7 @@ function firstPhotoUrl(b) {
   return m ? m[1] : null
 }
 function isVideoMsg(m) { return VIDEO_RE.test(m?.body || '') }
-function videoOf(m) { const mm = contentBody(m).match(VIDEO_RE); return mm ? { url: mm[1], poster: mm[2] || '', size: Number(mm[3]) || 0 } : null }
+function videoOf(m) { const mm = contentBody(m).match(VIDEO_RE); if (!mm) return null; const d = (mm[4] || '').match(/(\d+)x(\d+)/); return { url: mm[1], poster: mm[2] || '', size: Number(mm[3]) || 0, w: d ? +d[1] : 0, h: d ? +d[2] : 0 } }
 function lastPhoto(c) { return firstPhotoUrl(c?.last?.body) }
 
 // ── композер: авто-рост, лимит, отправка ───────────────────────────────
@@ -767,7 +767,7 @@ function addComposeItems(files, compress) {
     const isVideo = (f.type || '').startsWith('video/')
     const it = reactive({ file: f, url: (isImage || isVideo) ? URL.createObjectURL(f) : null, isImage, isVideo, size: f.size, poster: null, posterBlob: null })
     composeItems.value.push(it)
-    if (isVideo) capturePoster(f).then((r) => { if (r) { it.posterBlob = r.blob; it.poster = r.url } })
+    if (isVideo) capturePoster(f).then((r) => { if (r) { it.posterBlob = r.blob; it.poster = r.url; it.dimsW = r.w; it.dimsH = r.h } })
   }
 }
 // постер (кадр) видео на клиенте — ffmpeg на сервере не нужен
@@ -777,14 +777,15 @@ function capturePoster(file) {
       const v = document.createElement('video')
       v.preload = 'metadata'; v.muted = true; v.playsInline = true
       const src = URL.createObjectURL(file); v.src = src
-      let settled = false
-      const done = (blob) => { if (settled) return; settled = true; clearTimeout(guard); URL.revokeObjectURL(src); resolve(blob ? { blob, url: URL.createObjectURL(blob) } : null) }
+      let settled = false; let vw = 0; let vh = 0
+      const done = (blob) => { if (settled) return; settled = true; clearTimeout(guard); URL.revokeObjectURL(src); resolve(blob ? { blob, url: URL.createObjectURL(blob), w: vw, h: vh } : null) }
       // некоторые кодеки не дают ни seeked, ни error — не ждём вечно
       const guard = setTimeout(() => done(null), 3000)
       v.onloadeddata = () => { try { v.currentTime = Math.min(0.1, (v.duration || 1) / 2) } catch { done(null) } }
       v.onseeked = () => {
         try {
-          const c = document.createElement('canvas'); c.width = v.videoWidth || 320; c.height = v.videoHeight || 240
+          vw = v.videoWidth || 320; vh = v.videoHeight || 240
+          const c = document.createElement('canvas'); c.width = vw; c.height = vh
           c.getContext('2d').drawImage(v, 0, 0, c.width, c.height)
           c.toBlob((b) => done(b), 'image/jpeg', 0.82)
         } catch { done(null) }
@@ -828,7 +829,8 @@ async function runUpload(pu) {
       const vurl = await uploadOne(it.file)
       let purl = ''
       if (it.posterBlob) { try { purl = await uploadOne(new File([it.posterBlob], 'poster.jpg', { type: 'image/jpeg' })) } catch { purl = '' } }
-      let s = `@[video](${vurl}|${purl}|${it.file.size || 0})`
+      const wh = (it.dimsW && it.dimsH) ? `|${it.dimsW}x${it.dimsH}` : ''
+      let s = `@[video](${vurl}|${purl}|${it.file.size || 0}${wh})`
       if (cap && !capUsed && !files.length) { s += `\n${cap}`; capUsed = true }
       await sendMessageTo(chatId, s)
     }
@@ -856,7 +858,7 @@ async function sendCompose() {
   composeItems.value = []; composeCaption.value = ''; composeCompress.value = true
   // постер видео мог не успеть сняться к моменту нажатия «Отправить» — дожимаем (с таймаутом),
   // иначе в превью попадал бы blob самого видео и <img> ломался в «точку».
-  await Promise.all(vids.map(async (it) => { if (!it.posterBlob) { const r = await capturePoster(it.file); if (r) { it.posterBlob = r.blob; it.poster = r.url } } }))
+  await Promise.all(vids.map(async (it) => { if (!it.posterBlob) { const r = await capturePoster(it.file); if (r) { it.posterBlob = r.blob; it.poster = r.url; it.dimsW = r.w; it.dimsH = r.h } } }))
   const previews = [
     ...imgs.map((it) => ({ url: it.url })),
     ...vids.map((it) => ({ url: it.poster || null, isVideo: true })),
@@ -976,9 +978,12 @@ function onImgLoad(e, u) {
 function photoBoxStyle(u) {
   return { aspectRatio: String(imgAspects[u] || imageAspect(u) || 1.4), maxHeight: '400px' }
 }
-// резерв места под видео (по постеру) — крупнее фото, до 70vh
-function videoBoxStyle(u) {
-  return { aspectRatio: String(imgAspects[u] || imageAspect(u) || 0.7), maxHeight: '70vh' }
+// резерв места под видео. Приоритет — размеры из маркера (@[video](...|ШxВ)): бокс сразу
+// правильного размера, БЕЗ ожидания загрузки постера → нет рывка. Иначе — по постеру.
+function videoBoxStyle(v) {
+  const u = v?.poster || ''
+  const aspect = (v && v.w && v.h) ? (v.w / v.h) : (imgAspects[u] || imageAspect(u) || 0.7)
+  return { aspectRatio: String(aspect), maxHeight: '70vh' }
 }
 
 // ── превью ссылок (OG-карточки) ───────────────────────────────────────────
@@ -2354,7 +2359,7 @@ onBeforeUnmount(() => {
               </div>
               <!-- ≤10МБ или уже запущено: авто muted+loop + таймер; крупнее: постер с кнопкой (тот же размер).
                    Место резервируется по постеру (object-cover) — при открытии чата не «прыгает». -->
-              <div class="video-box relative flex justify-center overflow-hidden bg-black" :style="videoBoxStyle(videoOf(m)?.poster || '')">
+              <div class="video-box relative flex justify-center overflow-hidden bg-black" :style="videoBoxStyle(videoOf(m))">
                 <template v-if="videoAuto(m)">
                   <video :src="videoOf(m).url" :poster="thumbUrl(videoOf(m).poster || '')" autoplay muted loop playsinline
                          disablepictureinpicture controlslist="nodownload noremoteplayback nofullscreen"

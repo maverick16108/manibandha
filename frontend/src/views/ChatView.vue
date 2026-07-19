@@ -171,10 +171,9 @@ watch(activeId, async (id, oldId) => {
     stickBottom.value = !(saved && !saved.atBottom)
     nextTick(() => inputEl.value?.focus()) // фокус сразу, не ждём загрузки истории
     await openChat(id) // обновляет сообщения (единый рендер) и резолвится синхронно после
-    await ensureLinkPreviews() // превью ссылок — ДО позиционирования, чтобы карточка не выросла после
-    if (activeId.value !== id) return
     await nextTick() // позицию ставим в микротаске ДО первой отрисовки — нет пустого кадра/перемотки
     positionAfterOpen(id, saved)
+    ensureLinkPreviews() // превью ссылок — в ФОНЕ (не await!): якорь+ResizeObserver держат позицию, пока карточки грузятся
   } else closeChat()
   nextTick(autoGrow)
 }, { immediate: false })
@@ -940,6 +939,7 @@ function albumItemClass(n, k) { return (n === 3 && k === 0) ? 'col-span-2' : '' 
 const imgAspects = reactive({})
 function onImgLoad(e, u) {
   const el = e.target
+  el.style.opacity = 1 // плавное появление поверх подложки (без «моргания»)
   if (u && el.naturalWidth && el.naturalHeight && !imgAspects[u]) imgAspects[u] = el.naturalWidth / el.naturalHeight
 }
 // ЯВНЫЕ ширина+высота бокса из соотношения сторон — бокс НЕ зависит от загрузки медиа
@@ -1941,7 +1941,7 @@ onMounted(async () => {
     if (activeId.value) {
       const id = activeId.value; const saved = chatScrollMem[id]
       stickBottom.value = !(saved && !saved.atBottom)
-      await openChat(id); await ensureLinkPreviews(); await nextTick(); positionAfterOpen(id, saved) // вернуться на прежнее место, а не всегда вниз
+      await openChat(id); await nextTick(); positionAfterOpen(id, saved); ensureLinkPreviews() // вернуться на прежнее место; превью — в фоне
     } else maybeAutoOpen()
   }
 })
@@ -2395,12 +2395,13 @@ onBeforeUnmount(() => {
               </div>
               <div v-if="photoUrls(m).length === 1" class="w-full overflow-hidden bg-parchment-200/50" :style="photoBoxStyle(photoUrls(m)[0])">
                 <img :src="thumbUrl(photoUrls(m)[0])" @error="imgFull($event, photoUrls(m)[0])" @load="onImgLoad($event, photoUrls(m)[0])"
-                     class="block h-full max-h-[400px] w-full cursor-zoom-in object-cover" @click.stop="openPhoto(m, 0)" />
+                     style="opacity:0;transition:opacity .35s ease" class="block h-full max-h-[400px] w-full cursor-zoom-in object-cover" @click.stop="openPhoto(m, 0)" />
               </div>
               <div v-else class="grid gap-0.5" :class="albumCols(photoUrls(m).length)" :style="{ width: (wide ? 420 : 300) + 'px' }">
-                <img v-for="(u, k) in photoUrls(m).slice(0, 10)" :key="k" :src="thumbUrl(u)" @error="imgFull($event, u)"
-                     class="aspect-square w-full cursor-zoom-in bg-parchment-200/50 object-cover" :class="albumItemClass(photoUrls(m).length, k)"
-                     @click.stop="openPhoto(m, k)" />
+                <div v-for="(u, k) in photoUrls(m).slice(0, 10)" :key="k" class="relative aspect-square overflow-hidden bg-parchment-200/60" :class="albumItemClass(photoUrls(m).length, k)">
+                  <img :src="thumbUrl(u)" @error="imgFull($event, u)" @load="$event.target.style.opacity=1"
+                       style="opacity:0;transition:opacity .35s ease" class="h-full w-full cursor-zoom-in object-cover" @click.stop="openPhoto(m, k)" />
+                </div>
               </div>
               <div v-if="captionText(m)" class="markdown-body break-words px-3.5 pt-1.5 text-[15px]" :class="isMine(m) && 'markdown-on-accent'" v-html="renderChatBody(captionText(m))"></div>
               <!-- реакции + время в одной строке (с подписью) -->

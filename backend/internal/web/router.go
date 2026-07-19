@@ -77,6 +77,7 @@ func (s *Server) Router() http.Handler {
 		pr.Delete("/drafts/{scope}", s.deleteDraft)
 		pr.Get("/settings", s.readSettings)
 		pr.Post("/uploads", s.upload)
+		pr.Get("/uploads-dims", s.uploadsDims)
 		// отчёты (агрегаты + экспорт)
 		pr.Get("/reports/summary", s.reportSummary)
 		pr.Get("/reports/timeline", s.reportTimeline)

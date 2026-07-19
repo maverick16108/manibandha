@@ -112,11 +112,22 @@ async function prefetchPhotos() {
     const rows = await db.all(
       "SELECT body FROM messages WHERE deleted=0 AND (body LIKE '%![]%' OR body LIKE '%@[video]%') ORDER BY (seq IS NULL), seq DESC LIMIT 400",
     );
+    const need = new Set();
     for (const r of rows) {
       const b = r.body || '';
-      b.replace(/!\[[^\]]*\]\(([^)]+)\)/g, (_x, u) => { warmImage(thumbUrl(u)); return ''; });
+      b.replace(/!\[[^\]]*\]\(([^)]+)\)/g, (_x, u) => { warmImage(thumbUrl(u)); if (!imageAspect(u)) need.add(u); return ''; });
       // постеры видео тоже прогреваем (для мгновенного показа и точного резерва места)
-      b.replace(/@\[video\]\([^|)]+\|([^|)]*)/g, (_x, poster) => { if (poster) warmImage(thumbUrl(poster)); return ''; });
+      b.replace(/@\[video\]\([^|)]+\|([^|)]*)/g, (_x, poster) => { if (poster) { warmImage(thumbUrl(poster)); if (!imageAspect(poster)) need.add(poster); } return ''; });
+    }
+    // размеры картинок с СЕРВЕРА — чтобы бокс резервировался правильно (переживает очистку кэша)
+    const list = [...need].slice(0, 200);
+    if (list.length) {
+      chatApi.uploadsDims(list).then((dims) => {
+        if (!dims) return;
+        let changed = false;
+        for (const [u, aspect] of Object.entries(dims)) { if (aspect > 0 && !imgDims[u]) { imgDims[u] = aspect; imgDims[thumbUrl(u)] = aspect; changed = true; } }
+        if (changed) { saveDims(); if (chatState.activeChatId) refreshMessages(); } // перерисуем с точным резервом (якорь удержит)
+      }).catch(() => { /* ignore */ });
     }
   } catch { /* ignore */ }
 }

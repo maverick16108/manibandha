@@ -2057,7 +2057,7 @@ onBeforeUnmount(() => {
         <p v-else-if="!filteredChats.length" class="p-4 text-sm text-ink-700/50">Чатов пока нет. Нажмите «плюс», чтобы начать.</p>
         <button v-for="c in filteredChats" :key="c.id"
                 class="flex w-full items-center gap-3 border-b border-parchment-100 px-3 py-2.5 text-left hover:bg-parchment-50"
-                :class="[c.id === activeId && 'bg-saffron-500/10', dragChatId === c.id && 'opacity-40', dragOverChatId === c.id && 'ring-2 ring-inset ring-saffron-400']"
+                :class="[c.id === activeId && 'bg-saffron-500/20 shadow-[inset_3px_0_0_0_theme(colors.saffron.500)]', dragChatId === c.id && 'opacity-40', dragOverChatId === c.id && 'ring-2 ring-inset ring-saffron-400']"
                 :draggable="c.pinned && !search" @mousedown="chatMouseDown($event, c)" @click="selectChat(c)" @contextmenu="onListContext($event, c)"
                 @dragstart="pinDragStart($event, c)" @dragover="pinDragOver($event, c)" @dragleave="pinDragLeave(c)" @drop="pinDrop($event, c)" @dragend="pinDragEnd">
           <img v-if="c.avatar_url" :src="thumbUrl(c.avatar_url)" @error="imgFull($event, c.avatar_url)" class="photo-bw h-11 w-11 shrink-0 rounded-full object-cover" />

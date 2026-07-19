@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"image"
 	"io"
+	"math"
 	"net/http"
 	"os"
 	"os/exec"
@@ -16,6 +17,28 @@ import (
 
 	_ "golang.org/x/image/webp"
 )
+
+// GET /api/uploads-dims?u=/uploads/a.webp,/uploads/b.webp — соотношения сторон картинок,
+// чтобы фронт резервировал место под фото ДО их загрузки (без «прыжка» при открытии чата).
+func (s *Server) uploadsDims(w http.ResponseWriter, r *http.Request) {
+	out := map[string]float64{}
+	for _, u := range strings.Split(r.URL.Query().Get("u"), ",") {
+		u = strings.TrimSpace(u)
+		if u == "" || !strings.HasPrefix(u, "/uploads/") || strings.Contains(u, "..") {
+			continue
+		}
+		f, err := os.Open(filepath.Join(s.Cfg.UploadDir, filepath.Base(u)))
+		if err != nil {
+			continue
+		}
+		cfg, _, err := image.DecodeConfig(f)
+		f.Close()
+		if err == nil && cfg.Height > 0 {
+			out[u] = math.Round(float64(cfg.Width)/float64(cfg.Height)*1000) / 1000
+		}
+	}
+	writeJSON(w, http.StatusOK, out)
+}
 
 const maxUploadBytes = 16 * 1024 * 1024        // картинки/аудио/документы
 const maxVideoBytes = 100 * 1024 * 1024        // видео — больший лимит

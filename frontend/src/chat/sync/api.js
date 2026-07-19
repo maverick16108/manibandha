@@ -23,4 +23,5 @@ export const chatApi = {
   linkPreview: (url) => client.get('/link-preview', { params: { url } }).then((r) => r.data),
   searchMessages: (chatId, q) => client.get(`/chats/${chatId}/search`, { params: { q } }).then((r) => r.data),
   searchAllChats: (q) => client.get('/chats/search', { params: { q } }).then((r) => r.data),
+  uploadsDims: (urls) => client.get('/uploads-dims', { params: { u: urls.join(',') } }).then((r) => r.data),
 };

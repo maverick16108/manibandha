@@ -2825,18 +2825,18 @@ onBeforeUnmount(() => {
           <AppIcon :name="call.fullscreen ? 'minimize' : 'maximize'" :size="20" />
         </button>
         <!-- панель кнопок -->
-        <div class="flex items-end gap-8" :class="[call.status === 'connected' && call.remoteVideo ? 'absolute bottom-0 left-0 right-0 justify-center bg-gradient-to-t from-black/60 to-transparent pb-6 pt-10' : 'pb-8']">
-          <button class="flex flex-col items-center gap-2" @click="toggleCallVideo">
-            <span class="flex h-14 w-14 items-center justify-center rounded-full text-white transition" :class="call.localVideo ? 'bg-sky-600' : 'bg-white/15 hover:bg-white/25'"><AppIcon name="video" :size="24" /></span>
-            <span class="text-xs text-white/60">{{ call.localVideo ? 'Выкл. видео' : 'Вкл. видео' }}</span>
+        <div class="flex items-end justify-center gap-12" :class="[call.status === 'connected' && call.remoteVideo ? 'absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent pb-8 pt-10' : 'pb-10']">
+          <button class="flex flex-col items-center gap-2.5" @click="toggleCallVideo">
+            <span class="flex h-[4.5rem] w-[4.5rem] items-center justify-center rounded-full text-white shadow-lg transition active:scale-95" :class="call.localVideo ? 'bg-sky-600' : 'bg-white/15 hover:bg-white/25'"><AppIcon name="video" :size="30" /></span>
+            <span class="text-sm text-white/70">{{ call.localVideo ? 'Выкл. видео' : 'Вкл. видео' }}</span>
           </button>
-          <button class="flex flex-col items-center gap-2" @click="endCall">
-            <span class="flex h-14 w-14 items-center justify-center rounded-full bg-red-500 text-white transition hover:bg-red-600"><AppIcon name="phone" :size="24" class="rotate-[135deg]" /></span>
-            <span class="text-xs text-white/60">{{ call.status === 'connected' ? 'Завершить' : 'Отменить' }}</span>
+          <button class="flex flex-col items-center gap-2.5" @click="endCall">
+            <span class="flex h-[4.5rem] w-[4.5rem] items-center justify-center rounded-full bg-red-500 text-white shadow-lg transition hover:bg-red-600 active:scale-95"><AppIcon name="phone" :size="30" class="rotate-[135deg]" /></span>
+            <span class="text-sm text-white/70">{{ call.status === 'connected' ? 'Завершить' : 'Отменить' }}</span>
           </button>
-          <button v-if="call.status === 'idle-outgoing'" class="flex flex-col items-center gap-2" @click="placeCall">
-            <span class="flex h-14 w-14 items-center justify-center rounded-full bg-sky-500 text-white transition hover:bg-sky-600"><AppIcon name="phone" :size="24" /></span>
-            <span class="text-xs text-white/60">Позвонить</span>
+          <button v-if="call.status === 'idle-outgoing'" class="flex flex-col items-center gap-2.5" @click="placeCall">
+            <span class="flex h-[4.5rem] w-[4.5rem] items-center justify-center rounded-full bg-sky-500 text-white shadow-lg transition hover:bg-sky-600 active:scale-95"><AppIcon name="phone" :size="30" /></span>
+            <span class="text-sm text-white/70">Позвонить</span>
           </button>
         </div>
       </div>

@@ -58,32 +58,9 @@ const scroller = ref(null)
 const listWrap = ref(null)
 const stickBottom = ref(true)          // держимся ли у нижнего края (иначе не дёргаем при подгрузке)
 const chatOpening = ref(false)         // прячем ленту на время открытия/позиционирования (без мелькания)
-const floatDate = reactive({ label: '', show: false }) // единственная плавающая дата (без встроенных плашек)
-let floatRaf = 0
-// коалесцируем в один кадр — иначе чтение layout на каждом scroll-событии даёт лаги на медиа
-function updateFloatingDate() {
-  if (floatRaf) return
-  floatRaf = requestAnimationFrame(() => {
-    floatRaf = 0
-    const el = scroller.value; if (!el) { floatDate.show = false; return }
-    const top = el.getBoundingClientRect().top
-    const seps = el.querySelectorAll('[data-daysep]')
-    let label = ''
-    for (const s of seps) {
-      const st = s.getBoundingClientRect().top
-      if (st <= top + 20) label = s.getAttribute('data-daysep')
-      // встроенный разделитель ПОЛНОСТЬЮ гаснет, не доезжая до плавающей плашки (чтобы не было двух
-      // одинаковых дат вверху): плавно уводим прозрачность в 0 на последних ~56px перед верхом.
-      const o = Math.max(0, Math.min(1, (st - (top + 2)) / 56))
-      s.style.opacity = o < 0.999 ? String(o) : ''
-    }
-    if (!label && seps.length) label = seps[0].getAttribute('data-daysep')
-    floatDate.label = label
-    // плавающая дата ЗАКРЕПЛЕНА: не прячем при проходе встроенной плашки. При смене дня label меняется →
-    // кроссфейд (старая дата гаснет, новая встаёт на её место и замирает).
-    floatDate.show = !!label
-  })
-}
+// Дата теперь — sticky-разделитель (position:sticky в ленте): прилипает к верху, а следующий день
+// его выталкивает. Отдельная плавающая плашка и JS-подсчёт больше не нужны.
+function updateFloatingDate() { /* больше не требуется — sticky-разделитель делает всё нативно */ }
 let listObs = null
 let pendingAnchor = null // {id, offset} — якорное сообщение, которое держим при догрузке контента
 // топовое видимое сообщение + его смещение от верха вьюпорта (для устойчивого восстановления позиции)
@@ -1339,16 +1316,15 @@ function calcWide() {
   const lw = window.innerWidth >= 640 ? listWidth.value : 0
   return (window.innerWidth - lw) > 900
 }
-// стартуем от СОХРАНЁННОГО значения прошлой сессии (окно обычно того же размера) — так первый кадр
-// сразу верный; если сохранённого нет — оценка calcWide. Обсервер потом лишь подтверждает.
-const WIDE_KEY = 'chatWide'
-const wide = ref((() => { try { const s = localStorage.getItem(WIDE_KEY); return s === null ? calcWide() : s === '1' } catch { return calcWide() } })())
-function setWide(v) { if (wide.value !== v) wide.value = v; try { localStorage.setItem(WIDE_KEY, v ? '1' : '0') } catch { /* ignore */ } }
-function onWinResize() { isDesktop.value = window.innerWidth >= 640; setWide(calcWide()) }
+// wide считаем ЧИСТОЙ математикой по ширине окна (calcWide) — синхронно и стабильно. НИКАКИХ измерений
+// элемента/ResizeObserver: их первый вызов приходит с переходной (узкой) шириной → wide мигает false→true
+// и свои медиа прыгают справа налево. Оконная математика верна с первого кадра и не даёт переходного кадра.
+const wide = ref(calcWide())
+function onWinResize() { isDesktop.value = window.innerWidth >= 640; wide.value = calcWide() }
 function startResize(e) {
   const startX = e.clientX
   const startW = listWidth.value
-  const move = (ev) => { listWidth.value = Math.max(240, Math.min(600, startW + (ev.clientX - startX))) }
+  const move = (ev) => { listWidth.value = Math.max(240, Math.min(600, startW + (ev.clientX - startX))); wide.value = calcWide() }
   const up = () => {
     document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up)
     document.body.style.userSelect = ''
@@ -1957,14 +1933,8 @@ onMounted(async () => {
   })
   document.addEventListener('visibilitychange', onChatVisible)
   window.addEventListener('focus', onChatVisible)
-  // НЕ трогаем wide синхронно из convEl.clientWidth: при монтировании ширина ещё может быть
-  // переходной (узкой) → wide=false → свои медиа встают справа, а обсервер потом выставит true и
-  // они прыгают влево. Стартовое значение уже задано в setup (calcWide + сохранённое), а обсервер
-  // лишь реагирует на настоящие изменения ширины (переживает переходный кадр).
-  if (convEl.value && typeof ResizeObserver !== 'undefined') {
-    resizeObs = new ResizeObserver((entries) => { for (const e of entries) setWide(e.contentRect.width > 900) })
-    resizeObs.observe(convEl.value)
-  }
+  // wide теперь считается по ширине окна (calcWide) в setup + на resize окна/перетаскивании списка —
+  // без ResizeObserver, чтобы не было переходного кадра, из-за которого свои медиа прыгали справа налево.
   if (!auth.isPending && auth.user) {
     await initChat({ meId: auth.user.id, getToken: () => auth.token })
     if (activeId.value) {
@@ -2311,8 +2281,8 @@ onBeforeUnmount(() => {
           <template v-for="(m, i) in chatState.messages" :key="m.client_uuid">
           <!-- встроенная плашка даты между днями (остаётся в ленте); плавающая сверху её дублирует
                только когда встроенная ушла вверх за экран (см. updateFloatingDate) -->
-          <div v-if="showDaySep(m, i)" :data-daysep="dayLabel(m.created_at)" class="my-2 flex justify-center">
-            <span class="rounded-full bg-ink-900/55 px-3 py-1 text-xs font-semibold text-white shadow-sm">{{ dayLabel(m.created_at) }}</span>
+          <div v-if="showDaySep(m, i)" :data-daysep="dayLabel(m.created_at)" class="sticky top-2 z-[6] my-2 flex justify-center">
+            <span class="rounded-full bg-ink-900/55 px-3 py-1 text-xs font-semibold text-white shadow-sm backdrop-blur-sm">{{ dayLabel(m.created_at) }}</span>
           </div>
           <div v-if="m.client_uuid === firstUnreadKey" class="my-3 flex items-center gap-2 px-2">
             <span class="h-px flex-1 bg-saffron-400/60"></span>
@@ -2595,12 +2565,7 @@ onBeforeUnmount(() => {
           </div>
         </div>
 
-        <!-- единая плавающая дата при скролле (не накладывается, в отличие от sticky-плашек) -->
-        <div class="pointer-events-none absolute inset-x-0 top-2 z-[6] flex justify-center transition-opacity duration-300" :class="floatDate.show ? 'opacity-100' : 'opacity-0'">
-          <transition name="datefade" mode="out-in">
-            <span :key="floatDate.label" class="rounded-full bg-ink-900/55 px-3 py-1 text-xs font-semibold text-white shadow-sm backdrop-blur-sm">{{ floatDate.label }}</span>
-          </transition>
-        </div>
+        <!-- дата — sticky-разделитель (см. блок сообщений): прилипает к верху и выталкивается следующим днём -->
         </div>
 
         <!-- кнопка «вниз» (видна, когда прокручено вверх) -->

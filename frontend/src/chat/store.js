@@ -94,9 +94,13 @@ function onVisibleResync() { if (document.visibilityState === 'visible') resync(
 const warmed = new Set();
 // запоминаем пропорции (w/h) миниатюр, чтобы зарезервировать место и лента не «прыгала»
 const IMG_DIMS_KEY = 'chatImgDims';
+const IMG_COLOR_KEY = 'chatImgColors';
 let imgDims = {}; try { imgDims = JSON.parse(localStorage.getItem(IMG_DIMS_KEY) || '{}') || {}; } catch { imgDims = {}; }
+let imgColors = {}; try { imgColors = JSON.parse(localStorage.getItem(IMG_COLOR_KEY) || '{}') || {}; } catch { imgColors = {}; }
+// средний цвет картинки (для мгновенной подложки «в цвет» до загрузки)
+export function imageColor(url) { const t = thumbUrl(url); return imgColors[t] || imgColors[url] || null; }
 let dimsTimer = null;
-function saveDims() { if (dimsTimer) return; dimsTimer = setTimeout(() => { dimsTimer = null; try { localStorage.setItem(IMG_DIMS_KEY, JSON.stringify(imgDims)); } catch { /* ignore */ } }, 800); }
+function saveDims() { if (dimsTimer) return; dimsTimer = setTimeout(() => { dimsTimer = null; try { localStorage.setItem(IMG_DIMS_KEY, JSON.stringify(imgDims)); localStorage.setItem(IMG_COLOR_KEY, JSON.stringify(imgColors)); } catch { /* ignore */ } }, 800); }
 export function imageAspect(url) { const t = thumbUrl(url); return imgDims[t] || imgDims[url] || null; }
 function warmImage(url) {
   if (!url || warmed.has(url)) return; warmed.add(url);
@@ -126,7 +130,7 @@ async function prefetchPhotos() {
       chatApi.uploadsDims(list).then((dims) => {
         if (!dims) return;
         let changed = false;
-        for (const [u, aspect] of Object.entries(dims)) { if (aspect > 0 && !imgDims[u]) { imgDims[u] = aspect; imgDims[thumbUrl(u)] = aspect; changed = true; } }
+        for (const [u, v] of Object.entries(dims)) { const a = typeof v === 'object' ? v.a : v; const c = typeof v === 'object' ? v.c : null; if (a > 0 && !imgDims[u]) { imgDims[u] = a; imgDims[thumbUrl(u)] = a; changed = true; } if (c && !imgColors[u]) { imgColors[u] = c; imgColors[thumbUrl(u)] = c; changed = true; } }
         if (changed) { saveDims(); if (chatState.activeChatId) refreshMessages(); } // перерисуем с точным резервом (якорь удержит)
       }).catch(() => { /* ignore */ });
     }
@@ -256,7 +260,7 @@ async function ensureImageDims(chatId) {
     if (!list.length) return;
     const dims = await Promise.race([chatApi.uploadsDims(list), new Promise((r) => setTimeout(() => r(null), 700))]);
     if (dims) {
-      for (const [u, a] of Object.entries(dims)) { if (a > 0 && !imgDims[u]) { imgDims[u] = a; imgDims[thumbUrl(u)] = a; } }
+      for (const [u, v] of Object.entries(dims)) { const a = typeof v === 'object' ? v.a : v; const c = typeof v === 'object' ? v.c : null; if (a > 0 && !imgDims[u]) { imgDims[u] = a; imgDims[thumbUrl(u)] = a; } if (c && !imgColors[u]) { imgColors[u] = c; imgColors[thumbUrl(u)] = c; } }
       saveDims();
     }
   } catch { /* ignore */ }

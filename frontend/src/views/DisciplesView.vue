@@ -9,6 +9,7 @@ import AppIcon from '../components/AppIcon.vue'
 import AppSkeleton from '../components/AppSkeleton.vue'
 import { STATUS_LABELS, STATUS_ORDER, STATUS_BADGE } from '../lib/format'
 import { usePageTitle } from '../composables/pageTitle'
+import { cachedGet, peekCache, TTL } from '../composables/apiCache'
 
 usePageTitle('Ученики')
 
@@ -58,9 +59,12 @@ function params() {
 }
 
 async function load(silent = false) {
-  if (!silent) loading.value = true // тихий рефреш (keep-alive) — без скелетона
+  const p = params()
+  const cached = peekCache('/disciples', p)
+  if (cached) { items.value = cached.items; total.value = cached.total; loading.value = false } // мгновенно из кеша — без скелетона
+  else if (!silent) loading.value = true
   try {
-    const { data } = await client.get('/disciples', { params: params() })
+    const data = await cachedGet('/disciples', { params: p, ttl: TTL.list })
     items.value = data.items
     total.value = data.total
   } finally {
@@ -104,10 +108,12 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onDocKey))
 onMounted(() => {
   // seed filters from URL query (deep links from the dashboard)
   for (const k of Object.keys(filters)) if (route.query[k] != null) filters[k] = String(route.query[k])
-  // данные фильтров (в т.ч. тяжёлый /cities ~107КБ) — в ФОНЕ, чтобы не задерживать таблицу
+  // данные фильтров (в т.ч. тяжёлый /cities ~107КБ) — из общего кеша (прогреваются заранее), в фоне
   Promise.all([
-    client.get('/disciples', { params: { is_mentor: true, limit: 500 } }), client.get('/regions'), client.get('/cities'),
-  ]).then(([m, r, c]) => { mentors.value = m.data.items; regions.value = r.data; cities.value = c.data }).catch(() => {})
+    cachedGet('/disciples', { params: { is_mentor: true, limit: 500 }, ttl: TTL.list }),
+    cachedGet('/regions', { ttl: TTL.ref }),
+    cachedGet('/cities', { ttl: TTL.ref }),
+  ]).then(([m, r, c]) => { mentors.value = m.items; regions.value = r; cities.value = c }).catch(() => {})
   // таблицу грузим сразу
   load().finally(() => { seeding = false })
 })

@@ -15,7 +15,7 @@ import { usePageTitle } from '../composables/pageTitle'
 import {
   chatState, initChat, openChat, closeChat, sendMessage, sendMessageTo, sendTyping,
   editMessage, deleteMessage, retryFailed, loadOlder, loadContacts, startDirect, startGroup,
-  reactMessage, REACTION_EMOJIS, updateChat, pinChat, leaveChat, forwardMessages, loadAroundSeq, markActiveRead, imageAspect, expandWindow, reorderPins,
+  reactMessage, REACTION_EMOJIS, updateChat, pinChat, leaveChat, forwardMessages, loadAroundSeq, markActiveRead, imageAspect, imageColor, expandWindow, reorderPins,
   pinMessageInChat, unpinMessageInChat, localCacheStats, wipeLocalChatCache, onCallSignal, sendCallSignal, chatScrollMem, chatNav,
 } from '../chat/store'
 
@@ -68,11 +68,15 @@ function updateFloatingDate() {
     const el = scroller.value; if (!el) { floatDate.show = false; return }
     const top = el.getBoundingClientRect().top
     const seps = el.querySelectorAll('[data-daysep]')
-    let label = ''
-    for (const s of seps) { if (s.getBoundingClientRect().top <= top + 20) label = s.getAttribute('data-daysep'); else break }
+    let label = ''; let inlineAtTop = false
+    for (const s of seps) {
+      const st = s.getBoundingClientRect().top
+      if (st <= top + 20) label = s.getAttribute('data-daysep')
+      if (st > top - 6 && st < top + 46) inlineAtTop = true // встроенная плашка у самого верха — плавающую прячем
+    }
     if (!label && seps.length) label = seps[0].getAttribute('data-daysep')
     floatDate.label = label
-    floatDate.show = !!label
+    floatDate.show = !!label && !inlineAtTop // не дублируем встроенную плашку
   })
 }
 let listObs = null
@@ -937,9 +941,11 @@ function albumItemClass(n, k) { return (n === 3 && k === 0) ? 'col-span-2' : '' 
 // пропорции по факту загрузки (реактивно) — бокс корректируется СРАЗУ при загрузке миниатюры,
 // а не через несколько секунд на следующей перерисовке
 const imgAspects = reactive({})
+// картинка загрузилась/ошибка → проявляем и убираем спиннер подложки
+function markImgLoaded(e) { const el = e.target; el.style.opacity = 1; el.closest('.ph-box')?.classList.add('ph-done') }
 function onImgLoad(e, u) {
   const el = e.target
-  el.style.opacity = 1 // плавное появление поверх подложки (без «моргания»)
+  markImgLoaded(e) // плавное появление поверх подложки + скрыть спиннер
   if (u && el.naturalWidth && el.naturalHeight && !imgAspects[u]) imgAspects[u] = el.naturalWidth / el.naturalHeight
 }
 // ЯВНЫЕ ширина+высота бокса из соотношения сторон — бокс НЕ зависит от загрузки медиа
@@ -949,16 +955,16 @@ function boxWH(aspect, maxW, maxH) {
   if (h > maxH) { h = maxH; w = Math.round(h * aspect) }
   return { width: w + 'px', height: h + 'px' }
 }
-// резерв места под одиночное фото.
+// резерв места под одиночное фото + подложка «в цвет» (мгновенно, до загрузки).
 function photoBoxStyle(u) {
   const aspect = imgAspects[u] || imageAspect(u) || 1.4
-  return boxWH(aspect, wide.value ? 420 : 300, 400)
+  return { ...boxWH(aspect, wide.value ? 420 : 300, 400), background: imageColor(u) || 'rgba(190,170,145,.35)' }
 }
 // резерв места под видео. Приоритет — размеры из маркера (@[video](...|ШxВ)), иначе — по постеру.
 function videoBoxStyle(v) {
   const u = v?.poster || ''
   const aspect = (v && v.w && v.h) ? (v.w / v.h) : (imgAspects[u] || imageAspect(u) || 0.7)
-  return boxWH(aspect, wide.value ? 546 : 340, 600) // ~на 30% крупнее фото
+  return { ...boxWH(aspect, wide.value ? 546 : 340, 600), background: imageColor(u) || '#1a1614' } // ~на 30% крупнее; подложка в цвет
 }
 
 // ── превью ссылок (OG-карточки) ───────────────────────────────────────────
@@ -2271,8 +2277,11 @@ onBeforeUnmount(() => {
              @scroll="onScroll" @click="onScrollerClick" @mousedown="onScrollerDown" @touchstart="onScrollerDown" @contextmenu.prevent>
           <div ref="listWrap" class="mt-auto space-y-1">
           <template v-for="(m, i) in chatState.messages" :key="m.client_uuid">
-          <!-- невидимый якорь границы дня — по нему обновляется единственная плавающая дата -->
-          <div v-if="showDaySep(m, i)" :data-daysep="dayLabel(m.created_at)" class="h-0 overflow-hidden"></div>
+          <!-- встроенная плашка даты между днями (остаётся в ленте); плавающая сверху её дублирует
+               только когда встроенная ушла вверх за экран (см. updateFloatingDate) -->
+          <div v-if="showDaySep(m, i)" :data-daysep="dayLabel(m.created_at)" class="my-2 flex justify-center">
+            <span class="rounded-full bg-ink-900/55 px-3 py-1 text-xs font-semibold text-white shadow-sm">{{ dayLabel(m.created_at) }}</span>
+          </div>
           <div v-if="m.client_uuid === firstUnreadKey" class="my-3 flex items-center gap-2 px-2">
             <span class="h-px flex-1 bg-saffron-400/60"></span>
             <span class="rounded-full bg-saffron-500 px-3 py-0.5 text-xs font-semibold text-white shadow-sm">Непрочитанные</span>
@@ -2344,11 +2353,12 @@ onBeforeUnmount(() => {
               </div>
               <!-- ≤10МБ или уже запущено: авто muted+loop + таймер; крупнее: постер с кнопкой (тот же размер).
                    Место резервируется по постеру (object-cover) — при открытии чата не «прыгает». -->
-              <div class="video-box relative flex justify-center overflow-hidden bg-black" :style="videoBoxStyle(videoOf(m))">
+              <div class="video-box ph-box relative flex justify-center overflow-hidden" :style="videoBoxStyle(videoOf(m))">
+                <span class="ph-spin pointer-events-none absolute inset-0 flex items-center justify-center"><span class="h-8 w-8 animate-spin rounded-full border-2 border-white/45 border-t-white/90"></span></span>
                 <template v-if="videoAuto(m)">
                   <video :src="videoOf(m).url" :poster="thumbUrl(videoOf(m).poster || '')" autoplay muted loop playsinline
                          disablepictureinpicture controlslist="nodownload noremoteplayback nofullscreen"
-                         class="pointer-events-none block h-full w-full object-cover" @timeupdate="onVideoTime($event, m)"></video>
+                         style="opacity:0;transition:opacity .35s ease" class="pointer-events-none relative block h-full w-full object-cover" @loadeddata="markImgLoaded($event)" @timeupdate="onVideoTime($event, m)"></video>
                   <div class="absolute inset-0 cursor-pointer" @click.stop="openVideoLightbox(m)"></div>
                   <span class="pointer-events-none absolute left-2 top-2 flex items-center gap-1 rounded-full bg-black/55 px-2.5 py-1 text-sm text-white">
                     <span class="tabular-nums">{{ videoState[m.id]?.remain || '' }}</span>
@@ -2356,7 +2366,8 @@ onBeforeUnmount(() => {
                   </span>
                 </template>
                 <template v-else>
-                  <img :src="thumbUrl(videoOf(m)?.poster || '')" @error="imgFull($event, videoOf(m)?.poster)" @load="onImgLoad($event, videoOf(m)?.poster)" class="block h-full w-full object-cover" />
+                  <img :src="thumbUrl(videoOf(m)?.poster || '')" @error="imgFull($event, videoOf(m)?.poster); markImgLoaded($event)" @load="onImgLoad($event, videoOf(m)?.poster)"
+                       style="opacity:0;transition:opacity .35s ease" class="relative block h-full w-full object-cover" />
                   <button class="absolute inset-0 flex items-center justify-center" @click.stop="markVideoLoaded(m.id); openVideoLightbox(m)" title="Смотреть видео">
                     <span class="flex h-14 w-14 items-center justify-center rounded-full bg-black/50 text-white ring-2 ring-white/40"><AppIcon name="play" :size="26" /></span>
                   </button>
@@ -2393,14 +2404,16 @@ onBeforeUnmount(() => {
                   <div class="whitespace-pre-wrap break-words text-ink-700/70">{{ m.reply_preview }}</div>
                 </div>
               </div>
-              <div v-if="photoUrls(m).length === 1" class="w-full overflow-hidden bg-parchment-200/50" :style="photoBoxStyle(photoUrls(m)[0])">
-                <img :src="thumbUrl(photoUrls(m)[0])" @error="imgFull($event, photoUrls(m)[0])" @load="onImgLoad($event, photoUrls(m)[0])"
-                     style="opacity:0;transition:opacity .35s ease" class="block h-full max-h-[400px] w-full cursor-zoom-in object-cover" @click.stop="openPhoto(m, 0)" />
+              <div v-if="photoUrls(m).length === 1" class="ph-box relative w-full overflow-hidden" :style="photoBoxStyle(photoUrls(m)[0])">
+                <span class="ph-spin pointer-events-none absolute inset-0 flex items-center justify-center"><span class="h-7 w-7 animate-spin rounded-full border-2 border-white/45 border-t-white/90"></span></span>
+                <img :src="thumbUrl(photoUrls(m)[0])" @error="imgFull($event, photoUrls(m)[0]); markImgLoaded($event)" @load="onImgLoad($event, photoUrls(m)[0])"
+                     style="opacity:0;transition:opacity .35s ease" class="relative block h-full max-h-[400px] w-full cursor-zoom-in object-cover" @click.stop="openPhoto(m, 0)" />
               </div>
               <div v-else class="grid gap-0.5" :class="albumCols(photoUrls(m).length)" :style="{ width: (wide ? 420 : 300) + 'px' }">
-                <div v-for="(u, k) in photoUrls(m).slice(0, 10)" :key="k" class="relative aspect-square overflow-hidden bg-parchment-200/60" :class="albumItemClass(photoUrls(m).length, k)">
-                  <img :src="thumbUrl(u)" @error="imgFull($event, u)" @load="$event.target.style.opacity=1"
-                       style="opacity:0;transition:opacity .35s ease" class="h-full w-full cursor-zoom-in object-cover" @click.stop="openPhoto(m, k)" />
+                <div v-for="(u, k) in photoUrls(m).slice(0, 10)" :key="k" class="ph-box relative aspect-square overflow-hidden" :class="albumItemClass(photoUrls(m).length, k)" :style="{ background: imageColor(u) || 'rgba(190,170,145,.35)' }">
+                  <span class="ph-spin pointer-events-none absolute inset-0 flex items-center justify-center"><span class="h-6 w-6 animate-spin rounded-full border-2 border-white/45 border-t-white/90"></span></span>
+                  <img :src="thumbUrl(u)" @error="imgFull($event, u); markImgLoaded($event)" @load="markImgLoaded($event)"
+                       style="opacity:0;transition:opacity .35s ease" class="relative h-full w-full cursor-zoom-in object-cover" @click.stop="openPhoto(m, k)" />
                 </div>
               </div>
               <div v-if="captionText(m)" class="markdown-body break-words px-3.5 pt-1.5 text-[15px]" :class="isMine(m) && 'markdown-on-accent'" v-html="renderChatBody(captionText(m))"></div>
@@ -3047,6 +3060,9 @@ onBeforeUnmount(() => {
 .datefade-enter-active, .datefade-leave-active { transition: opacity .28s ease, transform .28s ease; }
 .datefade-enter-from { opacity: 0; transform: translateY(-6px); }
 .datefade-leave-to { opacity: 0; transform: translateY(6px); }
+/* подложка медиа: спиннер поверх цветной подложки, пока не загрузилось; после загрузки — прячем */
+.ph-done .ph-spin { display: none; }
+
 /* прикольный лёгкий эффект удаления (без DOM-частиц): «скомкал и зашвырнул» — замах, затем
    закручиваясь улетает вверх-в-сторону, сжимаясь в точку */
 .msg-toss-l, .msg-toss-r { pointer-events: none; will-change: transform, opacity; }

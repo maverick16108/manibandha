@@ -10,6 +10,7 @@ import { chatState, initChat, teardownChat } from '../chat/store'
 import { toastState } from '../composables/toast'
 import { backTarget } from '../composables/backTarget'
 import AppIcon from './AppIcon.vue'
+import { prefetchSections } from '../composables/prefetch'
 
 // Разделы, кешируемые keep-alive (по имени компонента). Чат и детальные страницы — не кешируем.
 const KEEP_ALIVE_VIEWS = [
@@ -113,6 +114,7 @@ onMounted(() => {
   // мессенджер работает в фоне на всём кабинете (доставка + бейдж непрочитанного)
   if (!auth.isPending && auth.user) {
     initChat({ meId: auth.user.id, getToken: () => auth.token }).catch((e) => console.warn('[chat] init failed', e))
+    prefetchSections((c) => auth.can(c)) // тихий idle-прогрев данных разделов в общий кеш
   }
 })
 onBeforeUnmount(() => { clearInterval(countsTimer); teardownChat(); window.removeEventListener('resize', onWinResize) })

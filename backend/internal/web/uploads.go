@@ -2,6 +2,7 @@ package web
 
 import (
 	"bytes"
+	"fmt"
 	"image"
 	"io"
 	"math"
@@ -18,23 +19,64 @@ import (
 	_ "golang.org/x/image/webp"
 )
 
-// GET /api/uploads-dims?u=/uploads/a.webp,/uploads/b.webp — соотношения сторон картинок,
-// чтобы фронт резервировал место под фото ДО их загрузки (без «прыжка» при открытии чата).
+// avgColor — грубый средний цвет картинки (по сетке сэмплов) для мгновенной подложки «в цвет».
+func avgColor(img image.Image) string {
+	b := img.Bounds()
+	if b.Dx() <= 0 || b.Dy() <= 0 {
+		return ""
+	}
+	stepX := b.Dx()/16 + 1
+	stepY := b.Dy()/16 + 1
+	var r, g, bl, n uint64
+	for y := b.Min.Y; y < b.Max.Y; y += stepY {
+		for x := b.Min.X; x < b.Max.X; x += stepX {
+			cr, cg, cb, _ := img.At(x, y).RGBA()
+			r += uint64(cr >> 8)
+			g += uint64(cg >> 8)
+			bl += uint64(cb >> 8)
+			n++
+		}
+	}
+	if n == 0 {
+		return ""
+	}
+	return fmt.Sprintf("#%02x%02x%02x", r/n, g/n, bl/n)
+}
+
+// GET /api/uploads-dims?u=/uploads/a.webp,/uploads/b.webp — соотношение сторон + средний цвет
+// картинок: фронт резервирует место (без «прыжка») и показывает подложку в цвет ДО загрузки.
 func (s *Server) uploadsDims(w http.ResponseWriter, r *http.Request) {
-	out := map[string]float64{}
+	out := map[string]map[string]any{}
 	for _, u := range strings.Split(r.URL.Query().Get("u"), ",") {
 		u = strings.TrimSpace(u)
 		if u == "" || !strings.HasPrefix(u, "/uploads/") || strings.Contains(u, "..") {
 			continue
 		}
-		f, err := os.Open(filepath.Join(s.Cfg.UploadDir, filepath.Base(u)))
-		if err != nil {
+		name := filepath.Base(u)
+		// декодируем миниатюру (маленькая → быстро) для размеров и цвета; иначе сам файл
+		ext := filepath.Ext(name)
+		thumb := strings.TrimSuffix(name, ext) + ".thumb" + ext
+		var img image.Image
+		if f, err := os.Open(filepath.Join(s.Cfg.UploadDir, thumb)); err == nil {
+			img, _, _ = image.Decode(f)
+			f.Close()
+		}
+		if img == nil {
+			if f, err := os.Open(filepath.Join(s.Cfg.UploadDir, name)); err == nil {
+				img, _, _ = image.Decode(f)
+				f.Close()
+			}
+		}
+		if img == nil {
 			continue
 		}
-		cfg, _, err := image.DecodeConfig(f)
-		f.Close()
-		if err == nil && cfg.Height > 0 {
-			out[u] = math.Round(float64(cfg.Width)/float64(cfg.Height)*1000) / 1000
+		b := img.Bounds()
+		if b.Dy() <= 0 {
+			continue
+		}
+		out[u] = map[string]any{
+			"a": math.Round(float64(b.Dx())/float64(b.Dy())*1000) / 1000,
+			"c": avgColor(img),
 		}
 	}
 	writeJSON(w, http.StatusOK, out)

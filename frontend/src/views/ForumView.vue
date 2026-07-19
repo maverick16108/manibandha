@@ -9,6 +9,7 @@ import AppSkeleton from '../components/AppSkeleton.vue'
 import PhotoUpload from '../components/PhotoUpload.vue'
 import { confirmDialog } from '../composables/confirm'
 import { usePageTitle } from '../composables/pageTitle'
+import { cachedGet, peekCache, TTL } from '../composables/apiCache'
 
 usePageTitle('Форум')
 const auth = useAuthStore()
@@ -31,11 +32,13 @@ const savingSection = ref(false)
 const COLORS = ['#c8742a', '#3b82c4', '#22a06b', '#8b5cf6', '#e0574b', '#d99a00', '#475569', '#0f766e']
 
 async function load(silent = false) {
-  if (!silent) loading.value = true
+  const ct = peekCache('/forum/topics'), cs = peekCache('/forum/sections')
+  if (ct && cs) { topics.value = ct; sections.value = cs; loading.value = false } // мгновенно из кеша
+  else if (!silent) loading.value = true
   try {
-    const [tRes, sRes] = await Promise.all([client.get('/forum/topics'), client.get('/forum/sections')])
-    topics.value = tRes.data
-    sections.value = sRes.data
+    const [t, s] = await Promise.all([cachedGet('/forum/topics', { ttl: TTL.list }), cachedGet('/forum/sections', { ttl: TTL.list })])
+    topics.value = t
+    sections.value = s
   } finally {
     loading.value = false
   }

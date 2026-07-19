@@ -1585,23 +1585,24 @@ function startRingtone(isIncoming) {
   stopRingtone()
   try {
     ringCtx = new (window.AudioContext || window.webkitAudioContext)()
-    const beep = () => {
+    if (ringCtx.state === 'suspended') ringCtx.resume().catch(() => {})
+    const tone = (offset, freq, dur, vol) => {
       if (!ringCtx) return
-      const dur = isIncoming ? 0.4 : 0.35
-      const two = isIncoming
-      const tone = (offset, freq) => {
-        const o = ringCtx.createOscillator(), g = ringCtx.createGain()
-        o.type = 'sine'; o.frequency.value = freq
-        const t = ringCtx.currentTime + offset
-        g.gain.setValueAtTime(0.0001, t)
-        g.gain.exponentialRampToValueAtTime(0.18, t + 0.04)
-        g.gain.exponentialRampToValueAtTime(0.0001, t + dur)
-        o.connect(g); g.connect(ringCtx.destination); o.start(t); o.stop(t + dur + 0.05)
-      }
-      tone(0, isIncoming ? 520 : 440)
-      if (two) tone(0.5, 660)
+      const o = ringCtx.createOscillator(), g = ringCtx.createGain()
+      o.type = 'sine'; o.frequency.value = freq
+      const t = ringCtx.currentTime + offset
+      g.gain.setValueAtTime(0.0001, t)
+      g.gain.exponentialRampToValueAtTime(vol, t + 0.03)
+      g.gain.setValueAtTime(vol, t + dur - 0.05)
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur)
+      o.connect(g); g.connect(ringCtx.destination); o.start(t); o.stop(t + dur + 0.05)
     }
-    beep(); ringTimer = setInterval(beep, isIncoming ? 2400 : 3200)
+    // «ring-ring» — два коротких гудка, затем пауза; повторяем
+    const beep = () => {
+      if (isIncoming) { tone(0, 540, 0.4, 0.22); tone(0.55, 680, 0.4, 0.22) }
+      else { tone(0, 440, 0.45, 0.2); tone(0.6, 480, 0.45, 0.2) } // исходящий гудок вызова
+    }
+    beep(); ringTimer = setInterval(beep, isIncoming ? 2400 : 3000)
   } catch { /* аудио недоступно */ }
 }
 function stopRingtone() { if (ringTimer) { clearInterval(ringTimer); ringTimer = null } if (ringCtx) { try { ringCtx.close() } catch { /* ignore */ } ringCtx = null } }
@@ -2332,13 +2333,13 @@ onBeforeUnmount(() => {
                   <div class="whitespace-pre-wrap break-words text-ink-700/70">{{ m.reply_preview }}</div>
                 </div>
               </div>
-              <div v-if="photoUrls(m).length === 1" class="w-full overflow-hidden" :style="photoBoxStyle(photoUrls(m)[0])">
+              <div v-if="photoUrls(m).length === 1" class="w-full overflow-hidden bg-parchment-200/50" :style="photoBoxStyle(photoUrls(m)[0])">
                 <img :src="thumbUrl(photoUrls(m)[0])" @error="imgFull($event, photoUrls(m)[0])" @load="onImgLoad($event, photoUrls(m)[0])"
                      class="block h-full max-h-[400px] w-full cursor-zoom-in object-cover" @click.stop="openPhoto(m, 0)" />
               </div>
               <div v-else class="grid gap-0.5" :class="albumCols(photoUrls(m).length)">
                 <img v-for="(u, k) in photoUrls(m).slice(0, 10)" :key="k" :src="thumbUrl(u)" @error="imgFull($event, u)"
-                     class="aspect-square w-full cursor-zoom-in object-cover" :class="albumItemClass(photoUrls(m).length, k)"
+                     class="aspect-square w-full cursor-zoom-in bg-parchment-200/50 object-cover" :class="albumItemClass(photoUrls(m).length, k)"
                      @click.stop="openPhoto(m, k)" />
               </div>
               <div v-if="captionText(m)" class="markdown-body break-words px-3.5 pt-1.5 text-[15px]" :class="isMine(m) && 'markdown-on-accent'" v-html="renderChatBody(captionText(m))"></div>

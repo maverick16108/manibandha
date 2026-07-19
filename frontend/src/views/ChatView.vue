@@ -171,6 +171,8 @@ watch(activeId, async (id, oldId) => {
     stickBottom.value = !(saved && !saved.atBottom)
     nextTick(() => inputEl.value?.focus()) // фокус сразу, не ждём загрузки истории
     await openChat(id) // обновляет сообщения (единый рендер) и резолвится синхронно после
+    await ensureLinkPreviews() // превью ссылок — ДО позиционирования, чтобы карточка не выросла после
+    if (activeId.value !== id) return
     await nextTick() // позицию ставим в микротаске ДО первой отрисовки — нет пустого кадра/перемотки
     positionAfterOpen(id, saved)
   } else closeChat()
@@ -405,45 +407,10 @@ async function confirmDelete() {
   if (!m?.id) return
   const isDir = activeChat.value?.type === 'direct'
   const everyone = !isDir ? true : (isMine(m) ? deleteForAll.value : false)
-  // эффект «расщепления на частицы» для одиночного удаления, затем убираем
+  // лёгкий CSS-эффект удаления (без DOM-частиц — не тормозит): пузырь растворяется с уменьшением
   const el = document.getElementById(`msg-${m.id}`)
-  if (el) { particleBurst(el.querySelector('.max-w-\\[78\\%\\], .max-w-\\[80\\%\\], .max-w-\\[600px\\], .max-w-\\[420px\\]') || el); el.classList.add('msg-dissolve'); await new Promise((r) => setTimeout(r, 380)) }
+  if (el) { el.classList.add('msg-poof'); await new Promise((r) => setTimeout(r, 280)) }
   await deleteMessage(m.id, everyone)
-}
-// расщепление элемента на множество частиц, разлетающихся во все стороны
-function particleBurst(el) {
-  try {
-    const rect = el.getBoundingClientRect()
-    if (!rect.width || !rect.height) return
-    const bg = getComputedStyle(el).backgroundColor
-    const color = (bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent') ? bg : '#e0902a'
-    const layer = document.createElement('div')
-    layer.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:60;overflow:hidden'
-    let cols = Math.max(30, Math.round(rect.width / 3))
-    let rows = Math.max(20, Math.round(rect.height / 3))
-    const MAX_PARTS = 7000 // потолок, чтобы удаление больших сообщений не подвешивало
-    if (cols * rows > MAX_PARTS) { const k = Math.sqrt(MAX_PARTS / (cols * rows)); cols = Math.max(1, Math.round(cols * k)); rows = Math.max(1, Math.round(rows * k)) }
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
-        const p = document.createElement('div')
-        const px = rect.left + (c + 0.5) / cols * rect.width
-        const py = rect.top + (r + 0.5) / rows * rect.height
-        const cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2
-        const size = 2 + Math.floor((px * py) % 3)
-        // разлёт от центра наружу + немного вверх
-        const dx = (px - cx) * (1.6 + ((c * 7 + r * 3) % 14) / 10) + ((c % 3) - 1) * 28
-        const dy = (py - cy) * (1.4 + ((c * 3 + r * 5) % 14) / 10) - 40 - (r % 4) * 14
-        p.style.cssText = `position:absolute;left:${px}px;top:${py}px;width:${size}px;height:${size}px;border-radius:50%;background:${color};will-change:transform,opacity`
-        layer.appendChild(p)
-        p.animate(
-          [{ transform: 'translate(0,0) scale(1)', opacity: 1 }, { transform: `translate(${dx}px,${dy}px) scale(0.12)`, opacity: 0 }],
-          { duration: 1700 + ((c * r) % 1100), easing: 'cubic-bezier(.2,.6,.25,1)', fill: 'forwards' },
-        )
-      }
-    }
-    document.body.appendChild(layer)
-    setTimeout(() => layer.remove(), 3200)
-  } catch { /* эффект необязателен */ }
 }
 function cleanBody(b) {
   return (b || '').replace(/@\[audio\]\([^)]*\)/g, '🎤 Голосовое сообщение').replace(/@\[videonote\]\([^)]*\)/g, '📹 Видеосообщение').replace(/!\[[^\]]*\]\([^)]*\)/g, '').trim()
@@ -1028,6 +995,14 @@ function linkCard(m) {
   const u = firstLink(m)
   const p = u ? linkPreviews[u] : null
   return (p && (p.title || p.image || p.description)) ? p : null
+}
+// подтягиваем превью ссылок текущего окна ДО позиционирования (кэшированные — мгновенно),
+// чтобы карточка не появлялась позже и не растила сообщение (нет «прыжка» при открытии)
+async function ensureLinkPreviews() {
+  const links = []
+  for (const m of chatState.messages) { const u = firstLink(m); if (u && !(u in linkPreviews)) links.push(u) }
+  if (!links.length) return
+  await Promise.race([Promise.all(links.slice(0, 20).map(fetchPreview)), new Promise((r) => setTimeout(r, 450))])
 }
 async function fetchPreview(u) {
   if (u in linkPreviews) return
@@ -1966,7 +1941,7 @@ onMounted(async () => {
     if (activeId.value) {
       const id = activeId.value; const saved = chatScrollMem[id]
       stickBottom.value = !(saved && !saved.atBottom)
-      await openChat(id); await nextTick(); positionAfterOpen(id, saved) // вернуться на прежнее место, а не всегда вниз
+      await openChat(id); await ensureLinkPreviews(); await nextTick(); positionAfterOpen(id, saved) // вернуться на прежнее место, а не всегда вниз
     } else maybeAutoOpen()
   }
 })
@@ -3071,10 +3046,11 @@ onBeforeUnmount(() => {
 .datefade-enter-active, .datefade-leave-active { transition: opacity .28s ease, transform .28s ease; }
 .datefade-enter-from { opacity: 0; transform: translateY(-6px); }
 .datefade-leave-to { opacity: 0; transform: translateY(6px); }
-/* «растворение» при удалении одиночного сообщения */
-.msg-dissolve { animation: msgDissolve .34s ease forwards; pointer-events: none; }
-@keyframes msgDissolve {
-  to { opacity: 0; filter: blur(5px); transform: scale(.88) translateY(-4px); }
+/* лёгкий эффект удаления (без DOM-частиц): сообщение растворяется с уменьшением и лёгким размытием */
+.msg-poof { animation: msgPoof .28s cubic-bezier(.4,0,.6,1) forwards; transform-origin: center; pointer-events: none; }
+@keyframes msgPoof {
+  40% { opacity: .6; filter: blur(2px); transform: scale(1.04); }
+  100% { opacity: 0; filter: blur(8px); transform: scale(.4); }
 }
 /* подсветка сообщения при переходе из поиска */
 .msg-flash { animation: msgFlash 1.6s ease; border-radius: 0.75rem; }

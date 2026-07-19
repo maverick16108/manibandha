@@ -420,28 +420,28 @@ function particleBurst(el) {
     const color = (bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent') ? bg : '#e0902a'
     const layer = document.createElement('div')
     layer.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:60;overflow:hidden'
-    const cols = Math.max(10, Math.min(40, Math.round(rect.width / 12)))
-    const rows = Math.max(6, Math.min(30, Math.round(rect.height / 12)))
+    const cols = Math.max(20, Math.min(90, Math.round(rect.width / 5)))
+    const rows = Math.max(12, Math.min(90, Math.round(rect.height / 5)))
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
         const p = document.createElement('div')
         const px = rect.left + (c + 0.5) / cols * rect.width
         const py = rect.top + (r + 0.5) / rows * rect.height
         const cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2
-        const size = 3 + Math.floor((px * py) % 3)
+        const size = 2 + Math.floor((px * py) % 3)
         // разлёт от центра наружу + немного вверх
-        const dx = (px - cx) * (1.4 + ((c * 7 + r * 3) % 10) / 10) + ((c % 3) - 1) * 24
-        const dy = (py - cy) * (1.2 + ((c * 3 + r * 5) % 10) / 10) - 30 - (r % 4) * 10
+        const dx = (px - cx) * (1.5 + ((c * 7 + r * 3) % 12) / 10) + ((c % 3) - 1) * 26
+        const dy = (py - cy) * (1.3 + ((c * 3 + r * 5) % 12) / 10) - 34 - (r % 4) * 12
         p.style.cssText = `position:absolute;left:${px}px;top:${py}px;width:${size}px;height:${size}px;border-radius:50%;background:${color};will-change:transform,opacity`
         layer.appendChild(p)
         p.animate(
-          [{ transform: 'translate(0,0) scale(1)', opacity: 1 }, { transform: `translate(${dx}px,${dy}px) scale(0.2)`, opacity: 0 }],
-          { duration: 520 + ((c * r) % 260), easing: 'cubic-bezier(.25,.7,.35,1)', fill: 'forwards' },
+          [{ transform: 'translate(0,0) scale(1)', opacity: 1 }, { transform: `translate(${dx}px,${dy}px) scale(0.15)`, opacity: 0 }],
+          { duration: 1100 + ((c * r) % 700), easing: 'cubic-bezier(.2,.65,.3,1)', fill: 'forwards' },
         )
       }
     }
     document.body.appendChild(layer)
-    setTimeout(() => layer.remove(), 900)
+    setTimeout(() => layer.remove(), 2100)
   } catch { /* эффект необязателен */ }
 }
 function cleanBody(b) {

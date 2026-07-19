@@ -1502,6 +1502,8 @@ async function acceptIncoming() {
   call.peerId = incoming.from; call.name = incoming.name; call.avatar = incoming.avatar
   call.video = incoming.video; call.localVideo = incoming.video; call.remoteVideo = false
   const offer = incoming.offer; incoming.open = false
+  sendCallSignal({ to: chatState.meId, subtype: 'handled' }) // погасить звонок на своих других вкладках
+  stopRingtone()
   call.open = true; call.status = 'calling'
   try { localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: call.localVideo }) }
   catch { showToast('Нет доступа к микрофону/камере'); endCall(); return }
@@ -1518,7 +1520,11 @@ async function acceptIncoming() {
   sendCallSignal({ to: call.peerId, subtype: 'answer', sdp: answer })
   call.status = 'connected'
 }
-function rejectIncoming() { if (incoming.from) sendCallSignal({ to: incoming.from, subtype: 'reject' }); incoming.open = false; incoming.offer = null }
+function rejectIncoming() {
+  if (incoming.from) sendCallSignal({ to: incoming.from, subtype: 'reject' })
+  sendCallSignal({ to: chatState.meId, subtype: 'handled' }) // погасить звонок на своих других вкладках
+  incoming.open = false; incoming.offer = null; stopRingtone()
+}
 function endCall() {
   const to = call.peerId || incoming.from
   if (to && (call.open || incoming.open)) sendCallSignal({ to, subtype: 'end' })
@@ -1531,6 +1537,7 @@ function cleanupCall() {
   if (remoteAudioEl) { try { remoteAudioEl.srcObject = null; remoteAudioEl.remove() } catch { /* ignore */ } remoteAudioEl = null }
   call.open = false; call.status = 'idle'; call.remoteVideo = false; call.localVideo = false; call.peerId = null; call.fullscreen = false
   incoming.open = false; incoming.offer = null
+  stopRingtone() // на всякий случай — гарантированно глушим гудки при любом завершении
 }
 async function toggleCallVideo() {
   call.localVideo = !call.localVideo
@@ -1562,6 +1569,9 @@ async function handleCallSignal(evt) {
   } else if (sub === 'ice') {
     const cand = new RTCIceCandidate(evt.candidate)
     if (pc && pc.remoteDescription) { try { await pc.addIceCandidate(cand) } catch { /* ignore */ } } else pendingIce.push(cand)
+  } else if (sub === 'handled') {
+    // звонок принят/отклонён на другой вкладке этого же пользователя — гасим входящий здесь
+    if (incoming.open) { incoming.open = false; incoming.offer = null; stopRingtone() }
   } else if (sub === 'end' || sub === 'reject' || sub === 'busy') {
     if (sub === 'busy') showToast('Абонент занят')
     else if (sub === 'reject') showToast('Звонок отклонён')
@@ -1819,6 +1829,7 @@ function onGlobalKey(e) {
     return
   }
   if (e.key !== 'Escape') return
+  if (call.fullscreen) { call.fullscreen = false; return } // выход из полноэкранного звонка
   if (showInfo.value) { closeInfo(); return }
   if (searchChat.open) { closeChatSearch(); return }
   if (recording.value) cancelRec()

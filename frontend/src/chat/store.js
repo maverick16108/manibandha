@@ -199,15 +199,23 @@ const MSG_WINDOW = 200;
 let msgWindow = MSG_WINDOW;
 async function refreshMessages() {
   if (!db || !chatState.activeChatId) return;
-  const rows = await db.all(
-    `SELECT * FROM (
-       SELECT * FROM messages WHERE chat_id=? AND deleted=0 AND (hidden IS NULL OR hidden=0)
-       ORDER BY (seq IS NULL) DESC, seq DESC, local_ts DESC LIMIT ?
-     ) t ORDER BY (seq IS NULL), seq ASC, local_ts ASC`,
-    [chatState.activeChatId, msgWindow],
-  );
-  chatState.messages = rows;
-  chatState.members = await db.all('SELECT * FROM members WHERE chat_id=?', [chatState.activeChatId]);
+  const cid = chatState.activeChatId;
+  // читаем сообщения И участников ПАРАЛЛЕЛЬНО, а присваиваем messages ПОСЛЕДНИМ и без await после —
+  // иначе await между «поставили messages» и «поставили members» уступает потоку, браузер успевает
+  // отрисовать новый чат на старом scrollTop (кадр-рывок) до того, как мы восстановим позицию.
+  const [rows, members] = await Promise.all([
+    db.all(
+      `SELECT * FROM (
+         SELECT * FROM messages WHERE chat_id=? AND deleted=0 AND (hidden IS NULL OR hidden=0)
+         ORDER BY (seq IS NULL) DESC, seq DESC, local_ts DESC LIMIT ?
+       ) t ORDER BY (seq IS NULL), seq ASC, local_ts ASC`,
+      [cid, msgWindow],
+    ),
+    db.all('SELECT * FROM members WHERE chat_id=?', [cid]),
+  ]);
+  if (chatState.activeChatId !== cid) return;
+  chatState.members = members;
+  chatState.messages = rows; // ПОСЛЕДНИМ, без await после
 }
 
 const chatWindowMem = {}; // chatId → msgWindow: сохраняем размер окна рендера, чтобы при

@@ -76,14 +76,32 @@ function updateFloatingDate() {
   })
 }
 let listObs = null
-// Пока пользователь у нижнего края — прижимаем ленту к низу при любом росте высоты
-// (догрузка картинок/файлов и т.п.), чтобы не было «прыжка» после открытия чата.
+let pendingAnchor = null // {id, offset} — якорное сообщение, которое держим при догрузке контента
+// топовое видимое сообщение + его смещение от верха вьюпорта (для устойчивого восстановления позиции)
+function computeAnchor() {
+  const el = scroller.value; if (!el) return null
+  const top = el.getBoundingClientRect().top
+  const nodes = el.querySelectorAll('[id^="msg-"]')
+  for (const n of nodes) { const r = n.getBoundingClientRect(); if (r.bottom > top + 4) return { id: n.id.slice(4), offset: r.top - top } }
+  return null
+}
+function restoreAnchor(a) {
+  const el = scroller.value; if (!el || !a) return false
+  const n = document.getElementById('msg-' + a.id); if (!n) return false
+  const top = el.getBoundingClientRect().top
+  const delta = (n.getBoundingClientRect().top - top) - a.offset
+  if (Math.abs(delta) > 0.5) el.scrollTop += delta
+  return true
+}
+// При догрузке контента (превью ссылок, картинки, файлы) высота меняется. Если стоим у низа —
+// прижимаемся к низу; если восстанавливаем позицию — держим ЯКОРНОЕ сообщение на месте (не пиксель),
+// иначе рост контента ВЫШЕ позиции «съезжает» ленту.
 watch(listWrap, (el) => {
   if (listObs) { listObs.disconnect(); listObs = null }
   if (el && typeof ResizeObserver !== 'undefined') {
     listObs = new ResizeObserver(() => {
-      if (!stickBottom.value) return
-      const s = scroller.value; if (s) s.scrollTop = s.scrollHeight
+      if (stickBottom.value) { const s = scroller.value; if (s) s.scrollTop = s.scrollHeight }
+      else if (pendingAnchor) restoreAnchor(pendingAnchor)
     })
     listObs.observe(el)
   }
@@ -121,7 +139,8 @@ const activeChat = computed(() => chatState.chats.find((c) => c.id === activeId.
 const chatScrollMem = {} // chatId → { top, atBottom } — сохраняем позицию прокрутки чата
 watch(activeId, async (id, oldId) => {
   if (oldId && !editingMsg.value) saveDraft(oldId, body.value) // сохранить черновик прежнего чата
-  if (oldId && scroller.value) chatScrollMem[oldId] = { top: scroller.value.scrollTop, atBottom: stickBottom.value }
+  if (oldId && scroller.value) chatScrollMem[oldId] = { top: scroller.value.scrollTop, atBottom: stickBottom.value, anchor: computeAnchor() }
+  pendingAnchor = null
   replyTo.value = null; editingMsg.value = null; closeCtx()
   body.value = id ? loadDraft(id) : ''
   openSettled.value = false
@@ -135,14 +154,22 @@ watch(activeId, async (id, oldId) => {
     // выставляем позицию в nextTick — это микротаск ДО первой отрисовки нового чата,
     // поэтому нет ни пустого кадра, ни видимой перемотки
     await nextTick()
-    const setPos = () => { const el = scroller.value; if (el) el.scrollTop = restore ? saved.top : el.scrollHeight }
+    // Восстанавливаем по ЯКОРНОМУ СООБЩЕНИЮ (не по пикселю): когда позже догружаются превью
+    // ссылок/картинки и высота меняется, ResizeObserver держит это сообщение на месте — не «съезжает».
+    pendingAnchor = restore ? (saved.anchor || null) : null
+    const setPos = () => {
+      const el = scroller.value; if (!el) return
+      if (restore) { if (!(pendingAnchor && restoreAnchor(pendingAnchor))) el.scrollTop = saved.top }
+      else el.scrollTop = el.scrollHeight
+    }
     setPos(); updateFloatingDate()
-    // одна отложенная коррекция — если поздно догрузилась раскладка/медиа сместили высоту
-    ;[80, 220].forEach((d) => setTimeout(() => {
-      if (activeId.value !== id || openSettled.value) return
-      setPos(); updateFloatingDate(); if (!restore) stickBottom.value = true
+    ;[80, 220, 450, 800].forEach((d) => setTimeout(() => {
+      if (activeId.value !== id) return
+      if (!openSettled.value) { setPos(); if (!restore) stickBottom.value = true }
+      updateFloatingDate()
     }, d))
     setTimeout(() => { openSettled.value = true }, 500) // после открытия — авто-читаем живые входящие
+    setTimeout(() => { if (activeId.value === id) pendingAnchor = null }, 1500) // держим якорь до оседания превью
   } else closeChat()
   nextTick(autoGrow)
 }, { immediate: false })
@@ -1461,8 +1488,19 @@ const call = reactive({ open: false, name: '', avatar: '', peerId: null, status:
 function toggleCallFullscreen() { call.fullscreen = !call.fullscreen }
 const incoming = reactive({ open: false, name: '', avatar: '', video: false, from: null, offer: null })
 const callRemoteVideo = ref(null); const callLocalVideo = ref(null)
-let pc = null; let localStream = null; let remoteAudioEl = null; let pendingIce = []
+let pc = null; let localStream = null; let remoteStream = null; let remoteAudioEl = null; let pendingIce = []
+let makingOffer = false; let politePeer = false
 const callStatusText = computed(() => call.status === 'connected' ? 'Соединено' : (call.status === 'calling' ? 'Вызов…' : 'Готов к звонку'))
+function attachRemoteVideo() { if (callRemoteVideo.value && remoteStream) { callRemoteVideo.value.srcObject = remoteStream; callRemoteVideo.value.muted = true; callRemoteVideo.value.play?.().catch(() => {}) } }
+// удалённое видео привязываем НАДЁЖНО: элемент появляется только при connected+remoteVideo,
+// а ontrack мог сработать раньше — перепривязываем при появлении элемента
+watch([() => call.status, () => call.remoteVideo], () => nextTick(attachRemoteVideo))
+async function ensureLocalStream(wantVideo) {
+  if (!localStream) localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: wantVideo })
+  else if (wantVideo && !localStream.getVideoTracks().length) { const vs = await navigator.mediaDevices.getUserMedia({ video: true }); localStream.addTrack(vs.getVideoTracks()[0]) }
+  attachLocalVideo()
+  return localStream
+}
 
 async function startCall(withVideo) {
   if (!activeChat.value || activeChat.value.type !== 'direct') return
@@ -1473,27 +1511,33 @@ async function startCall(withVideo) {
   call.localVideo = !!withVideo; call.video = !!withVideo; call.remoteVideo = false
   call.status = 'idle-outgoing'; call.open = true
 }
-function setupPc(peerId, cfg) {
+function setupPc(peerId, cfg, polite) {
+  politePeer = !!polite; makingOffer = false
   pc = new RTCPeerConnection(cfg || RTC_FALLBACK)
   pc.onicecandidate = (e) => { if (e.candidate) sendCallSignal({ to: peerId, subtype: 'ice', candidate: e.candidate }) }
   pc.ontrack = (e) => {
-    const stream = e.streams[0]
+    remoteStream = e.streams[0]
     if (!remoteAudioEl) { remoteAudioEl = document.createElement('audio'); remoteAudioEl.autoplay = true; document.body.appendChild(remoteAudioEl) }
-    remoteAudioEl.srcObject = stream
-    if (e.track.kind === 'video') { call.remoteVideo = true; nextTick(() => { if (callRemoteVideo.value) { callRemoteVideo.value.srcObject = stream; callRemoteVideo.value.muted = true } }) }
+    remoteAudioEl.srcObject = remoteStream
+    call.remoteVideo = remoteStream.getVideoTracks().length > 0
+    nextTick(attachRemoteVideo)
+    // собеседник мог вкл/выкл видео — следим за составом треков
+    remoteStream.onaddtrack = remoteStream.onremovetrack = () => { call.remoteVideo = remoteStream.getVideoTracks().length > 0; nextTick(attachRemoteVideo) }
   }
-  pc.onconnectionstatechange = () => { if (pc && ['failed', 'closed'].includes(pc.connectionState)) endCall() }
+  pc.onconnectionstatechange = () => {
+    if (!pc) return
+    if (pc.connectionState === 'connected') call.status = 'connected'
+    if (['failed', 'closed'].includes(pc.connectionState)) endCall()
+  }
 }
 function attachLocalVideo() { nextTick(() => { if (callLocalVideo.value && localStream) callLocalVideo.value.srcObject = localStream }) }
 async function placeCall() {
   call.status = 'calling'
-  try { localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: call.localVideo }) }
+  try { await ensureLocalStream(call.localVideo) }
   catch { showToast('Нет доступа к микрофону/камере'); endCall(); return }
   const rtcCfg = await getRtcConfig()
-
-  setupPc(call.peerId, rtcCfg)
+  setupPc(call.peerId, rtcCfg, false) // звонящий — «невежливый» (при коллизии не уступает)
   localStream.getTracks().forEach((t) => pc.addTrack(t, localStream))
-  attachLocalVideo()
   const offer = await pc.createOffer()
   await pc.setLocalDescription(offer)
   sendCallSignal({ to: call.peerId, subtype: 'offer', sdp: offer, video: call.localVideo, name: myName.value })
@@ -1505,13 +1549,11 @@ async function acceptIncoming() {
   sendCallSignal({ to: chatState.meId, subtype: 'handled' }) // погасить звонок на своих других вкладках
   stopRingtone()
   call.open = true; call.status = 'calling'
-  try { localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: call.localVideo }) }
+  try { await ensureLocalStream(call.localVideo) }
   catch { showToast('Нет доступа к микрофону/камере'); endCall(); return }
   const rtcCfg = await getRtcConfig()
-
-  setupPc(call.peerId, rtcCfg)
+  setupPc(call.peerId, rtcCfg, true) // принимающий — «вежливый» (уступает при коллизии renego)
   localStream.getTracks().forEach((t) => pc.addTrack(t, localStream))
-  attachLocalVideo()
   await pc.setRemoteDescription(new RTCSessionDescription(offer))
   for (const c of pendingIce) { try { await pc.addIceCandidate(c) } catch { /* ignore */ } }
   pendingIce = []
@@ -1532,38 +1574,49 @@ function endCall() {
 }
 function cleanupCall() {
   try { pc && pc.close() } catch { /* ignore */ }
-  pc = null; pendingIce = []
+  pc = null; pendingIce = []; remoteStream = null; makingOffer = false; politePeer = false
   if (localStream) { localStream.getTracks().forEach((t) => t.stop()); localStream = null }
   if (remoteAudioEl) { try { remoteAudioEl.srcObject = null; remoteAudioEl.remove() } catch { /* ignore */ } remoteAudioEl = null }
   call.open = false; call.status = 'idle'; call.remoteVideo = false; call.localVideo = false; call.peerId = null; call.fullscreen = false
   incoming.open = false; incoming.offer = null
   stopRingtone() // на всякий случай — гарантированно глушим гудки при любом завершении
 }
+async function renegotiate() {
+  if (!pc) return
+  try { makingOffer = true; const offer = await pc.createOffer(); await pc.setLocalDescription(offer); sendCallSignal({ to: call.peerId, subtype: 'offer', sdp: offer, renego: true }) }
+  catch { /* ignore */ } finally { makingOffer = false }
+}
 async function toggleCallVideo() {
-  call.localVideo = !call.localVideo
-  if (!pc || call.status !== 'connected') { attachLocalVideo(); return }
-  const vtrack = localStream?.getVideoTracks()[0]
-  if (call.localVideo && !vtrack) {
-    try {
-      const vs = await navigator.mediaDevices.getUserMedia({ video: true })
-      const t = vs.getVideoTracks()[0]; localStream.addTrack(t); pc.addTrack(t, localStream); attachLocalVideo()
-      const offer = await pc.createOffer(); await pc.setLocalDescription(offer); sendCallSignal({ to: call.peerId, subtype: 'offer', sdp: offer, renego: true })
-    } catch { /* ignore */ }
-  } else if (vtrack) { vtrack.enabled = call.localVideo }
+  const want = !call.localVideo
+  try { await ensureLocalStream(want) } catch { showToast('Нет доступа к камере'); return }
+  call.localVideo = want
+  const vt = localStream.getVideoTracks()[0]
+  if (vt) vt.enabled = want
+  if (pc && call.status === 'connected') {
+    const sender = pc.getSenders().find((s) => s.track && s.track.kind === 'video')
+    if (want && !sender && vt) { pc.addTrack(vt, localStream); await renegotiate() } // добавили видео-дорожку → пере-согласование
+    else if (sender && sender.track) sender.track.enabled = want
+  }
 }
 async function handleCallSignal(evt) {
   const sub = evt.subtype
   if (sub === 'offer') {
-    if (evt.renego && pc) { // повторное согласование (вкл. видео в процессе звонка)
-      await pc.setRemoteDescription(new RTCSessionDescription(evt.sdp))
-      const answer = await pc.createAnswer(); await pc.setLocalDescription(answer)
-      sendCallSignal({ to: evt.from, subtype: 'answer', sdp: answer }); return
+    if (evt.renego && pc) { // повторное согласование (вкл/выкл видео в процессе звонка)
+      const collision = makingOffer || pc.signalingState !== 'stable'
+      if (!politePeer && collision) return // «невежливый» игнорирует встречный offer
+      try {
+        if (collision) await Promise.all([pc.setLocalDescription({ type: 'rollback' }).catch(() => {}), pc.setRemoteDescription(new RTCSessionDescription(evt.sdp))])
+        else await pc.setRemoteDescription(new RTCSessionDescription(evt.sdp))
+        const answer = await pc.createAnswer(); await pc.setLocalDescription(answer)
+        sendCallSignal({ to: evt.from, subtype: 'answer', sdp: answer })
+      } catch { /* ignore */ }
+      return
     }
     if (call.status === 'connected' || call.status === 'calling' || incoming.open) { sendCallSignal({ to: evt.from, subtype: 'busy' }); return }
     incoming.open = true; incoming.from = evt.from; incoming.name = evt.name || evt.from_name || 'Вызов'
     incoming.avatar = evt.from_avatar || ''; incoming.video = !!evt.video; incoming.offer = evt.sdp
   } else if (sub === 'answer') {
-    if (pc) { await pc.setRemoteDescription(new RTCSessionDescription(evt.sdp)); call.status = 'connected' }
+    if (pc && pc.signalingState === 'have-local-offer') { await pc.setRemoteDescription(new RTCSessionDescription(evt.sdp)); if (call.status !== 'connected') call.status = 'connected' }
     for (const c of pendingIce) { try { await pc.addIceCandidate(c) } catch { /* ignore */ } }
     pendingIce = []
   } else if (sub === 'ice') {

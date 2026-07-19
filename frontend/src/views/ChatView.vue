@@ -58,9 +58,24 @@ const scroller = ref(null)
 const listWrap = ref(null)
 const stickBottom = ref(true)          // держимся ли у нижнего края (иначе не дёргаем при подгрузке)
 const chatOpening = ref(false)         // прячем ленту на время открытия/позиционирования (без мелькания)
-// Дата теперь — sticky-разделитель (position:sticky в ленте): прилипает к верху, а следующий день
-// его выталкивает. Отдельная плавающая плашка и JS-подсчёт больше не нужны.
-function updateFloatingDate() { /* больше не требуется — sticky-разделитель делает всё нативно */ }
+// Дата — sticky-разделитель (position:sticky): прилипает к верху, следующий день его выталкивает.
+// Единственное, что делает JS — ПЛАВНО ГАСИТ выталкиваемый разделитель (иначе «Вчера» резко наезжает
+// на «Сегодня»): чем выше линии прилипания уехала плашка, тем она прозрачнее.
+let floatRaf = 0
+function updateFloatingDate() {
+  if (floatRaf) return
+  floatRaf = requestAnimationFrame(() => {
+    floatRaf = 0
+    const el = scroller.value; if (!el) return
+    const stickyTop = el.getBoundingClientRect().top + 8 // top-2 = 0.5rem
+    for (const s of el.querySelectorAll('[data-daysep]')) {
+      const r = s.getBoundingClientRect()
+      const delta = stickyTop - r.top // >0 когда разделитель выталкивают вверх выше линии прилипания
+      const o = delta <= 0 ? 1 : Math.max(0, 1 - delta / (r.height || 28))
+      s.style.opacity = o >= 0.999 ? '' : String(o)
+    }
+  })
+}
 let listObs = null
 let pendingAnchor = null // {id, offset} — якорное сообщение, которое держим при догрузке контента
 // топовое видимое сообщение + его смещение от верха вьюпорта (для устойчивого восстановления позиции)

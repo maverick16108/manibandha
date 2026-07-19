@@ -44,7 +44,7 @@ export async function initChat({ meId, getToken }) {
     engine = new ChatEngine({ db, api: chatApi, meId, onEphemeral });
     socket = new ChatSocket({
       getToken,
-      onMessage: (evt) => engine.handleWs(evt),
+      onMessage: (evt) => { if (evt && evt.type === 'call') { callHandler && callHandler(evt); } else { engine.handleWs(evt); } },
       onReconnect: () => {
         engine.catchUp(); engine.flushOutbox();
         // пока были офлайн, могли пропустить delete/edit (они не двигают seq → догон их не берёт).
@@ -341,6 +341,11 @@ export async function forwardMessages(targetChatId, bodies) {
 export function sendTyping() {
   if (chatState.activeChatId) socket?.sendTyping(chatState.activeChatId);
 }
+
+// ── сигналинг звонков (WebRTC поверх чат-сокета) ────────────────────────────
+let callHandler = null;
+export function onCallSignal(fn) { callHandler = fn; }
+export function sendCallSignal(obj) { socket?.send({ type: 'call', ...obj }); }
 
 export async function editMessage(messageId, body) {
   await engine?.editMessage(chatState.activeChatId, messageId, body);

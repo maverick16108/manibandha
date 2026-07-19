@@ -16,7 +16,7 @@ import {
   chatState, initChat, openChat, closeChat, sendMessage, sendMessageTo, sendTyping,
   editMessage, deleteMessage, retryFailed, loadOlder, loadContacts, startDirect, startGroup,
   reactMessage, REACTION_EMOJIS, updateChat, pinChat, leaveChat, forwardMessages, loadAroundSeq, markActiveRead, imageAspect, expandWindow, reorderPins,
-  pinMessageInChat, unpinMessageInChat, localCacheStats, wipeLocalChatCache,
+  pinMessageInChat, unpinMessageInChat, localCacheStats, wipeLocalChatCache, onCallSignal, sendCallSignal,
 } from '../chat/store'
 
 usePageTitle('Чат')
@@ -58,15 +58,20 @@ const scroller = ref(null)
 const listWrap = ref(null)
 const stickBottom = ref(true)          // держимся ли у нижнего края (иначе не дёргаем при подгрузке)
 const floatDate = reactive({ label: '', show: false }) // плавающая дата при скролле
-let floatHideTimer = null
+let floatHideTimer = null; let floatRaf = 0
+// коалесцируем в один кадр — иначе чтение layout на каждом scroll-событии даёт лаги на медиа
 function updateFloatingDate() {
-  const el = scroller.value; if (!el) return
-  const top = el.getBoundingClientRect().top
-  const seps = el.querySelectorAll('[data-daysep]')
-  let label = ''
-  for (const s of seps) { if (s.getBoundingClientRect().top <= top + 28) label = s.getAttribute('data-daysep'); else break }
-  if (!label && seps.length) label = seps[0].getAttribute('data-daysep')
-  if (label) { floatDate.label = label; floatDate.show = true; clearTimeout(floatHideTimer); floatHideTimer = setTimeout(() => { floatDate.show = false }, 1500) }
+  if (floatRaf) return
+  floatRaf = requestAnimationFrame(() => {
+    floatRaf = 0
+    const el = scroller.value; if (!el) return
+    const top = el.getBoundingClientRect().top
+    const seps = el.querySelectorAll('[data-daysep]')
+    let label = ''
+    for (const s of seps) { if (s.getBoundingClientRect().top <= top + 28) label = s.getAttribute('data-daysep'); else break }
+    if (!label && seps.length) label = seps[0].getAttribute('data-daysep')
+    if (label) { floatDate.label = label; floatDate.show = true; clearTimeout(floatHideTimer); floatHideTimer = setTimeout(() => { floatDate.show = false }, 1500) }
+  })
 }
 let listObs = null
 // Пока пользователь у нижнего края — прижимаем ленту к низу при любом росте высоты
@@ -111,18 +116,27 @@ function renderChatBody(b) {
 const activeId = computed(() => (route.params.id ? Number(route.params.id) : null))
 const activeChat = computed(() => chatState.chats.find((c) => c.id === activeId.value) || null)
 
+const chatScrollMem = {} // chatId → { top, atBottom } — сохраняем позицию прокрутки чата
 watch(activeId, async (id, oldId) => {
   if (oldId && !editingMsg.value) saveDraft(oldId, body.value) // сохранить черновик прежнего чата
+  if (oldId && scroller.value) chatScrollMem[oldId] = { top: scroller.value.scrollTop, atBottom: stickBottom.value }
   replyTo.value = null; editingMsg.value = null; closeCtx()
   body.value = id ? loadDraft(id) : ''
   openSettled.value = false
   if (id) {
-    stickBottom.value = true
+    // если чат был проскроллен вверх — восстанавливаем позицию; иначе к низу
+    const saved = chatScrollMem[id]
+    const restore = !!saved && !saved.atBottom
+    stickBottom.value = !restore
     nextTick(() => inputEl.value?.focus()) // фокус сразу, не ждём загрузки истории
-    await openChat(id); scrollToBottom()
-    // при ОТКРЫТИИ всегда доводим к низу (безусловно, пока не «осел»): первый scrollToBottom
-    // мог не долистать из-за поздней раскладки, а onScroll успел сбросить stickBottom.
-    ;[60, 180, 400].forEach((d) => setTimeout(() => { if (activeId.value === id && !openSettled.value) { scrollToBottom(); stickBottom.value = true } }, d))
+    await openChat(id)
+    if (restore) { await nextTick(); if (scroller.value) scroller.value.scrollTop = saved.top } else scrollToBottom()
+    // добиваем позицию, пока раскладка «оседает» (медиа догружаются)
+    ;[60, 180, 400].forEach((d) => setTimeout(() => {
+      if (activeId.value !== id || openSettled.value || !scroller.value) return
+      if (restore) scroller.value.scrollTop = saved.top
+      else { scrollToBottom(); stickBottom.value = true }
+    }, d))
     setTimeout(() => { openSettled.value = true }, 500) // после открытия — авто-читаем живые входящие
   } else closeChat()
   nextTick(autoGrow)
@@ -1399,15 +1413,115 @@ const peerStatusText = computed(() => {
 })
 watch(activeId, () => { clearInterval(peerStatusTimer); peerStatus.value = null; refreshPeerStatus(); peerStatusTimer = setInterval(refreshPeerStatus, 30000) }, { immediate: true })
 
-// ── звонок (окно вызова) ───────────────────────────────────────────────────
-const call = reactive({ open: false, name: '', avatar: '', video: false, status: 'idle' })
-function startCall(withVideo) {
+// ── звонок (WebRTC 1:1 поверх чат-сокета) ──────────────────────────────────
+const RTC_CONFIG = { iceServers: [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }] }
+const call = reactive({ open: false, name: '', avatar: '', peerId: null, status: 'idle', localVideo: false, remoteVideo: false, video: false })
+const incoming = reactive({ open: false, name: '', avatar: '', video: false, from: null, offer: null })
+const callRemoteVideo = ref(null); const callLocalVideo = ref(null)
+let pc = null; let localStream = null; let remoteAudioEl = null; let pendingIce = []
+const callStatusText = computed(() => call.status === 'connected' ? 'Соединено' : (call.status === 'calling' ? 'Вызов…' : 'Готов к звонку'))
+
+async function startCall(withVideo) {
   if (!activeChat.value || activeChat.value.type !== 'direct') return
-  call.name = activeChat.value.title || ''
-  call.avatar = activeChat.value.avatar_url || ''
-  call.video = !!withVideo; call.status = 'calling'; call.open = true
+  if (!peerStatus.value?.id) await refreshPeerStatus()
+  call.peerId = peerStatus.value?.id || null
+  if (!call.peerId) { showToast('Не удалось определить собеседника'); return }
+  call.name = activeChat.value.title || ''; call.avatar = activeChat.value.avatar_url || ''
+  call.localVideo = !!withVideo; call.video = !!withVideo; call.remoteVideo = false
+  call.status = 'idle-outgoing'; call.open = true
 }
-function endCall() { call.open = false; call.status = 'idle' }
+function setupPc(peerId) {
+  pc = new RTCPeerConnection(RTC_CONFIG)
+  pc.onicecandidate = (e) => { if (e.candidate) sendCallSignal({ to: peerId, subtype: 'ice', candidate: e.candidate }) }
+  pc.ontrack = (e) => {
+    const stream = e.streams[0]
+    if (!remoteAudioEl) { remoteAudioEl = document.createElement('audio'); remoteAudioEl.autoplay = true; document.body.appendChild(remoteAudioEl) }
+    remoteAudioEl.srcObject = stream
+    if (e.track.kind === 'video') { call.remoteVideo = true; nextTick(() => { if (callRemoteVideo.value) { callRemoteVideo.value.srcObject = stream; callRemoteVideo.value.muted = true } }) }
+  }
+  pc.onconnectionstatechange = () => { if (pc && ['failed', 'closed'].includes(pc.connectionState)) endCall() }
+}
+function attachLocalVideo() { nextTick(() => { if (callLocalVideo.value && localStream) callLocalVideo.value.srcObject = localStream }) }
+async function placeCall() {
+  call.status = 'calling'
+  try { localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: call.localVideo }) }
+  catch { showToast('Нет доступа к микрофону/камере'); endCall(); return }
+  setupPc(call.peerId)
+  localStream.getTracks().forEach((t) => pc.addTrack(t, localStream))
+  attachLocalVideo()
+  const offer = await pc.createOffer()
+  await pc.setLocalDescription(offer)
+  sendCallSignal({ to: call.peerId, subtype: 'offer', sdp: offer, video: call.localVideo, name: myName.value })
+}
+async function acceptIncoming() {
+  call.peerId = incoming.from; call.name = incoming.name; call.avatar = incoming.avatar
+  call.video = incoming.video; call.localVideo = incoming.video; call.remoteVideo = false
+  const offer = incoming.offer; incoming.open = false
+  call.open = true; call.status = 'calling'
+  try { localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: call.localVideo }) }
+  catch { showToast('Нет доступа к микрофону/камере'); endCall(); return }
+  setupPc(call.peerId)
+  localStream.getTracks().forEach((t) => pc.addTrack(t, localStream))
+  attachLocalVideo()
+  await pc.setRemoteDescription(new RTCSessionDescription(offer))
+  for (const c of pendingIce) { try { await pc.addIceCandidate(c) } catch { /* ignore */ } }
+  pendingIce = []
+  const answer = await pc.createAnswer()
+  await pc.setLocalDescription(answer)
+  sendCallSignal({ to: call.peerId, subtype: 'answer', sdp: answer })
+  call.status = 'connected'
+}
+function rejectIncoming() { if (incoming.from) sendCallSignal({ to: incoming.from, subtype: 'reject' }); incoming.open = false; incoming.offer = null }
+function endCall() {
+  const to = call.peerId || incoming.from
+  if (to && (call.open || incoming.open)) sendCallSignal({ to, subtype: 'end' })
+  cleanupCall()
+}
+function cleanupCall() {
+  try { pc && pc.close() } catch { /* ignore */ }
+  pc = null; pendingIce = []
+  if (localStream) { localStream.getTracks().forEach((t) => t.stop()); localStream = null }
+  if (remoteAudioEl) { try { remoteAudioEl.srcObject = null; remoteAudioEl.remove() } catch { /* ignore */ } remoteAudioEl = null }
+  call.open = false; call.status = 'idle'; call.remoteVideo = false; call.localVideo = false; call.peerId = null
+  incoming.open = false; incoming.offer = null
+}
+async function toggleCallVideo() {
+  call.localVideo = !call.localVideo
+  if (!pc || call.status !== 'connected') { attachLocalVideo(); return }
+  const vtrack = localStream?.getVideoTracks()[0]
+  if (call.localVideo && !vtrack) {
+    try {
+      const vs = await navigator.mediaDevices.getUserMedia({ video: true })
+      const t = vs.getVideoTracks()[0]; localStream.addTrack(t); pc.addTrack(t, localStream); attachLocalVideo()
+      const offer = await pc.createOffer(); await pc.setLocalDescription(offer); sendCallSignal({ to: call.peerId, subtype: 'offer', sdp: offer, renego: true })
+    } catch { /* ignore */ }
+  } else if (vtrack) { vtrack.enabled = call.localVideo }
+}
+async function handleCallSignal(evt) {
+  const sub = evt.subtype
+  if (sub === 'offer') {
+    if (evt.renego && pc) { // повторное согласование (вкл. видео в процессе звонка)
+      await pc.setRemoteDescription(new RTCSessionDescription(evt.sdp))
+      const answer = await pc.createAnswer(); await pc.setLocalDescription(answer)
+      sendCallSignal({ to: evt.from, subtype: 'answer', sdp: answer }); return
+    }
+    if (call.status === 'connected' || call.status === 'calling' || incoming.open) { sendCallSignal({ to: evt.from, subtype: 'busy' }); return }
+    incoming.open = true; incoming.from = evt.from; incoming.name = evt.name || evt.from_name || 'Вызов'
+    incoming.avatar = evt.from_avatar || ''; incoming.video = !!evt.video; incoming.offer = evt.sdp
+  } else if (sub === 'answer') {
+    if (pc) { await pc.setRemoteDescription(new RTCSessionDescription(evt.sdp)); call.status = 'connected' }
+    for (const c of pendingIce) { try { await pc.addIceCandidate(c) } catch { /* ignore */ } }
+    pendingIce = []
+  } else if (sub === 'ice') {
+    const cand = new RTCIceCandidate(evt.candidate)
+    if (pc && pc.remoteDescription) { try { await pc.addIceCandidate(cand) } catch { /* ignore */ } } else pendingIce.push(cand)
+  } else if (sub === 'end' || sub === 'reject' || sub === 'busy') {
+    if (sub === 'busy') showToast('Абонент занят')
+    else if (sub === 'reject') showToast('Звонок отклонён')
+    cleanupCall()
+  }
+}
+onCallSignal(handleCallSignal)
 async function openInfo() {
   const id = activeId.value
   showInfo.value = true
@@ -2509,30 +2623,58 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <!-- Окно звонка (исходящий вызов) -->
-    <div v-if="call.open" class="fixed inset-0 z-[80] flex flex-col items-center justify-between bg-ink-900 p-10 text-white">
-      <div class="pt-6 text-center text-white/50">{{ call.video ? 'Видеозвонок' : 'Аудиозвонок' }}</div>
-      <div class="flex flex-1 flex-col items-center justify-center gap-6">
-        <img v-if="call.avatar" :src="thumbUrl(call.avatar)" class="h-44 w-44 rounded-full object-cover shadow-2xl" />
-        <span v-else class="flex h-44 w-44 items-center justify-center rounded-full bg-gradient-to-br from-saffron-400 to-saffron-600 text-6xl font-semibold shadow-2xl">{{ initials(call.name) }}</span>
-        <div class="text-center">
-          <div class="text-3xl font-semibold">{{ call.name }}</div>
-          <div class="mt-3 text-white/55">Если Вы хотите начать видеозвонок,<br>нажмите на значок камеры.</div>
+    <!-- Окно звонка (попап) -->
+    <div v-if="call.open" class="fixed inset-0 z-[80] flex items-center justify-center bg-ink-900/60 p-4" @click.self="call.status === 'connected' ? null : endCall">
+      <div class="relative flex w-full max-w-md flex-col items-center overflow-hidden rounded-2xl bg-ink-900 p-8 text-white shadow-2xl">
+        <div class="text-sm text-white/45">{{ callStatusText }}</div>
+        <!-- видео собеседника (когда соединено и есть видео) -->
+        <div v-if="call.status === 'connected' && call.remoteVideo" class="mt-4 w-full overflow-hidden rounded-xl bg-black">
+          <video ref="callRemoteVideo" autoplay playsinline class="h-64 w-full object-cover"></video>
+        </div>
+        <template v-else>
+          <img v-if="call.avatar" :src="thumbUrl(call.avatar)" class="mt-6 h-36 w-36 rounded-full object-cover shadow-xl" />
+          <span v-else class="mt-6 flex h-36 w-36 items-center justify-center rounded-full bg-gradient-to-br from-saffron-400 to-saffron-600 text-5xl font-semibold shadow-xl">{{ initials(call.name) }}</span>
+        </template>
+        <div class="mt-5 text-center">
+          <div class="text-2xl font-semibold">{{ call.name }}</div>
+          <div v-if="call.status !== 'connected'" class="mt-2 text-sm text-white/50">Если Вы хотите начать видеозвонок,<br>нажмите на значок камеры.</div>
+        </div>
+        <!-- своё видео превью -->
+        <video v-show="call.localVideo" ref="callLocalVideo" autoplay playsinline muted class="absolute right-4 top-4 h-24 w-20 -scale-x-100 rounded-lg object-cover shadow-lg ring-2 ring-white/20"></video>
+        <div class="mt-8 flex items-end gap-8">
+          <button class="flex flex-col items-center gap-2" @click="toggleCallVideo">
+            <span class="flex h-14 w-14 items-center justify-center rounded-full text-white transition" :class="call.localVideo ? 'bg-sky-600' : 'bg-sky-500 hover:bg-sky-600'"><AppIcon name="video" :size="24" /></span>
+            <span class="text-xs text-white/60">{{ call.localVideo ? 'Выкл. видео' : 'Вкл. видео' }}</span>
+          </button>
+          <button class="flex flex-col items-center gap-2" @click="endCall">
+            <span class="flex h-14 w-14 items-center justify-center rounded-full bg-red-500 text-white transition hover:bg-red-600"><AppIcon name="phone" :size="24" class="rotate-[135deg]" /></span>
+            <span class="text-xs text-white/60">{{ call.status === 'connected' ? 'Завершить' : 'Отменить' }}</span>
+          </button>
+          <button v-if="call.status === 'idle-outgoing'" class="flex flex-col items-center gap-2" @click="placeCall">
+            <span class="flex h-14 w-14 items-center justify-center rounded-full bg-sky-500 text-white transition hover:bg-sky-600"><AppIcon name="phone" :size="24" /></span>
+            <span class="text-xs text-white/60">Позвонить</span>
+          </button>
         </div>
       </div>
-      <div class="flex items-end gap-10 pb-6">
-        <button class="flex flex-col items-center gap-2" @click="call.video = !call.video">
-          <span class="flex h-16 w-16 items-center justify-center rounded-full text-white transition" :class="call.video ? 'bg-sky-600' : 'bg-sky-500 hover:bg-sky-600'"><AppIcon name="video" :size="28" /></span>
-          <span class="text-sm text-white/70">Вкл. видео</span>
-        </button>
-        <button class="flex flex-col items-center gap-2" @click="endCall">
-          <span class="flex h-16 w-16 items-center justify-center rounded-full bg-white text-ink-900 transition hover:bg-white/90"><AppIcon name="close" :size="28" /></span>
-          <span class="text-sm text-white/70">Отменить</span>
-        </button>
-        <button class="flex flex-col items-center gap-2" @click="endCall">
-          <span class="flex h-16 w-16 items-center justify-center rounded-full bg-sky-500 text-white transition hover:bg-sky-600"><AppIcon name="phone" :size="28" /></span>
-          <span class="text-sm text-white/70">Позвонить</span>
-        </button>
+    </div>
+
+    <!-- Входящий звонок (попап) -->
+    <div v-if="incoming.open" class="fixed inset-0 z-[81] flex items-center justify-center bg-ink-900/60 p-4">
+      <div class="flex w-full max-w-sm flex-col items-center rounded-2xl bg-ink-900 p-8 text-white shadow-2xl">
+        <div class="text-sm text-white/45">Входящий {{ incoming.video ? 'видеозвонок' : 'звонок' }}</div>
+        <img v-if="incoming.avatar" :src="thumbUrl(incoming.avatar)" class="mt-6 h-32 w-32 rounded-full object-cover shadow-xl" />
+        <span v-else class="mt-6 flex h-32 w-32 items-center justify-center rounded-full bg-gradient-to-br from-saffron-400 to-saffron-600 text-4xl font-semibold shadow-xl">{{ initials(incoming.name) }}</span>
+        <div class="mt-4 text-xl font-semibold">{{ incoming.name }}</div>
+        <div class="mt-8 flex items-end gap-12">
+          <button class="flex flex-col items-center gap-2" @click="rejectIncoming">
+            <span class="flex h-14 w-14 items-center justify-center rounded-full bg-red-500 text-white transition hover:bg-red-600 animate-pulse"><AppIcon name="phone" :size="24" class="rotate-[135deg]" /></span>
+            <span class="text-xs text-white/60">Отклонить</span>
+          </button>
+          <button class="flex flex-col items-center gap-2" @click="acceptIncoming">
+            <span class="flex h-14 w-14 items-center justify-center rounded-full bg-green-500 text-white transition hover:bg-green-600"><AppIcon name="phone" :size="24" /></span>
+            <span class="text-xs text-white/60">Принять</span>
+          </button>
+        </div>
       </div>
     </div>
 

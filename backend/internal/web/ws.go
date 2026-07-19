@@ -183,6 +183,20 @@ func (s *Server) wsChat(w http.ResponseWriter, r *http.Request) {
 		if err := ws.ReadJSON(&data); err != nil {
 			return
 		}
+		// сигналинг звонков (WebRTC): ретранслируем сообщение конкретному пользователю
+		if data["type"] == "call" {
+			to, ok := toInt(data["to"])
+			if !ok {
+				continue
+			}
+			data["from"] = u.ID
+			data["from_name"] = u.FullName
+			if u.AvatarURL != nil {
+				data["from_avatar"] = *u.AvatarURL
+			}
+			chatH.sendToUsers([]int{to}, data)
+			continue
+		}
 		if data["type"] == "typing" {
 			cid, ok := toInt(data["chat_id"])
 			if !ok {

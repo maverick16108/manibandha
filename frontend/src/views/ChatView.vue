@@ -58,20 +58,21 @@ const scroller = ref(null)
 const listWrap = ref(null)
 const stickBottom = ref(true)          // держимся ли у нижнего края (иначе не дёргаем при подгрузке)
 const chatOpening = ref(false)         // прячем ленту на время открытия/позиционирования (без мелькания)
-const floatDate = reactive({ label: '', show: false }) // плавающая дата при скролле
-let floatHideTimer = null; let floatRaf = 0
+const floatDate = reactive({ label: '', show: false }) // единственная плавающая дата (без встроенных плашек)
+let floatRaf = 0
 // коалесцируем в один кадр — иначе чтение layout на каждом scroll-событии даёт лаги на медиа
 function updateFloatingDate() {
   if (floatRaf) return
   floatRaf = requestAnimationFrame(() => {
     floatRaf = 0
-    const el = scroller.value; if (!el) return
+    const el = scroller.value; if (!el) { floatDate.show = false; return }
     const top = el.getBoundingClientRect().top
     const seps = el.querySelectorAll('[data-daysep]')
     let label = ''
-    for (const s of seps) { if (s.getBoundingClientRect().top <= top + 28) label = s.getAttribute('data-daysep'); else break }
+    for (const s of seps) { if (s.getBoundingClientRect().top <= top + 20) label = s.getAttribute('data-daysep'); else break }
     if (!label && seps.length) label = seps[0].getAttribute('data-daysep')
-    if (label) { floatDate.label = label; floatDate.show = true; clearTimeout(floatHideTimer); floatHideTimer = setTimeout(() => { floatDate.show = false }, 1500) }
+    floatDate.label = label
+    floatDate.show = !!label
   })
 }
 let listObs = null
@@ -129,17 +130,17 @@ watch(activeId, async (id, oldId) => {
     const saved = chatScrollMem[id]
     const restore = !!saved && !saved.atBottom
     stickBottom.value = !restore
-    chatOpening.value = true // прячем ленту, пока не спозиционируем — чтобы не было видно перемотки
     nextTick(() => inputEl.value?.focus()) // фокус сразу, не ждём загрузки истории
-    await openChat(id)
+    await openChat(id) // обновляет сообщения (единый рендер) и резолвится синхронно после
+    // выставляем позицию в nextTick — это микротаск ДО первой отрисовки нового чата,
+    // поэтому нет ни пустого кадра, ни видимой перемотки
     await nextTick()
     const setPos = () => { const el = scroller.value; if (el) el.scrollTop = restore ? saved.top : el.scrollHeight }
-    setPos()
-    requestAnimationFrame(() => { setPos(); requestAnimationFrame(() => { setPos(); chatOpening.value = false }) })
-    // добиваем позицию, пока раскладка «оседает» (медиа догружаются)
-    ;[120, 300].forEach((d) => setTimeout(() => {
+    setPos(); updateFloatingDate()
+    // одна отложенная коррекция — если поздно догрузилась раскладка/медиа сместили высоту
+    ;[80, 220].forEach((d) => setTimeout(() => {
       if (activeId.value !== id || openSettled.value) return
-      setPos(); if (!restore) stickBottom.value = true
+      setPos(); updateFloatingDate(); if (!restore) stickBottom.value = true
     }, d))
     setTimeout(() => { openSettled.value = true }, 500) // после открытия — авто-читаем живые входящие
   } else closeChat()
@@ -2162,11 +2163,10 @@ onBeforeUnmount(() => {
 
         <div ref="scroller" class="chat-bg flex flex-1 flex-col overflow-y-auto p-4"
              @scroll="onScroll" @click="onScrollerClick" @mousedown="onScrollerDown" @touchstart="onScrollerDown">
-          <div ref="listWrap" class="mt-auto space-y-1" :style="chatOpening ? 'opacity:0' : ''">
+          <div ref="listWrap" class="mt-auto space-y-1">
           <template v-for="(m, i) in chatState.messages" :key="m.client_uuid">
-          <div v-if="showDaySep(m, i)" :data-daysep="dayLabel(m.created_at)" class="my-2 flex justify-center">
-            <span class="rounded-full bg-ink-900/55 px-3 py-1 text-xs font-semibold text-white shadow-sm">{{ dayLabel(m.created_at) }}</span>
-          </div>
+          <!-- невидимый якорь границы дня — по нему обновляется единственная плавающая дата -->
+          <div v-if="showDaySep(m, i)" :data-daysep="dayLabel(m.created_at)" class="h-0 overflow-hidden"></div>
           <div v-if="m.client_uuid === firstUnreadKey" class="my-3 flex items-center gap-2 px-2">
             <span class="h-px flex-1 bg-saffron-400/60"></span>
             <span class="rounded-full bg-saffron-500 px-3 py-0.5 text-xs font-semibold text-white shadow-sm">Непрочитанные</span>
@@ -2443,7 +2443,9 @@ onBeforeUnmount(() => {
 
         <!-- единая плавающая дата при скролле (не накладывается, в отличие от sticky-плашек) -->
         <div class="pointer-events-none absolute inset-x-0 top-2 z-[6] flex justify-center transition-opacity duration-300" :class="floatDate.show ? 'opacity-100' : 'opacity-0'">
-          <span class="rounded-full bg-ink-900/55 px-3 py-1 text-xs font-semibold text-white shadow-sm backdrop-blur-sm">{{ floatDate.label }}</span>
+          <transition name="datefade" mode="out-in">
+            <span :key="floatDate.label" class="rounded-full bg-ink-900/55 px-3 py-1 text-xs font-semibold text-white shadow-sm backdrop-blur-sm">{{ floatDate.label }}</span>
+          </transition>
         </div>
         </div>
 
@@ -2912,6 +2914,10 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+/* кроссфейд плавающей даты: старая исчезает, новая встаёт на её место (без наложения) */
+.datefade-enter-active, .datefade-leave-active { transition: opacity .28s ease, transform .28s ease; }
+.datefade-enter-from { opacity: 0; transform: translateY(-6px); }
+.datefade-leave-to { opacity: 0; transform: translateY(6px); }
 /* «растворение» при удалении одиночного сообщения */
 .msg-dissolve { animation: msgDissolve .34s ease forwards; pointer-events: none; }
 @keyframes msgDissolve {

@@ -606,6 +606,32 @@ function onInput() {
   if (body.value.length > MAX_LEN) body.value = body.value.slice(0, MAX_LEN)
   autoGrow()
 }
+// ── кастомное контекстное меню поля ввода (вместо браузерного) ─────────────
+const inputCtx = reactive({ open: false, x: 0, y: 0, hasSel: false })
+function onInputContext(e) {
+  e.preventDefault()
+  const el = inputEl.value
+  inputCtx.hasSel = !!el && el.selectionStart !== el.selectionEnd
+  inputCtx.x = Math.min(e.clientX, window.innerWidth - 210); inputCtx.y = Math.min(e.clientY, window.innerHeight - 220); inputCtx.open = true
+}
+async function inputAction(name) {
+  inputCtx.open = false
+  const el = inputEl.value; if (!el) return
+  el.focus()
+  const start = el.selectionStart, end = el.selectionEnd
+  const sel = body.value.slice(start, end)
+  try {
+    if (name === 'copy' && sel) { await navigator.clipboard?.writeText(sel) }
+    else if (name === 'cut' && sel) {
+      await navigator.clipboard?.writeText(sel)
+      body.value = body.value.slice(0, start) + body.value.slice(end)
+      nextTick(() => { el.selectionStart = el.selectionEnd = start; autoGrow() })
+    } else if (name === 'paste') {
+      const t = await navigator.clipboard?.readText()
+      if (t != null) { body.value = body.value.slice(0, start) + t + body.value.slice(end); nextTick(() => { const p = start + t.length; el.selectionStart = el.selectionEnd = p; autoGrow() }) }
+    } else if (name === 'selectall') { el.select() }
+  } catch { /* буфер недоступен */ }
+}
 watch(body, () => { nextTick(autoGrow); if (activeId.value && !editingMsg.value) saveDraftDebounced(activeId.value, body.value) })
 
 let lastTyping = 0
@@ -2162,7 +2188,7 @@ onBeforeUnmount(() => {
         <div class="pointer-events-none absolute inset-x-0 top-0 z-20 [&>*]:pointer-events-auto"><AudioBar /></div>
 
         <div ref="scroller" class="chat-bg flex flex-1 flex-col overflow-y-auto p-4"
-             @scroll="onScroll" @click="onScrollerClick" @mousedown="onScrollerDown" @touchstart="onScrollerDown">
+             @scroll="onScroll" @click="onScrollerClick" @mousedown="onScrollerDown" @touchstart="onScrollerDown" @contextmenu.prevent>
           <div ref="listWrap" class="mt-auto space-y-1">
           <template v-for="(m, i) in chatState.messages" :key="m.client_uuid">
           <!-- невидимый якорь границы дня — по нему обновляется единственная плавающая дата -->
@@ -2451,7 +2477,7 @@ onBeforeUnmount(() => {
 
         <!-- кнопка «вниз» (видна, когда прокручено вверх) -->
         <transition name="fade">
-          <button v-if="activeChat && !stickBottom" @click="stickBottom = true; scrollToBottom()" title="Вниз"
+          <button v-if="activeChat && !stickBottom && !holdRec.active" @click="stickBottom = true; scrollToBottom()" title="Вниз"
                   class="absolute bottom-24 right-5 z-20 flex h-11 w-11 items-center justify-center rounded-full bg-white text-ink-700 shadow-lg ring-1 ring-parchment-200 transition hover:bg-parchment-50">
             <AppIcon name="chevron" :size="22" />
           </button>
@@ -2505,7 +2531,7 @@ onBeforeUnmount(() => {
 
             <textarea ref="inputEl" v-model="body" rows="1" :maxlength="MAX_LEN"
                       class="chat-input min-h-[2.75rem] flex-1 resize-none rounded-2xl border border-parchment-300 bg-parchment-50 px-4 py-2.5 text-base leading-6 focus:border-saffron-400 focus:outline-none focus:ring-1 focus:ring-saffron-400"
-                      placeholder="Сообщение…" @input="onInput" @keydown="onKeydown"></textarea>
+                      placeholder="Сообщение…" @input="onInput" @keydown="onKeydown" @contextmenu="onInputContext"></textarea>
 
             <div class="relative mb-0.5 shrink-0">
               <button class="rounded-full p-2 text-ink-700/60 hover:bg-parchment-100 hover:text-saffron-600" title="Эмодзи" @click="showEmoji = !showEmoji">
@@ -2678,6 +2704,17 @@ onBeforeUnmount(() => {
         </div>
       </div>
     </div>
+
+    <!-- Кастомное контекстное меню поля ввода -->
+    <template v-if="inputCtx.open">
+      <div class="fixed inset-0 z-[85]" @click="inputCtx.open = false" @contextmenu.prevent="inputCtx.open = false"></div>
+      <div class="fixed z-[86] w-52 overflow-hidden rounded-xl bg-white py-1 shadow-2xl ring-1 ring-parchment-200" :style="{ left: inputCtx.x + 'px', top: inputCtx.y + 'px' }" @click.stop>
+        <button class="flex w-full items-center gap-3 px-4 py-2 text-left text-[15px] text-ink-900 hover:bg-parchment-100 disabled:text-ink-700/30 disabled:hover:bg-transparent" :disabled="!inputCtx.hasSel" @click="inputAction('cut')"><AppIcon name="trash" :size="17" class="opacity-0" /> Вырезать</button>
+        <button class="flex w-full items-center gap-3 px-4 py-2 text-left text-[15px] text-ink-900 hover:bg-parchment-100 disabled:text-ink-700/30 disabled:hover:bg-transparent" :disabled="!inputCtx.hasSel" @click="inputAction('copy')"><AppIcon name="copy" :size="17" /> Копировать</button>
+        <button class="flex w-full items-center gap-3 px-4 py-2 text-left text-[15px] text-ink-900 hover:bg-parchment-100" @click="inputAction('paste')"><AppIcon name="reply" :size="17" class="opacity-0" /> Вставить</button>
+        <button class="flex w-full items-center gap-3 border-t border-parchment-100 px-4 py-2 text-left text-[15px] text-ink-900 hover:bg-parchment-100" @click="inputAction('selectall')"><AppIcon name="check" :size="17" class="opacity-0" /> Выделить всё</button>
+      </div>
+    </template>
 
     <!-- Окно звонка (попап) -->
     <div v-if="call.open" class="fixed inset-0 z-[80] flex items-center justify-center bg-ink-900/60 p-4" @click.self="call.status === 'connected' ? null : endCall">

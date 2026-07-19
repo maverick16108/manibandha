@@ -771,6 +771,42 @@ func (s *Server) searchChatMessages(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
+// GET /api/chats/{id}/media?type=photos|videos|files|voice|links — все медиа чата по типу
+// (для полноэкранных списков в панели информации, как в Telegram).
+func (s *Server) chatMedia(w http.ResponseWriter, r *http.Request) {
+	id, _ := strconv.Atoi(chi.URLParam(r, "id"))
+	u := currentUser(r)
+	if _, code := s.requireMembership(u.ID, id); code != http.StatusOK {
+		httpErr(w, code, membershipMsg(code))
+		return
+	}
+	var cond string
+	switch r.URL.Query().Get("type") {
+	case "photos":
+		cond = "body LIKE '%![](%'"
+	case "videos":
+		cond = "body LIKE '%@[video]%'"
+	case "files":
+		cond = "body LIKE '%@[file]%'"
+	case "voice":
+		cond = "body LIKE '%@[audio]%'"
+	case "links":
+		cond = "body LIKE '%http%' AND body NOT LIKE '%](%'"
+	default:
+		httpErr(w, http.StatusBadRequest, "Неизвестный тип")
+		return
+	}
+	var rows []models.ChatMessage
+	s.DB.Preload("Author").
+		Where("chat_id = ? AND deleted = ? AND "+cond, id, false).
+		Order("seq DESC").Limit(2000).Find(&rows)
+	out := make([]map[string]any, 0, len(rows))
+	for i := range rows {
+		out = append(out, chatMsgOut(&rows[i], u.ID))
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
 // POST /api/chats/pins/reorder — новый порядок закреплённых чатов (перетаскивание)
 func (s *Server) reorderPins(w http.ResponseWriter, r *http.Request) {
 	u := currentUser(r)

@@ -1288,15 +1288,72 @@ function pluralWord(n, forms) { const a = n % 10, b = n % 100; if (a === 1 && b 
 const infoCountRows = computed(() => {
   const c = infoData.value?.counts; if (!c) return []
   const rows = []
-  const add = (n, icon, forms) => { if (n > 0) rows.push({ n, icon, label: pluralWord(n, forms) }) }
-  add(c.photos, 'image', ['фотография', 'фотографии', 'фотографий'])
-  add(c.videos, 'video', ['видео', 'видео', 'видео'])
-  add(c.files, 'paperclip', ['файл', 'файла', 'файлов'])
-  add(c.links, 'link', ['ссылка', 'ссылки', 'ссылок'])
-  add(c.voice, 'mic', ['голосовое', 'голосовых', 'голосовых'])
-  add(c.common_groups, 'users', ['общая группа', 'общие группы', 'общих групп'])
+  const add = (n, icon, forms, type) => { if (n > 0) rows.push({ n, icon, label: pluralWord(n, forms), type }) }
+  add(c.photos, 'image', ['фотография', 'фотографии', 'фотографий'], 'photos')
+  add(c.videos, 'video', ['видео', 'видео', 'видео'], 'videos')
+  add(c.files, 'paperclip', ['файл', 'файла', 'файлов'], 'files')
+  add(c.links, 'link', ['ссылка', 'ссылки', 'ссылок'], 'links')
+  add(c.voice, 'mic', ['голосовое', 'голосовых', 'голосовых'], 'voice')
+  add(c.common_groups, 'users', ['общая группа', 'общие группы', 'общих групп'], 'groups')
   return rows
 })
+// ── просмотр всех медиа по типу (как в Telegram) ───────────────────────────
+const mediaBrowser = reactive({ open: false, type: null, title: '', items: [], loading: false, q: '' })
+const MEDIA_TITLES = { photos: 'Фотографии', videos: 'Видео', files: 'Файлы', voice: 'Голосовые сообщения', links: 'Общие ссылки' }
+const MONTHS_RU = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь']
+async function openMediaBrowser(type) {
+  if (!type || type === 'groups' || !activeId.value) return
+  Object.assign(mediaBrowser, { open: true, type, title: MEDIA_TITLES[type] || 'Медиа', items: [], q: '', loading: true })
+  try { const { data } = await client.get(`/chats/${activeId.value}/media`, { params: { type } }); if (mediaBrowser.type === type) mediaBrowser.items = Array.isArray(data) ? data : [] }
+  catch { mediaBrowser.items = [] } finally { mediaBrowser.loading = false }
+}
+function closeMediaBrowser() { mediaBrowser.open = false; mediaBrowser.items = []; mediaBrowser.q = '' }
+function fileOf(m) { const mm = (m.body || '').match(/@\[file\]\(([^|)]+)\|([^)]*)\)/); if (!mm) return null; let name = mm[2]; try { name = decodeURIComponent(mm[2]) } catch { /* as is */ } return { url: mm[1], name } }
+function audioOf(m) { const mm = (m.body || '').match(/@\[audio\]\(([^)]+)\)/); return mm ? mm[1] : null }
+function monthLabel(ds) { const d = ds ? new Date(ds) : null; if (!d || isNaN(d.getTime())) return ''; const now = new Date(); return MONTHS_RU[d.getMonth()] + (d.getFullYear() !== now.getFullYear() ? ' ' + d.getFullYear() : '') }
+function fileExt(name) { const m = (name || '').match(/\.([a-z0-9]{1,5})$/i); return m ? m[1].toLowerCase() : 'file' }
+const fileExtColor = (e) => ({ pdf: 'bg-red-500', zip: 'bg-amber-500', rar: 'bg-amber-500', doc: 'bg-blue-500', docx: 'bg-blue-500', xls: 'bg-green-600', xlsx: 'bg-green-600' }[e] || 'bg-sage-500')
+const mediaExpanded = computed(() => {
+  const out = []
+  for (const m of mediaBrowser.items) {
+    const ca = m.created_at
+    if (mediaBrowser.type === 'photos') { for (const u of photoUrls(m)) out.push({ kind: 'photo', url: u, mid: m.id, created_at: ca }) }
+    else if (mediaBrowser.type === 'videos') { const v = videoOf(m); if (v) out.push({ kind: 'video', url: v.url, poster: v.poster, mid: m.id, created_at: ca }) }
+    else if (mediaBrowser.type === 'files') { const f = fileOf(m); if (f) out.push({ kind: 'file', url: f.url, name: f.name, ext: fileExt(f.name), mid: m.id, created_at: ca }) }
+    else if (mediaBrowser.type === 'voice') { const a = audioOf(m); if (a) out.push({ kind: 'voice', url: a, mid: m.id, created_at: ca, author: m.author_name }) }
+    else if (mediaBrowser.type === 'links') { const u = urlInBody(m.body); if (u) out.push({ kind: 'link', url: u, mid: m.id, created_at: ca, preview: linkPreviews[u] || null, text: cleanBody(m.body) }) }
+  }
+  return out
+})
+const mediaGroups = computed(() => {
+  const q = mediaBrowser.q.trim().toLowerCase()
+  let items = mediaExpanded.value
+  if (q && ['files', 'links', 'voice'].includes(mediaBrowser.type)) {
+    items = items.filter((it) => `${it.name || ''} ${it.url || ''} ${it.author || ''} ${it.text || ''}`.toLowerCase().includes(q))
+  }
+  const groups = []; let cur = null
+  for (const it of items) { const label = monthLabel(it.created_at); if (!cur || cur.label !== label) { cur = { label, items: [] }; groups.push(cur) } cur.items.push(it) }
+  return groups
+})
+function openBrowserMedia(it) {
+  const list = mediaExpanded.value.filter((x) => x.kind === 'photo' || x.kind === 'video').map((x) => ({ url: x.url, mid: x.mid, video: x.kind === 'video', poster: x.poster }))
+  const idx = list.findIndex((x) => x.url === it.url && x.mid === it.mid)
+  openLightbox(it.url, list, Math.max(0, idx))
+}
+function playBrowserVoice(it) { playAudio(it.url, `${it.author || 'Голосовое'} · ${monthLabel(it.created_at)}`) }
+function openBrowserFile(it) { const a = document.createElement('a'); a.href = it.url; a.target = '_blank'; a.rel = 'noopener'; a.download = it.name || ''; document.body.appendChild(a); a.click(); a.remove() }
+// ── разделители дат в ленте (как в Telegram) ───────────────────────────────
+const MONTHS_RU_GEN = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря']
+function sameDayTs(a, b) { if (!a || !b) return false; const x = new Date(a), y = new Date(b); return x.getFullYear() === y.getFullYear() && x.getMonth() === y.getMonth() && x.getDate() === y.getDate() }
+function showDaySep(m, i) { if (i === 0) return true; return !sameDayTs(chatState.messages[i - 1]?.created_at, m.created_at) }
+function dayLabel(ds) {
+  const d = ds ? new Date(ds) : null; if (!d || isNaN(d.getTime())) return ''
+  const now = new Date(); const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const diff = Math.round((today - new Date(d.getFullYear(), d.getMonth(), d.getDate())) / 86400000)
+  if (diff === 0) return 'Сегодня'
+  if (diff === 1) return 'Вчера'
+  return `${d.getDate()} ${MONTHS_RU_GEN[d.getMonth()]}` + (d.getFullYear() !== now.getFullYear() ? ' ' + d.getFullYear() : '')
+}
 function shareContact() {
   const p = infoData.value?.peer; if (!p) return
   const parts = [`👤 ${p.name || 'Контакт'}`]
@@ -1672,10 +1729,11 @@ onBeforeUnmount(() => {
                 </div>
                 <!-- счётчики медиа (как в Telegram) -->
                 <div v-if="infoCountRows.length" class="divide-y divide-parchment-100 border-t border-parchment-200">
-                  <div v-for="row in infoCountRows" :key="row.icon" class="flex items-center gap-3 px-6 py-3">
+                  <button v-for="row in infoCountRows" :key="row.icon" class="flex w-full items-center gap-3 px-6 py-3 text-left transition hover:bg-parchment-50 disabled:cursor-default disabled:hover:bg-transparent"
+                          :disabled="row.type === 'groups'" @click="openMediaBrowser(row.type)">
                     <AppIcon :name="row.icon" :size="20" class="shrink-0 text-ink-700/50" />
                     <span class="text-[15px] text-ink-900"><b class="tabular-nums">{{ row.n }}</b> {{ row.label }}</span>
-                  </div>
+                  </button>
                 </div>
                 <!-- поделиться контактом -->
                 <div class="border-t border-parchment-200 p-2">
@@ -1683,6 +1741,66 @@ onBeforeUnmount(() => {
                     <AppIcon name="reply" :size="19" class="-scale-x-100" /> Поделиться контактом
                   </button>
                 </div>
+              </div>
+            </div>
+          </div>
+        </transition>
+
+        <!-- Полноэкранный просмотр медиа по типу (фото/видео/файлы/аудио/ссылки) -->
+        <transition name="info-slide">
+          <div v-if="mediaBrowser.open" class="absolute inset-0 z-[35] flex">
+            <div class="absolute inset-0 bg-ink-900/30" @click="closeMediaBrowser"></div>
+            <div class="relative ml-auto flex h-full w-full flex-col bg-white shadow-2xl sm:max-w-md">
+              <header class="flex items-center gap-2 border-b border-parchment-200 px-3 py-3">
+                <button class="rounded-lg p-1.5 text-ink-700/60 hover:bg-parchment-100" title="Назад" @click="closeMediaBrowser"><AppIcon name="chevron" :size="18" class="rotate-90" /></button>
+                <div class="flex-1 font-medium text-ink-900">{{ mediaBrowser.title }}</div>
+                <button class="rounded-lg p-1.5 text-ink-700/60 hover:bg-parchment-100" title="Закрыть" @click="closeMediaBrowser(); closeInfo()"><AppIcon name="close" :size="18" /></button>
+              </header>
+              <div v-if="['files', 'links', 'voice'].includes(mediaBrowser.type)" class="border-b border-parchment-200 p-3">
+                <div class="relative">
+                  <AppIcon name="search" :size="16" class="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-700/40" />
+                  <input v-model="mediaBrowser.q" class="input h-9 w-full pl-8 pr-3 text-sm" placeholder="Поиск" />
+                </div>
+              </div>
+              <div class="flex-1 overflow-y-auto">
+                <p v-if="mediaBrowser.loading" class="p-6 text-center text-sm text-ink-700/50">Загрузка…</p>
+                <p v-else-if="!mediaGroups.length" class="p-8 text-center text-sm text-ink-700/50">Ничего не найдено</p>
+                <template v-for="g in mediaGroups" :key="g.label">
+                  <div class="px-4 pb-1 pt-4 text-sm font-semibold text-ink-900">{{ g.label }}</div>
+                  <!-- фото/видео — сетка -->
+                  <div v-if="['photos', 'videos'].includes(mediaBrowser.type)" class="grid grid-cols-3 gap-0.5 px-0.5 sm:grid-cols-4">
+                    <button v-for="(it, k) in g.items" :key="k" class="relative aspect-square overflow-hidden bg-ink-900/5" @click="openBrowserMedia(it)">
+                      <img :src="thumbUrl(it.kind === 'video' ? (it.poster || it.url) : it.url)" loading="lazy" class="h-full w-full object-cover" />
+                      <span v-if="it.kind === 'video'" class="absolute inset-0 flex items-center justify-center"><AppIcon name="play" :size="24" class="text-white drop-shadow" /></span>
+                    </button>
+                  </div>
+                  <!-- файлы -->
+                  <div v-else-if="mediaBrowser.type === 'files'">
+                    <button v-for="(it, k) in g.items" :key="k" class="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-parchment-50" @click="openBrowserFile(it)">
+                      <span class="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg text-[11px] font-bold uppercase text-white" :class="fileExtColor(it.ext)">{{ it.ext }}</span>
+                      <span class="min-w-0 flex-1"><span class="block truncate text-[15px] text-ink-900">{{ it.name }}</span><span class="block text-xs text-ink-700/50">{{ new Date(it.created_at).toLocaleDateString('ru') }}</span></span>
+                    </button>
+                  </div>
+                  <!-- голосовые -->
+                  <div v-else-if="mediaBrowser.type === 'voice'">
+                    <button v-for="(it, k) in g.items" :key="k" class="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-parchment-50" @click="playBrowserVoice(it)">
+                      <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-saffron-500 text-white"><AppIcon name="play" :size="20" /></span>
+                      <span class="min-w-0 flex-1"><span class="block truncate text-[15px] text-ink-900">{{ it.author || 'Голосовое' }}</span><span class="block text-xs text-ink-700/50">{{ new Date(it.created_at).toLocaleString('ru', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) }}</span></span>
+                    </button>
+                  </div>
+                  <!-- ссылки -->
+                  <div v-else-if="mediaBrowser.type === 'links'">
+                    <a v-for="(it, k) in g.items" :key="k" :href="it.url" target="_blank" rel="noopener" class="flex gap-3 px-4 py-3 hover:bg-parchment-50">
+                      <img v-if="it.preview && it.preview.image" :src="it.preview.image" class="h-12 w-12 shrink-0 rounded-lg object-cover" />
+                      <span v-else class="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-sage-500 text-lg font-bold text-white">{{ (it.preview && it.preview.title ? it.preview.title : it.url).replace(/^https?:\/\/(www\.)?/, '').charAt(0).toUpperCase() }}</span>
+                      <span class="min-w-0 flex-1">
+                        <span v-if="it.preview && it.preview.title" class="block truncate text-[15px] font-medium text-ink-900">{{ it.preview.title }}</span>
+                        <span class="block truncate text-sm text-saffron-700">{{ it.url }}</span>
+                      </span>
+                    </a>
+                  </div>
+                </template>
+                <div class="h-4"></div>
               </div>
             </div>
           </div>
@@ -1705,6 +1823,9 @@ onBeforeUnmount(() => {
              @scroll="onScroll" @click="onScrollerClick" @mousedown="onScrollerDown" @touchstart="onScrollerDown">
           <div ref="listWrap" class="mt-auto space-y-1">
           <template v-for="(m, i) in chatState.messages" :key="m.client_uuid">
+          <div v-if="showDaySep(m, i)" class="sticky top-1 z-[1] my-2 flex justify-center">
+            <span class="rounded-full bg-ink-900/55 px-3 py-1 text-xs font-semibold text-white shadow-sm backdrop-blur-sm">{{ dayLabel(m.created_at) }}</span>
+          </div>
           <div v-if="m.client_uuid === firstUnreadKey" class="my-3 flex items-center gap-2 px-2">
             <span class="h-px flex-1 bg-saffron-400/60"></span>
             <span class="rounded-full bg-saffron-500 px-3 py-0.5 text-xs font-semibold text-white shadow-sm">Непрочитанные</span>
@@ -1743,20 +1864,20 @@ onBeforeUnmount(() => {
                           :stroke-dasharray="304.7" :stroke-dashoffset="304.7 * (1 - (videoState[m.id]?.progress || 0))" />
                 </svg>
                 <div class="absolute inset-0 cursor-pointer rounded-full" @click.stop="toggleVnSound(m)" title="Включить звук"></div>
-                <span class="pointer-events-none absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-black/55 px-3 py-1 text-[15px] text-white">
+                <!-- отсчёт + звук: тёмная плашка снизу-слева, поверх кружка -->
+                <span class="pointer-events-none absolute bottom-3 left-3 flex items-center gap-1.5 rounded-full bg-black/55 px-3 py-1 text-[15px] text-white">
                   <AppIcon :name="vnSound[m.id] ? 'volume' : 'volume-x'" :size="19" /><span class="tabular-nums">{{ videoState[m.id]?.remain || '' }}</span>
                 </span>
-              </div>
-              <div class="flex items-center gap-2 px-1" :class="isMine(m) ? 'justify-end' : ''">
-                <div class="flex flex-wrap gap-1">
-                  <button v-for="r in parseReactions(m)" :key="r.emoji" @click.stop="onChip(m, r.emoji)" @contextmenu.prevent.stop="openWho($event, r)"
-                          class="flex items-center gap-1 rounded-full px-2 py-0.5 leading-none ring-1 transition"
-                          :class="m.my_reaction === r.emoji ? 'bg-saffron-500/25 text-saffron-800 ring-saffron-400' : 'bg-saffron-500/10 text-ink-700 ring-transparent hover:bg-saffron-500/20'"><span class="text-base leading-none">{{ r.emoji }}</span><span v-if="r.count > 1" class="text-sm font-semibold tabular-nums">{{ r.count }}</span></button>
-                </div>
-                <div class="flex shrink-0 items-center gap-1 text-[11px] text-ink-700/40">
-                  <span>{{ fmtTime(m.created_at) }}</span>
+                <!-- время + статус: тёмная плашка снизу-справа (не сливается с фоном) -->
+                <span class="pointer-events-none absolute bottom-3 right-3 flex items-center gap-1 rounded-full bg-black/55 px-2.5 py-1 text-[13px] text-white">
+                  <span class="tabular-nums">{{ fmtTime(m.created_at) }}</span>
                   <template v-if="statusOf(m)"><AppIcon v-if="statusOf(m) === 'pending'" name="clock" :size="15" /><AppIcon v-else-if="statusOf(m) === 'read'" name="check-double" :size="16" /><AppIcon v-else-if="statusOf(m) === 'sent'" name="check" :size="15" /></template>
-                </div>
+                </span>
+              </div>
+              <div v-if="parseReactions(m).length" class="flex flex-wrap gap-1 px-1" :class="isMine(m) ? 'justify-end' : ''">
+                <button v-for="r in parseReactions(m)" :key="r.emoji" @click.stop="onChip(m, r.emoji)" @contextmenu.prevent.stop="openWho($event, r)"
+                        class="flex items-center gap-1 rounded-full px-2 py-0.5 leading-none ring-1 transition"
+                        :class="m.my_reaction === r.emoji ? 'bg-saffron-500/25 text-saffron-800 ring-saffron-400' : 'bg-saffron-500/10 text-ink-700 ring-transparent hover:bg-saffron-500/20'"><span class="text-base leading-none">{{ r.emoji }}</span><span v-if="r.count > 1" class="text-sm font-semibold tabular-nums">{{ r.count }}</span></button>
               </div>
             </div>
             <!-- видео-сообщение -->

@@ -223,6 +223,7 @@ func (s *Server) Router() http.Handler {
 		pr.Get("/chats/search", s.searchAllChats)
 		pr.Get("/chats/{id}/search", s.searchChatMessages)
 		pr.Get("/chats/{id}/info", s.chatInfo)
+		pr.Get("/chats/{id}/media", s.chatMedia)
 	})
 
 	// конференции: публичные (без токена)

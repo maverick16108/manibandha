@@ -221,7 +221,14 @@ function logout() {
       </header>
 
       <main class="p-4 sm:p-6 lg:p-8">
-        <RouterView />
+        <!-- Разделы с meta.keepAlive кешируются (SPA-навигация не перерисовывает их: нет скелетонов,
+             позиция сохраняется). Чат и детальные/param-страницы рендерятся вне кеша. -->
+        <RouterView v-slot="{ Component, route }">
+          <keep-alive :max="8">
+            <component v-if="route.meta.keepAlive" :is="Component" :key="route.name" />
+          </keep-alive>
+          <component v-if="!route.meta.keepAlive" :is="Component" :key="route.fullPath" />
+        </RouterView>
       </main>
     </div>
 

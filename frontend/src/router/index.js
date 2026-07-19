@@ -14,34 +14,34 @@ const routes = [
     meta: { requiresAuth: true },
     children: [
       { path: '', redirect: '/app/dashboard' },
-      { path: 'dashboard', name: 'dashboard', component: () => import('../views/DashboardView.vue') },
-      { path: 'calendar', name: 'calendar', component: () => import('../views/CalendarView.vue') },
+      { path: 'dashboard', name: 'dashboard', component: () => import('../views/DashboardView.vue') , meta: { keepAlive: true } },
+      { path: 'calendar', name: 'calendar', component: () => import('../views/CalendarView.vue') , meta: { keepAlive: true } },
       { path: 'calendar/new', name: 'event-new', component: () => import('../views/EventFormView.vue') },
       { path: 'calendar/:id/edit', name: 'event-edit', component: () => import('../views/EventFormView.vue') },
-      { path: 'disciples', name: 'disciples', component: () => import('../views/DisciplesView.vue') },
+      { path: 'disciples', name: 'disciples', component: () => import('../views/DisciplesView.vue') , meta: { keepAlive: true } },
       { path: 'disciples/new', name: 'disciple-new', component: () => import('../views/DiscipleFormView.vue') },
       { path: 'disciples/:id', name: 'disciple', component: () => import('../views/DiscipleDetailView.vue') },
       { path: 'disciples/:id/edit', name: 'disciple-edit', component: () => import('../views/DiscipleFormView.vue') },
-      { path: 'questions', name: 'questions', component: () => import('../views/ThreadsView.vue'), meta: { kind: 'question' } },
+      { path: 'questions', name: 'questions', component: () => import('../views/ThreadsView.vue'), meta: { kind: 'question', keepAlive: true } },
       { path: 'questions/new', name: 'question-new', component: () => import('../views/ThreadComposeView.vue'), meta: { kind: 'question' } },
-      { path: 'service-reports', name: 'service-reports', component: () => import('../views/ThreadsView.vue'), meta: { kind: 'report' } },
+      { path: 'service-reports', name: 'service-reports', component: () => import('../views/ThreadsView.vue'), meta: { kind: 'report', keepAlive: true } },
       { path: 'service-reports/new', name: 'report-new', component: () => import('../views/ThreadComposeView.vue'), meta: { kind: 'report' } },
       { path: 'threads/:id', name: 'thread', component: () => import('../views/ThreadView.vue') },
       { path: 'chat', name: 'chat-home', component: () => import('../views/ChatView.vue') },
       { path: 'chat/:id', name: 'chat', component: () => import('../views/ChatView.vue') },
-      { path: 'forum', name: 'forum', component: () => import('../views/ForumView.vue') },
+      { path: 'forum', name: 'forum', component: () => import('../views/ForumView.vue') , meta: { keepAlive: true } },
       { path: 'forum/new', name: 'forum-new', component: () => import('../views/ForumNewView.vue') },
       { path: 'forum/:id', name: 'forum-topic', component: () => import('../views/ForumTopicView.vue') },
-      { path: 'conference', name: 'conference', component: () => import('../views/ConferenceView.vue') },
-      { path: 'conference/recordings', name: 'conference-recordings', component: () => import('../views/RecordingsArchiveView.vue') },
+      { path: 'conference', name: 'conference', component: () => import('../views/ConferenceView.vue') , meta: { keepAlive: true } },
+      { path: 'conference/recordings', name: 'conference-recordings', component: () => import('../views/RecordingsArchiveView.vue') , meta: { keepAlive: true } },
       { path: 'conference/:id', name: 'conference-room', component: () => import('../views/ConferenceRoomView.vue') },
-      { path: 'dictionaries', name: 'dictionaries', component: () => import('../views/DictionariesView.vue') },
-      { path: 'reports', name: 'reports', component: () => import('../views/ReportsView.vue') },
-      { path: 'users', name: 'users', component: () => import('../views/UsersView.vue'), meta: { staffOnly: true } },
-      { path: 'roles', name: 'roles', component: () => import('../views/RolesView.vue'), meta: { guruOnly: true } },
-      { path: 'settings', name: 'settings', component: () => import('../views/SettingsView.vue') },
-      { path: 'profile', name: 'profile', component: () => import('../views/ProfileView.vue') },
-      { path: 'approvals', name: 'approvals', component: () => import('../views/ApprovalsView.vue') },
+      { path: 'dictionaries', name: 'dictionaries', component: () => import('../views/DictionariesView.vue') , meta: { keepAlive: true } },
+      { path: 'reports', name: 'reports', component: () => import('../views/ReportsView.vue') , meta: { keepAlive: true } },
+      { path: 'users', name: 'users', component: () => import('../views/UsersView.vue'), meta: { staffOnly: true, keepAlive: true } },
+      { path: 'roles', name: 'roles', component: () => import('../views/RolesView.vue'), meta: { guruOnly: true, keepAlive: true } },
+      { path: 'settings', name: 'settings', component: () => import('../views/SettingsView.vue') , meta: { keepAlive: true } },
+      { path: 'profile', name: 'profile', component: () => import('../views/ProfileView.vue') , meta: { keepAlive: true } },
+      { path: 'approvals', name: 'approvals', component: () => import('../views/ApprovalsView.vue') , meta: { keepAlive: true } },
       { path: 'waiting', name: 'waiting', component: () => import('../views/WaitingView.vue') },
     ],
   },
@@ -70,13 +70,17 @@ const LANDING_ORDER = ['dashboard', 'calendar', 'disciples', 'questions', 'servi
 
 // запоминаем прокрутку главной, чтобы вернуться на то же место после календаря/событий/карты
 let homeScroll = 0
+// память прокрутки окна по маршрутам (для кешируемых keep-alive разделов): при возврате
+// в раздел через SPA восстанавливаем позицию, а не прыгаем наверх. Обнуляется при перезагрузке.
+const routeScroll = {}
 
 const router = createRouter({
   history: createWebHistory(),
   routes,
   scrollBehavior(to, from, savedPosition) {
     if (to.hash) return { el: to.hash, behavior: 'smooth' }
-    const pos = savedPosition || (to.name === 'home' && homeScroll ? { top: homeScroll } : null)
+    const remembered = to.meta.keepAlive && routeScroll[to.fullPath] != null ? { top: routeScroll[to.fullPath] } : null
+    const pos = savedPosition || remembered || (to.name === 'home' && homeScroll ? { top: homeScroll } : null)
     if (!pos) return { top: 0 }
     // дождаться, пока страница станет достаточно высокой (ленивый чанк + раскладка), затем прокрутить — без рывка
     return new Promise((resolve) => {
@@ -103,6 +107,8 @@ router.onError((err) => {
 router.beforeEach(async (to, from) => {
   // запомнить позицию главной перед уходом (для возврата на то же место)
   if (from.name === 'home') homeScroll = window.scrollY || document.documentElement.scrollTop || 0
+  // запомнить позицию окна кешируемого раздела перед уходом
+  if (from.meta && from.meta.keepAlive && from.fullPath) routeScroll[from.fullPath] = window.scrollY || document.documentElement.scrollTop || 0
   const auth = useAuthStore()
   if (auth.token && !auth.user) {
     try {

@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, onActivated, onDeactivated, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import client from '../api/client'
 import { useAuthStore } from '../stores/auth'
@@ -60,12 +60,16 @@ watch([kind, filterDisciple, filterMentor], () => load())
 
 // живое обновление списка (новые вопросы/отчёты появляются сразу)
 let poll = null
+function startPoll() { clearInterval(poll); poll = setInterval(() => load(true), 15000) }
 function onVisible() { if (document.visibilityState === 'visible') load(true) }
 onMounted(() => {
-  poll = setInterval(() => load(true), 15000)
+  startPoll()
   document.addEventListener('visibilitychange', onVisible)
 })
 onBeforeUnmount(() => { clearInterval(poll); document.removeEventListener('visibilitychange', onVisible) })
+// keep-alive: тихий рефреш без скелетона при возврате, пауза поллинга при уходе
+onActivated(() => { load(true); startPoll() })
+onDeactivated(() => clearInterval(poll))
 
 function periodLabel(p) {
   if (!p) return ''

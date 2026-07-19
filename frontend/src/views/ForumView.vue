@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, onActivated, onDeactivated } from 'vue'
 import { RouterLink } from 'vue-router'
 import client from '../api/client'
 import { useAuthStore } from '../stores/auth'
@@ -40,8 +40,12 @@ async function load(silent = false) {
   }
 }
 let poll = null
-onMounted(() => { load(); poll = setInterval(() => load(true), 25000) })
+function startPoll() { clearInterval(poll); poll = setInterval(() => load(true), 25000) }
+onMounted(() => { load(); startPoll() })
 onBeforeUnmount(() => clearInterval(poll))
+// keep-alive: при возврате — тихий рефреш без скелетона и возобновление поллинга; при уходе — пауза
+onActivated(() => { load(true); startPoll() })
+onDeactivated(() => clearInterval(poll))
 
 const unreadCount = computed(() => topics.value.filter((t) => t.unread).length)
 const currentSection = computed(() => sections.value.find((s) => s.id === sectionFilter.value) || null)

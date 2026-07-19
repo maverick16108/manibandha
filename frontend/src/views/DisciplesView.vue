@@ -1,5 +1,5 @@
 <script setup>
-import { ref, reactive, onMounted, onBeforeUnmount, watch, computed } from 'vue'
+import { ref, reactive, onMounted, onBeforeUnmount, onActivated, watch, computed } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import client from '../api/client'
 import { useAuthStore } from '../stores/auth'
@@ -56,8 +56,8 @@ function params() {
   return p
 }
 
-async function load() {
-  loading.value = true
+async function load(silent = false) {
+  if (!silent) loading.value = true // тихий рефреш (keep-alive) — без скелетона
   try {
     const { data } = await client.get('/disciples', { params: params() })
     items.value = data.items
@@ -110,6 +110,10 @@ onMounted(() => {
   // таблицу грузим сразу
   load().finally(() => { seeding = false })
 })
+// keep-alive: при ВОЗВРАТЕ в раздел — тихий рефреш без скелетона (первую активацию после
+// монтирования пропускаем, чтобы не грузить дважды)
+let firstActivate = true
+onActivated(() => { if (firstActivate) { firstActivate = false; return } load(true) })
 </script>
 
 <template>

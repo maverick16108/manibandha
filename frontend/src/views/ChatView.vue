@@ -2036,7 +2036,16 @@ onBeforeUnmount(() => {
         </div>
         <div class="flex-1 overflow-y-auto">
           <p v-if="searchChat.q.trim().length < 2" class="p-8 text-center text-sm text-ink-700/40">Введите минимум 2 символа</p>
-          <p v-else-if="searchChat.loading && !searchChat.results.length" class="p-4 text-sm text-ink-700/50">Идёт поиск…</p>
+          <template v-else-if="searchChat.loading && !searchChat.results.length">
+            <div v-for="i in 6" :key="'sk' + i" class="flex flex-col gap-2 border-b border-parchment-100 px-3 py-3">
+              <div class="flex items-center justify-between gap-2">
+                <div class="h-3.5 w-32 animate-pulse rounded bg-parchment-200"></div>
+                <div class="h-2.5 w-10 animate-pulse rounded bg-parchment-200"></div>
+              </div>
+              <div class="h-3 w-full animate-pulse rounded bg-parchment-200"></div>
+              <div class="h-3 w-2/3 animate-pulse rounded bg-parchment-200"></div>
+            </div>
+          </template>
           <p v-else-if="!searchChat.results.length" class="p-8 text-center text-sm text-ink-700/50">Ничего не найдено</p>
           <button v-for="(m, mi) in searchChat.results" :id="'sres-' + mi" :key="m.id" @click="jumpToMessage(m)"
                   class="flex w-full flex-col gap-0.5 border-b border-parchment-100 px-3 py-2.5 text-left hover:bg-parchment-50"
@@ -2855,18 +2864,18 @@ onBeforeUnmount(() => {
           <AppIcon :name="call.fullscreen ? 'minimize' : 'maximize'" :size="20" />
         </button>
         <!-- панель кнопок -->
-        <div class="flex items-end justify-center gap-12" :class="[call.status === 'connected' && call.remoteVideo ? 'absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent pb-8 pt-10' : 'pb-10']">
-          <button class="flex flex-col items-center gap-2.5" @click="toggleCallVideo">
-            <span class="flex h-[4.5rem] w-[4.5rem] items-center justify-center rounded-full text-white shadow-lg transition active:scale-95" :class="call.localVideo ? 'bg-sky-600' : 'bg-white/15 hover:bg-white/25'"><AppIcon name="video" :size="30" /></span>
-            <span class="text-sm text-white/70">{{ call.localVideo ? 'Выкл. видео' : 'Вкл. видео' }}</span>
+        <div class="flex items-end justify-center gap-7" :class="[call.status === 'connected' && call.remoteVideo ? 'absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent pb-8 pt-10' : 'pb-10']">
+          <button class="flex flex-col items-center gap-2" @click="toggleCallVideo">
+            <span class="flex h-12 w-12 items-center justify-center rounded-full text-white shadow-lg transition active:scale-95" :class="call.localVideo ? 'bg-sky-600' : 'bg-white/15 hover:bg-white/25'"><AppIcon name="video" :size="22" /></span>
+            <span class="text-xs text-white/70">{{ call.localVideo ? 'Выкл. видео' : 'Вкл. видео' }}</span>
           </button>
-          <button class="flex flex-col items-center gap-2.5" @click="endCall">
-            <span class="flex h-[4.5rem] w-[4.5rem] items-center justify-center rounded-full bg-red-500 text-white shadow-lg transition hover:bg-red-600 active:scale-95"><AppIcon name="phone" :size="30" class="rotate-[135deg]" /></span>
-            <span class="text-sm text-white/70">{{ call.status === 'connected' ? 'Завершить' : 'Отменить' }}</span>
+          <button class="flex flex-col items-center gap-2" @click="endCall">
+            <span class="flex h-12 w-12 items-center justify-center rounded-full bg-red-500 text-white shadow-lg transition hover:bg-red-600 active:scale-95"><AppIcon name="phone" :size="22" class="rotate-[135deg]" /></span>
+            <span class="text-xs text-white/70">{{ call.status === 'connected' ? 'Завершить' : 'Отменить' }}</span>
           </button>
-          <button v-if="call.status === 'idle-outgoing'" class="flex flex-col items-center gap-2.5" @click="placeCall">
-            <span class="flex h-[4.5rem] w-[4.5rem] items-center justify-center rounded-full bg-sky-500 text-white shadow-lg transition hover:bg-sky-600 active:scale-95"><AppIcon name="phone" :size="30" /></span>
-            <span class="text-sm text-white/70">Позвонить</span>
+          <button v-if="call.status === 'idle-outgoing'" class="flex flex-col items-center gap-2" @click="placeCall">
+            <span class="flex h-12 w-12 items-center justify-center rounded-full bg-sky-500 text-white shadow-lg transition hover:bg-sky-600 active:scale-95"><AppIcon name="phone" :size="22" /></span>
+            <span class="text-xs text-white/70">Позвонить</span>
           </button>
         </div>
       </div>

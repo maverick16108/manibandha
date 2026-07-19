@@ -68,10 +68,17 @@ function updateFloatingDate() {
     floatRaf = 0
     const el = scroller.value; if (!el) return
     const stickyTop = el.getBoundingClientRect().top + 8 // top-2 = 0.5rem
-    for (const s of el.querySelectorAll('[data-daysep]')) {
-      const r = s.getBoundingClientRect()
-      const delta = stickyTop - r.top // >0 когда разделитель выталкивают вверх выше линии прилипания
-      const o = delta <= 0 ? 1 : Math.max(0, 1 - delta / (r.height || 28))
+    const seps = el.querySelectorAll('[data-daysep]')
+    for (let i = 0; i < seps.length; i++) {
+      const s = seps[i]
+      const stuck = s.getBoundingClientRect().top <= stickyTop + 1 // разделитель прилип к верху
+      let o = 1
+      // прилипший разделитель ГАСНЕТ по мере приближения следующего дня к линии прилипания
+      // (sticky-собратья стоят на одном top — «Вчера» иначе просто лежит под «Сегодня»)
+      if (stuck && seps[i + 1]) {
+        const nt = seps[i + 1].getBoundingClientRect().top
+        o = Math.max(0, Math.min(1, (nt - stickyTop) / 40))
+      }
       s.style.opacity = o >= 0.999 ? '' : String(o)
     }
   })
@@ -2533,7 +2540,7 @@ onBeforeUnmount(() => {
           </template>
 
           <!-- оптимистичные загрузки фото (мгновенно, с лоадером; уходят на сервер в фоне) -->
-          <div v-for="pu in pendingUploads.filter((p) => p.chatId === activeId && p.previews.length)" :key="pu.id" class="flex justify-end px-1">
+          <div v-for="pu in pendingUploads.filter((p) => p.chatId === activeId && p.previews.length)" :key="pu.id" class="flex px-1" :class="wide ? 'justify-start' : 'justify-end'">
             <div class="relative max-w-[78%] overflow-hidden rounded-2xl bg-saffron-500 shadow-sm">
               <div class="grid gap-0.5" :class="albumCols(pu.previews.length)">
                 <div v-for="(p, k) in pu.previews" :key="k" class="relative" :class="albumItemClass(pu.previews.length, k)">
@@ -2550,7 +2557,7 @@ onBeforeUnmount(() => {
           </div>
 
           <!-- оптимистичное голосовое: индикатор загрузки на сервер (кольцо + × отмена) -->
-          <div v-for="pv in pendingVoice.filter((p) => p.chatId === activeId)" :key="pv.id" class="flex justify-end px-1">
+          <div v-for="pv in pendingVoice.filter((p) => p.chatId === activeId)" :key="pv.id" class="flex px-1" :class="wide ? 'justify-start' : 'justify-end'">
             <div class="flex max-w-[78%] items-center gap-3 rounded-2xl bg-saffron-500 px-3 py-2.5 text-white shadow-sm">
               <button class="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/25 transition hover:bg-white/35" :title="pv.failed ? 'Повторить' : 'Отменить'" @click="pv.failed ? retryVoice(pv) : cancelVoice(pv)">
                 <svg v-if="!pv.failed" class="absolute inset-0 h-full w-full -rotate-90" viewBox="0 0 44 44">

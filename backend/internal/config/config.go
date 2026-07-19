@@ -30,6 +30,9 @@ type Config struct {
 	LiveKitURL       string
 	LiveKitAPIURL    string
 	RecordingsDir    string
+
+	TurnSecret string
+	TurnHost   string
 }
 
 func env(k, def string) string {
@@ -80,6 +83,9 @@ func Load() *Config {
 		LiveKitURL:       env("LIVEKIT_URL", ""),
 		LiveKitAPIURL:    env("LIVEKIT_API_URL", "http://127.0.0.1:7880"),
 		RecordingsDir:    env("RECORDINGS_DIR", "/opt/livekit/recordings"),
+
+		TurnSecret: env("TURN_SECRET", ""),
+		TurnHost:   env("TURN_HOST", "manibandha.prema.su"),
 	}
 	for _, o := range strings.Split(env("BACKEND_CORS_ORIGINS", "http://localhost:5173"), ",") {
 		if s := strings.TrimSpace(o); s != "" {

@@ -57,6 +57,7 @@ const editingMsg = ref(null)
 const scroller = ref(null)
 const listWrap = ref(null)
 const stickBottom = ref(true)          // держимся ли у нижнего края (иначе не дёргаем при подгрузке)
+const chatOpening = ref(false)         // прячем ленту на время открытия/позиционирования (без мелькания)
 const floatDate = reactive({ label: '', show: false }) // плавающая дата при скролле
 let floatHideTimer = null; let floatRaf = 0
 // коалесцируем в один кадр — иначе чтение layout на каждом scroll-событии даёт лаги на медиа
@@ -128,14 +129,17 @@ watch(activeId, async (id, oldId) => {
     const saved = chatScrollMem[id]
     const restore = !!saved && !saved.atBottom
     stickBottom.value = !restore
+    chatOpening.value = true // прячем ленту, пока не спозиционируем — чтобы не было видно перемотки
     nextTick(() => inputEl.value?.focus()) // фокус сразу, не ждём загрузки истории
     await openChat(id)
-    if (restore) { await nextTick(); if (scroller.value) scroller.value.scrollTop = saved.top } else scrollToBottom()
+    await nextTick()
+    const setPos = () => { const el = scroller.value; if (el) el.scrollTop = restore ? saved.top : el.scrollHeight }
+    setPos()
+    requestAnimationFrame(() => { setPos(); requestAnimationFrame(() => { setPos(); chatOpening.value = false }) })
     // добиваем позицию, пока раскладка «оседает» (медиа догружаются)
-    ;[60, 180, 400].forEach((d) => setTimeout(() => {
-      if (activeId.value !== id || openSettled.value || !scroller.value) return
-      if (restore) scroller.value.scrollTop = saved.top
-      else { scrollToBottom(); stickBottom.value = true }
+    ;[120, 300].forEach((d) => setTimeout(() => {
+      if (activeId.value !== id || openSettled.value) return
+      setPos(); if (!restore) stickBottom.value = true
     }, d))
     setTimeout(() => { openSettled.value = true }, 500) // после открытия — авто-читаем живые входящие
   } else closeChat()
@@ -1414,7 +1418,11 @@ const peerStatusText = computed(() => {
 watch(activeId, () => { clearInterval(peerStatusTimer); peerStatus.value = null; refreshPeerStatus(); peerStatusTimer = setInterval(refreshPeerStatus, 30000) }, { immediate: true })
 
 // ── звонок (WebRTC 1:1 поверх чат-сокета) ──────────────────────────────────
-const RTC_CONFIG = { iceServers: [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }] }
+const RTC_FALLBACK = { iceServers: [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }] }
+async function getRtcConfig() {
+  try { const { data } = await client.get('/turn-credentials'); if (data?.iceServers?.length) return { iceServers: data.iceServers } } catch { /* fallback */ }
+  return RTC_FALLBACK
+}
 const call = reactive({ open: false, name: '', avatar: '', peerId: null, status: 'idle', localVideo: false, remoteVideo: false, video: false })
 const incoming = reactive({ open: false, name: '', avatar: '', video: false, from: null, offer: null })
 const callRemoteVideo = ref(null); const callLocalVideo = ref(null)
@@ -1430,8 +1438,8 @@ async function startCall(withVideo) {
   call.localVideo = !!withVideo; call.video = !!withVideo; call.remoteVideo = false
   call.status = 'idle-outgoing'; call.open = true
 }
-function setupPc(peerId) {
-  pc = new RTCPeerConnection(RTC_CONFIG)
+function setupPc(peerId, cfg) {
+  pc = new RTCPeerConnection(cfg || RTC_FALLBACK)
   pc.onicecandidate = (e) => { if (e.candidate) sendCallSignal({ to: peerId, subtype: 'ice', candidate: e.candidate }) }
   pc.ontrack = (e) => {
     const stream = e.streams[0]
@@ -1446,7 +1454,9 @@ async function placeCall() {
   call.status = 'calling'
   try { localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: call.localVideo }) }
   catch { showToast('Нет доступа к микрофону/камере'); endCall(); return }
-  setupPc(call.peerId)
+  const rtcCfg = await getRtcConfig()
+
+  setupPc(call.peerId, rtcCfg)
   localStream.getTracks().forEach((t) => pc.addTrack(t, localStream))
   attachLocalVideo()
   const offer = await pc.createOffer()
@@ -1460,7 +1470,9 @@ async function acceptIncoming() {
   call.open = true; call.status = 'calling'
   try { localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: call.localVideo }) }
   catch { showToast('Нет доступа к микрофону/камере'); endCall(); return }
-  setupPc(call.peerId)
+  const rtcCfg = await getRtcConfig()
+
+  setupPc(call.peerId, rtcCfg)
   localStream.getTracks().forEach((t) => pc.addTrack(t, localStream))
   attachLocalVideo()
   await pc.setRemoteDescription(new RTCSessionDescription(offer))
@@ -1522,6 +1534,34 @@ async function handleCallSignal(evt) {
   }
 }
 onCallSignal(handleCallSignal)
+// ── рингтон (генерируем через Web Audio, без файлов) ───────────────────────
+let ringCtx = null; let ringTimer = null
+function startRingtone(isIncoming) {
+  stopRingtone()
+  try {
+    ringCtx = new (window.AudioContext || window.webkitAudioContext)()
+    const beep = () => {
+      if (!ringCtx) return
+      const dur = isIncoming ? 0.4 : 0.35
+      const two = isIncoming
+      const tone = (offset, freq) => {
+        const o = ringCtx.createOscillator(), g = ringCtx.createGain()
+        o.type = 'sine'; o.frequency.value = freq
+        const t = ringCtx.currentTime + offset
+        g.gain.setValueAtTime(0.0001, t)
+        g.gain.exponentialRampToValueAtTime(0.18, t + 0.04)
+        g.gain.exponentialRampToValueAtTime(0.0001, t + dur)
+        o.connect(g); g.connect(ringCtx.destination); o.start(t); o.stop(t + dur + 0.05)
+      }
+      tone(0, isIncoming ? 520 : 440)
+      if (two) tone(0.5, 660)
+    }
+    beep(); ringTimer = setInterval(beep, isIncoming ? 2400 : 3200)
+  } catch { /* аудио недоступно */ }
+}
+function stopRingtone() { if (ringTimer) { clearInterval(ringTimer); ringTimer = null } if (ringCtx) { try { ringCtx.close() } catch { /* ignore */ } ringCtx = null } }
+watch(() => call.status, (s) => { if (s === 'calling') startRingtone(false); else stopRingtone() })
+watch(() => incoming.open, (v) => { v ? startRingtone(true) : stopRingtone() })
 async function openInfo() {
   const id = activeId.value
   showInfo.value = true
@@ -1569,11 +1609,16 @@ const mediaBrowser = reactive({ open: false, type: null, title: '', items: [], l
 const MEDIA_TITLES = { photos: 'Фотографии', videos: 'Видео', files: 'Файлы', voice: 'Голосовые сообщения', links: 'Общие ссылки' }
 const MONTHS_RU = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь']
 async function openMediaBrowser(type) {
-  if (!type || type === 'groups' || !activeId.value) return
-  Object.assign(mediaBrowser, { open: true, type, title: MEDIA_TITLES[type] || 'Медиа', items: [], q: '', loading: true })
-  try { const { data } = await client.get(`/chats/${activeId.value}/media`, { params: { type } }); if (mediaBrowser.type === type) mediaBrowser.items = Array.isArray(data) ? data : [] }
-  catch { mediaBrowser.items = [] } finally { mediaBrowser.loading = false }
+  if (!type || !activeId.value) return
+  const isGroups = type === 'groups'
+  Object.assign(mediaBrowser, { open: true, type, title: isGroups ? 'Общие группы' : (MEDIA_TITLES[type] || 'Медиа'), items: [], q: '', loading: true })
+  try {
+    const url = isGroups ? `/chats/${activeId.value}/common-groups` : `/chats/${activeId.value}/media`
+    const { data } = await client.get(url, isGroups ? {} : { params: { type } })
+    if (mediaBrowser.type === type) mediaBrowser.items = Array.isArray(data) ? data : []
+  } catch { mediaBrowser.items = [] } finally { mediaBrowser.loading = false }
 }
+function openGroupFromBrowser(g) { closeMediaBrowser(); closeInfo(); router.push({ name: 'chat', params: { id: String(g.id) } }) }
 function closeMediaBrowser() { mediaBrowser.open = false; mediaBrowser.items = []; mediaBrowser.q = '' }
 function fileOf(m) { const mm = (m.body || '').match(/@\[file\]\(([^|)]+)\|([^)]*)\)/); if (!mm) return null; let name = mm[2]; try { name = decodeURIComponent(mm[2]) } catch { /* as is */ } return { url: mm[1], name } }
 function audioOf(m) { const mm = (m.body || '').match(/@\[audio\]\(([^)]+)\)/); return mm ? mm[1] : null }
@@ -1976,15 +2021,15 @@ onBeforeUnmount(() => {
             </div>
           </div>
           <!-- действия: поиск / звонок / информация -->
-          <div class="flex shrink-0 items-center gap-0.5">
+          <div class="flex shrink-0 items-center gap-1">
             <button class="rounded-full p-2 text-ink-700/55 transition hover:bg-parchment-100 hover:text-saffron-600" title="Поиск в чате" @click.stop="openChatSearch">
-              <AppIcon name="search" :size="21" />
+              <AppIcon name="search" :size="26" />
             </button>
             <button v-if="activeChat.type === 'direct'" class="rounded-full p-2 text-ink-700/55 transition hover:bg-parchment-100 hover:text-saffron-600" title="Позвонить" @click.stop="startCall(false)">
-              <AppIcon name="phone" :size="21" />
+              <AppIcon name="phone" :size="26" />
             </button>
             <button class="rounded-full p-2 text-ink-700/55 transition hover:bg-parchment-100 hover:text-saffron-600" title="Информация" @click.stop="isGroup ? openGroupEdit() : openInfo()">
-              <AppIcon name="info" :size="21" />
+              <AppIcon name="info" :size="26" />
             </button>
           </div>
         </header>
@@ -2014,8 +2059,8 @@ onBeforeUnmount(() => {
                 </div>
                 <!-- счётчики медиа (как в Telegram) -->
                 <div v-if="infoCountRows.length" class="divide-y divide-parchment-100 border-t border-parchment-200">
-                  <button v-for="row in infoCountRows" :key="row.icon" class="flex w-full items-center gap-3 px-6 py-3 text-left transition hover:bg-parchment-50 disabled:cursor-default disabled:hover:bg-transparent"
-                          :disabled="row.type === 'groups'" @click="openMediaBrowser(row.type)">
+                  <button v-for="row in infoCountRows" :key="row.icon" class="flex w-full items-center gap-3 px-6 py-3 text-left transition hover:bg-parchment-50"
+                          @click="openMediaBrowser(row.type)">
                     <AppIcon :name="row.icon" :size="20" class="shrink-0 text-ink-700/50" />
                     <span class="text-[15px] text-ink-900"><b class="tabular-nums">{{ row.n }}</b> {{ row.label }}</span>
                   </button>
@@ -2049,6 +2094,15 @@ onBeforeUnmount(() => {
               </div>
               <div class="flex-1 overflow-y-auto">
                 <p v-if="mediaBrowser.loading" class="p-6 text-center text-sm text-ink-700/50">Загрузка…</p>
+                <!-- общие группы — простой список -->
+                <template v-else-if="mediaBrowser.type === 'groups'">
+                  <p v-if="!mediaBrowser.items.length" class="p-8 text-center text-sm text-ink-700/50">Общих групп нет</p>
+                  <button v-for="g in mediaBrowser.items" :key="g.id" class="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-parchment-50" @click="openGroupFromBrowser(g)">
+                    <img v-if="g.avatar" :src="thumbUrl(g.avatar)" class="h-12 w-12 shrink-0 rounded-full object-cover" />
+                    <span v-else class="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-sage-400 to-sage-600 text-base font-semibold text-white">{{ initials(g.title) }}</span>
+                    <span class="truncate text-[15px] text-ink-900">{{ g.title }}</span>
+                  </button>
+                </template>
                 <p v-else-if="!mediaGroups.length" class="p-8 text-center text-sm text-ink-700/50">Ничего не найдено</p>
                 <template v-for="g in mediaGroups" :key="g.label">
                   <div class="px-4 pb-1 pt-4 text-sm font-semibold text-ink-900">{{ g.label }}</div>
@@ -2108,7 +2162,7 @@ onBeforeUnmount(() => {
 
         <div ref="scroller" class="chat-bg flex flex-1 flex-col overflow-y-auto p-4"
              @scroll="onScroll" @click="onScrollerClick" @mousedown="onScrollerDown" @touchstart="onScrollerDown">
-          <div ref="listWrap" class="mt-auto space-y-1">
+          <div ref="listWrap" class="mt-auto space-y-1" :style="chatOpening ? 'opacity:0' : ''">
           <template v-for="(m, i) in chatState.messages" :key="m.client_uuid">
           <div v-if="showDaySep(m, i)" :data-daysep="dayLabel(m.created_at)" class="my-2 flex justify-center">
             <span class="rounded-full bg-ink-900/55 px-3 py-1 text-xs font-semibold text-white shadow-sm">{{ dayLabel(m.created_at) }}</span>

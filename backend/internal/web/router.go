@@ -224,6 +224,8 @@ func (s *Server) Router() http.Handler {
 		pr.Get("/chats/{id}/search", s.searchChatMessages)
 		pr.Get("/chats/{id}/info", s.chatInfo)
 		pr.Get("/chats/{id}/media", s.chatMedia)
+		pr.Get("/chats/{id}/common-groups", s.commonGroups)
+		pr.Get("/turn-credentials", s.turnCredentials)
 	})
 
 	// конференции: публичные (без токена)

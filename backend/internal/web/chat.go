@@ -810,6 +810,42 @@ func (s *Server) chatMedia(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
+// GET /api/chats/{id}/common-groups — общие группы с собеседником личного чата
+func (s *Server) commonGroups(w http.ResponseWriter, r *http.Request) {
+	id, _ := strconv.Atoi(chi.URLParam(r, "id"))
+	u := currentUser(r)
+	if _, code := s.requireMembership(u.ID, id); code != http.StatusOK {
+		httpErr(w, code, membershipMsg(code))
+		return
+	}
+	var chat models.Chat
+	if err := s.DB.Preload("Members").First(&chat, id).Error; err != nil || chat.Type != "direct" {
+		writeJSON(w, http.StatusOK, []any{})
+		return
+	}
+	peerID := 0
+	for i := range chat.Members {
+		if chat.Members[i].UserID != u.ID {
+			peerID = chat.Members[i].UserID
+			break
+		}
+	}
+	var rows []struct {
+		ID       int
+		Title    string
+		PhotoURL *string
+	}
+	s.DB.Raw(`SELECT c.id, c.title, c.photo_url FROM chats c
+		JOIN chat_members a ON a.chat_id = c.id AND a.user_id = ?
+		JOIN chat_members b ON b.chat_id = c.id AND b.user_id = ?
+		WHERE c.type = 'group' ORDER BY c.updated_at DESC`, u.ID, peerID).Scan(&rows)
+	out := make([]map[string]any, 0, len(rows))
+	for _, g := range rows {
+		out = append(out, map[string]any{"id": g.ID, "title": g.Title, "avatar": g.PhotoURL})
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
 // POST /api/chats/pins/reorder — новый порядок закреплённых чатов (перетаскивание)
 func (s *Server) reorderPins(w http.ResponseWriter, r *http.Request) {
 	u := currentUser(r)

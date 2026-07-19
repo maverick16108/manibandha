@@ -991,7 +991,7 @@ function photoBoxStyle(u) {
 function videoBoxStyle(v) {
   const u = v?.poster || ''
   const aspect = (v && v.w && v.h) ? (v.w / v.h) : (imgAspects[u] || imageAspect(u) || 0.7)
-  return boxWH(aspect, wide.value ? 420 : 300, 460)
+  return boxWH(aspect, wide.value ? 546 : 340, 600) // ~на 30% крупнее фото
 }
 
 // ── превью ссылок (OG-карточки) ───────────────────────────────────────────
@@ -2358,7 +2358,7 @@ onBeforeUnmount(() => {
             </div>
             <!-- видео-сообщение -->
             <div v-else-if="isVideoMsg(m)" class="relative overflow-hidden rounded-2xl shadow-sm"
-                 :class="[wide ? 'max-w-[420px]' : 'max-w-[80%]', isMine(m) ? 'bg-saffron-500 text-white' : 'bg-white text-ink-900 ring-1 ring-parchment-200']"
+                 :class="[wide ? 'max-w-[560px]' : 'max-w-[85%]', isMine(m) ? 'bg-saffron-500 text-white' : 'bg-white text-ink-900 ring-1 ring-parchment-200']"
                  @contextmenu="onContext($event, m)">
               <div v-if="showAuthor(m, i)" class="cursor-pointer px-3 pt-2 text-sm font-semibold text-sage-600 hover:underline" @click.stop="openUserInfo(m.author_id)">{{ nameOf(m) }}</div>
               <div v-if="fwdName(m)" class="flex items-center gap-1.5 px-3 pt-2 text-sm font-semibold" :class="isMine(m) ? 'text-white/90' : 'text-saffron-700'">

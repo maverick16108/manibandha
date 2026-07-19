@@ -68,15 +68,16 @@ function updateFloatingDate() {
     const el = scroller.value; if (!el) { floatDate.show = false; return }
     const top = el.getBoundingClientRect().top
     const seps = el.querySelectorAll('[data-daysep]')
-    let label = ''; let inlineAtTop = false
+    let label = ''
     for (const s of seps) {
       const st = s.getBoundingClientRect().top
       if (st <= top + 20) label = s.getAttribute('data-daysep')
-      if (st > top - 6 && st < top + 46) inlineAtTop = true // встроенная плашка у самого верха — плавающую прячем
     }
     if (!label && seps.length) label = seps[0].getAttribute('data-daysep')
     floatDate.label = label
-    floatDate.show = !!label && !inlineAtTop // не дублируем встроенную плашку
+    // плавающая дата ЗАКРЕПЛЕНА: не прячем при проходе встроенной плашки (иначе «уезжает и появляется
+    // вновь»). При смене дня label меняется → кроссфейд (16 июля исчезает, «Вчера» встаёт на её место).
+    floatDate.show = !!label
   })
 }
 let listObs = null
@@ -1321,13 +1322,21 @@ function showAuthor(m, i) {
 }
 // широкая область переписки → все сообщения слева; узкая → свои справа, чужие слева
 const convEl = ref(null)
-const wide = ref(false)
 let resizeObs = null
 
 // ширина панели списка чатов — с возможностью раздвигать (перетаскиванием)
 const listWidth = ref(Number(localStorage.getItem('chatListWidth')) || 320)
 const isDesktop = ref(typeof window !== 'undefined' && window.innerWidth >= 640)
-function onWinResize() { isDesktop.value = window.innerWidth >= 640 }
+// ВАЖНО: считаем `wide` синхронно уже в setup (до ПЕРВОЙ отрисовки), иначе медиа встают
+// по-узкому и прыгают, когда обсервер позже выставит настоящее значение. Ширина переписки ≈
+// ширина окна минус панель списка (на десктопе).
+function calcWide() {
+  if (typeof window === 'undefined') return true
+  const lw = window.innerWidth >= 640 ? listWidth.value : 0
+  return (window.innerWidth - lw) > 900
+}
+const wide = ref(calcWide())
+function onWinResize() { isDesktop.value = window.innerWidth >= 640; wide.value = calcWide() }
 function startResize(e) {
   const startX = e.clientX
   const startW = listWidth.value

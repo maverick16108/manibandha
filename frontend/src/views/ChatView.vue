@@ -72,11 +72,15 @@ function updateFloatingDate() {
     for (const s of seps) {
       const st = s.getBoundingClientRect().top
       if (st <= top + 20) label = s.getAttribute('data-daysep')
+      // встроенный разделитель ПОЛНОСТЬЮ гаснет, не доезжая до плавающей плашки (чтобы не было двух
+      // одинаковых дат вверху): плавно уводим прозрачность в 0 на последних ~56px перед верхом.
+      const o = Math.max(0, Math.min(1, (st - (top + 2)) / 56))
+      s.style.opacity = o < 0.999 ? String(o) : ''
     }
     if (!label && seps.length) label = seps[0].getAttribute('data-daysep')
     floatDate.label = label
-    // плавающая дата ЗАКРЕПЛЕНА: не прячем при проходе встроенной плашки (иначе «уезжает и появляется
-    // вновь»). При смене дня label меняется → кроссфейд (16 июля исчезает, «Вчера» встаёт на её место).
+    // плавающая дата ЗАКРЕПЛЕНА: не прячем при проходе встроенной плашки. При смене дня label меняется →
+    // кроссфейд (старая дата гаснет, новая встаёт на её место и замирает).
     floatDate.show = !!label
   })
 }
@@ -1335,8 +1339,12 @@ function calcWide() {
   const lw = window.innerWidth >= 640 ? listWidth.value : 0
   return (window.innerWidth - lw) > 900
 }
-const wide = ref(calcWide())
-function onWinResize() { isDesktop.value = window.innerWidth >= 640; wide.value = calcWide() }
+// стартуем от СОХРАНЁННОГО значения прошлой сессии (окно обычно того же размера) — так первый кадр
+// сразу верный; если сохранённого нет — оценка calcWide. Обсервер потом лишь подтверждает.
+const WIDE_KEY = 'chatWide'
+const wide = ref((() => { try { const s = localStorage.getItem(WIDE_KEY); return s === null ? calcWide() : s === '1' } catch { return calcWide() } })())
+function setWide(v) { if (wide.value !== v) wide.value = v; try { localStorage.setItem(WIDE_KEY, v ? '1' : '0') } catch { /* ignore */ } }
+function onWinResize() { isDesktop.value = window.innerWidth >= 640; setWide(calcWide()) }
 function startResize(e) {
   const startX = e.clientX
   const startW = listWidth.value
@@ -1949,12 +1957,13 @@ onMounted(async () => {
   })
   document.addEventListener('visibilitychange', onChatVisible)
   window.addEventListener('focus', onChatVisible)
-  if (convEl.value) {
-    wide.value = convEl.value.clientWidth > 900 // синхронно ДО первой отрисовки — иначе свои медиа встают справа (narrow) и прыгают влево, когда обсервер выставит wide
-    if (typeof ResizeObserver !== 'undefined') {
-      resizeObs = new ResizeObserver((entries) => { for (const e of entries) wide.value = e.contentRect.width > 900 })
-      resizeObs.observe(convEl.value)
-    }
+  // НЕ трогаем wide синхронно из convEl.clientWidth: при монтировании ширина ещё может быть
+  // переходной (узкой) → wide=false → свои медиа встают справа, а обсервер потом выставит true и
+  // они прыгают влево. Стартовое значение уже задано в setup (calcWide + сохранённое), а обсервер
+  // лишь реагирует на настоящие изменения ширины (переживает переходный кадр).
+  if (convEl.value && typeof ResizeObserver !== 'undefined') {
+    resizeObs = new ResizeObserver((entries) => { for (const e of entries) setWide(e.contentRect.width > 900) })
+    resizeObs.observe(convEl.value)
   }
   if (!auth.isPending && auth.user) {
     await initChat({ meId: auth.user.id, getToken: () => auth.token })
@@ -3082,9 +3091,10 @@ onBeforeUnmount(() => {
 
 <style scoped>
 /* кроссфейд плавающей даты: старая исчезает, новая встаёт на её место (без наложения) */
-.datefade-enter-active, .datefade-leave-active { transition: opacity .28s ease, transform .28s ease; }
-.datefade-enter-from { opacity: 0; transform: translateY(-6px); }
-.datefade-leave-to { opacity: 0; transform: translateY(6px); }
+/* смена подписи плавающей даты — чистое затухание НА МЕСТЕ (без сдвига вверх): старая гаснет,
+   новая появляется на том же месте и замирает */
+.datefade-enter-active, .datefade-leave-active { transition: opacity .25s ease; }
+.datefade-enter-from, .datefade-leave-to { opacity: 0; }
 /* подложка медиа: спиннер поверх цветной подложки, пока не загрузилось; после загрузки — прячем */
 .ph-done .ph-spin { display: none; }
 /* размытая подложка-микропревью (blur-up): картинка «проявляется» из неё, как в Telegram */

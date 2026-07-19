@@ -108,7 +108,9 @@ onBeforeUnmount(() => { document.removeEventListener('click', onDocClick, true);
 
       <!-- область медиа -->
       <div class="relative flex min-h-0 flex-1 items-center justify-center px-16 pb-4" @click="closeLightbox">
-        <video v-if="lightboxItem?.video" :src="lightboxSrc" :poster="thumbUrl(lightboxItem.poster || '')" controls autoplay playsinline
+        <!-- key по src → при переключении старый <video> уничтожается (звук останавливается, не «догоняет»
+             на след. кадре); при открытой сетке видео скрыто, иначе играет звук позади оверлея -->
+        <video v-if="lightboxItem?.video && !grid" :key="lightboxSrc" :src="lightboxSrc" :poster="thumbUrl(lightboxItem.poster || '')" controls autoplay playsinline
                controlslist="nodownload noremoteplayback" disablepictureinpicture
                class="max-h-full max-w-full rounded-lg shadow-2xl" @click.stop @contextmenu.prevent.stop="openMenu"></video>
         <template v-else>
@@ -148,7 +150,7 @@ onBeforeUnmount(() => { document.removeEventListener('click', onDocClick, true);
         </div>
         <div class="grid grid-cols-3 gap-1 sm:grid-cols-4 md:grid-cols-6">
           <button v-for="(it, i) in lb.items" :key="i" class="relative aspect-square overflow-hidden rounded" :class="i === lb.index && 'ring-2 ring-saffron-400'" @click="pickFromGrid(i)">
-            <img :src="thumbUrl(it.poster || it.url)" class="h-full w-full object-cover" />
+            <img :src="it.video ? thumbUrl(it.poster || it.url) : it.url" loading="lazy" class="h-full w-full object-cover" />
             <span v-if="it.video" class="absolute inset-0 flex items-center justify-center"><AppIcon name="play" :size="20" class="text-white drop-shadow" /></span>
           </button>
         </div>

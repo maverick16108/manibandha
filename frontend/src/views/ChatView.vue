@@ -2422,7 +2422,7 @@ onBeforeUnmount(() => {
                 <img :src="thumbUrl(photoUrls(m)[0])" @error="imgFull($event, photoUrls(m)[0])" @load="onImgLoad($event, photoUrls(m)[0])"
                      class="block h-full max-h-[400px] w-full cursor-zoom-in object-cover" @click.stop="openPhoto(m, 0)" />
               </div>
-              <div v-else class="grid gap-0.5" :class="albumCols(photoUrls(m).length)">
+              <div v-else class="grid gap-0.5" :class="albumCols(photoUrls(m).length)" :style="{ width: (wide ? 420 : 300) + 'px' }">
                 <img v-for="(u, k) in photoUrls(m).slice(0, 10)" :key="k" :src="thumbUrl(u)" @error="imgFull($event, u)"
                      class="aspect-square w-full cursor-zoom-in bg-parchment-200/50 object-cover" :class="albumItemClass(photoUrls(m).length, k)"
                      @click.stop="openPhoto(m, k)" />

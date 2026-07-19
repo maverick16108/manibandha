@@ -367,6 +367,22 @@ defineProps({
       <path d="M12 7.5v.5" />
     </template>
 
+    <!-- maximize (на весь экран) -->
+    <template v-else-if="name === 'maximize'">
+      <path d="M8 4H4v4" />
+      <path d="M16 4h4v4" />
+      <path d="M16 20h4v-4" />
+      <path d="M8 20H4v-4" />
+    </template>
+
+    <!-- minimize (свернуть) -->
+    <template v-else-if="name === 'minimize'">
+      <path d="M8 4v4H4" />
+      <path d="M16 4v4h4" />
+      <path d="M16 20v-4h4" />
+      <path d="M8 20v-4H4" />
+    </template>
+
     <!-- reply (ответить) -->
     <template v-else-if="name === 'reply'">
       <path d="M9 8 4 12.5 9 17" />

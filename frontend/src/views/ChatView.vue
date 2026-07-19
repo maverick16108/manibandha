@@ -196,7 +196,7 @@ const filteredChats = computed(() => {
   const q = search.value.trim().toLowerCase()
   return q ? chatState.chats.filter((c) => (c.title || '').toLowerCase().includes(q)) : chatState.chats
 })
-function selectChat(c) { router.push({ name: 'chat', params: { id: c.id } }) }
+function selectChat(c) { if (Number(c.id) === activeId.value) return; router.push({ name: 'chat', params: { id: c.id } }) }
 
 // глобальный поиск по сообщениям всех чатов (в поле списка чатов)
 const globalResults = ref([])
@@ -637,8 +637,15 @@ watch(body, () => { nextTick(autoGrow); if (activeId.value && !editingMsg.value)
 let lastTyping = 0
 function onKeydown(e) {
   // не давать браузеру сбрасывать текст поля на Escape (нативный revert);
-  // закрытие оверлеев/ответа/редактирования делает глобальный обработчик
-  if (e.key === 'Escape') { e.preventDefault(); return }
+  // Escape в поле: снимаем ответ/редактирование, но НЕ стираем набранный текст
+  // (stopPropagation — чтобы не сработал нативный «сброс» поля и глобальный обработчик)
+  if (e.key === 'Escape') {
+    e.preventDefault(); e.stopPropagation()
+    if (editingMsg.value) cancelEdit()
+    else if (replyTo.value) replyTo.value = null
+    else inputEl.value?.blur()
+    return
+  }
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); return }
   const now = Date.now()
   if (now - lastTyping > 2000) { lastTyping = now; sendTyping() }
@@ -1450,7 +1457,8 @@ async function getRtcConfig() {
   try { const { data } = await client.get('/turn-credentials'); if (data?.iceServers?.length) return { iceServers: data.iceServers } } catch { /* fallback */ }
   return RTC_FALLBACK
 }
-const call = reactive({ open: false, name: '', avatar: '', peerId: null, status: 'idle', localVideo: false, remoteVideo: false, video: false })
+const call = reactive({ open: false, name: '', avatar: '', peerId: null, status: 'idle', localVideo: false, remoteVideo: false, video: false, fullscreen: false })
+function toggleCallFullscreen() { call.fullscreen = !call.fullscreen }
 const incoming = reactive({ open: false, name: '', avatar: '', video: false, from: null, offer: null })
 const callRemoteVideo = ref(null); const callLocalVideo = ref(null)
 let pc = null; let localStream = null; let remoteAudioEl = null; let pendingIce = []
@@ -1521,7 +1529,7 @@ function cleanupCall() {
   pc = null; pendingIce = []
   if (localStream) { localStream.getTracks().forEach((t) => t.stop()); localStream = null }
   if (remoteAudioEl) { try { remoteAudioEl.srcObject = null; remoteAudioEl.remove() } catch { /* ignore */ } remoteAudioEl = null }
-  call.open = false; call.status = 'idle'; call.remoteVideo = false; call.localVideo = false; call.peerId = null
+  call.open = false; call.status = 'idle'; call.remoteVideo = false; call.localVideo = false; call.peerId = null; call.fullscreen = false
   incoming.open = false; incoming.offer = null
 }
 async function toggleCallVideo() {
@@ -2716,27 +2724,38 @@ onBeforeUnmount(() => {
       </div>
     </template>
 
-    <!-- Окно звонка (попап) -->
-    <div v-if="call.open" class="fixed inset-0 z-[80] flex items-center justify-center bg-ink-900/60 p-4" @click.self="call.status === 'connected' ? null : endCall">
-      <div class="relative flex w-full max-w-md flex-col items-center overflow-hidden rounded-2xl bg-ink-900 p-8 text-white shadow-2xl">
-        <div class="text-sm text-white/45">{{ callStatusText }}</div>
-        <!-- видео собеседника (когда соединено и есть видео) -->
-        <div v-if="call.status === 'connected' && call.remoteVideo" class="mt-4 w-full overflow-hidden rounded-xl bg-black">
-          <video ref="callRemoteVideo" autoplay playsinline class="h-64 w-full object-cover"></video>
-        </div>
-        <template v-else>
-          <img v-if="call.avatar" :src="thumbUrl(call.avatar)" class="mt-6 h-36 w-36 rounded-full object-cover shadow-xl" />
-          <span v-else class="mt-6 flex h-36 w-36 items-center justify-center rounded-full bg-gradient-to-br from-saffron-400 to-saffron-600 text-5xl font-semibold shadow-xl">{{ initials(call.name) }}</span>
+    <!-- Окно звонка (попап / на весь экран) -->
+    <div v-if="call.open" class="fixed inset-0 z-[80] flex items-center justify-center bg-ink-900/60" :class="call.fullscreen ? 'p-0' : 'p-4'">
+      <div class="relative flex flex-col items-center overflow-hidden bg-ink-900 text-white shadow-2xl"
+           :class="call.fullscreen ? 'h-full w-full rounded-none' : 'w-full max-w-2xl rounded-2xl'">
+        <!-- видео собеседника на весь экран (когда соединено и есть видео) -->
+        <template v-if="call.status === 'connected' && call.remoteVideo">
+          <video ref="callRemoteVideo" autoplay playsinline class="w-full bg-black object-cover" :class="call.fullscreen ? 'h-full' : 'aspect-video max-h-[70vh]'"></video>
+          <!-- имя + статус поверх видео -->
+          <div class="pointer-events-none absolute left-0 right-0 top-0 bg-gradient-to-b from-black/50 to-transparent p-4 text-center">
+            <div class="text-lg font-semibold">{{ call.name }}</div>
+            <div class="text-xs text-white/70">{{ callStatusText }}</div>
+          </div>
         </template>
-        <div class="mt-5 text-center">
-          <div class="text-2xl font-semibold">{{ call.name }}</div>
-          <div v-if="call.status !== 'connected'" class="mt-2 text-sm text-white/50">Если Вы хотите начать видеозвонок,<br>нажмите на значок камеры.</div>
+        <!-- аватар (аудио-звонок или ещё нет видео) -->
+        <div v-else class="flex flex-col items-center px-8 py-10" :class="call.fullscreen && 'flex-1 justify-center'">
+          <div class="text-sm text-white/45">{{ callStatusText }}</div>
+          <img v-if="call.avatar" :src="thumbUrl(call.avatar)" class="mt-6 rounded-full object-cover shadow-xl" :class="call.fullscreen ? 'h-56 w-56' : 'h-40 w-40'" />
+          <span v-else class="mt-6 flex items-center justify-center rounded-full bg-gradient-to-br from-saffron-400 to-saffron-600 font-semibold shadow-xl" :class="call.fullscreen ? 'h-56 w-56 text-7xl' : 'h-40 w-40 text-5xl'">{{ initials(call.name) }}</span>
+          <div class="mt-5 text-2xl font-semibold">{{ call.name }}</div>
+          <div v-if="call.status !== 'connected'" class="mt-2 text-center text-sm text-white/50">Если Вы хотите начать видеозвонок,<br>нажмите на значок камеры.</div>
         </div>
         <!-- своё видео превью -->
-        <video v-show="call.localVideo" ref="callLocalVideo" autoplay playsinline muted class="absolute right-4 top-4 h-24 w-20 -scale-x-100 rounded-lg object-cover shadow-lg ring-2 ring-white/20"></video>
-        <div class="mt-8 flex items-end gap-8">
+        <video v-show="call.localVideo" ref="callLocalVideo" autoplay playsinline muted class="absolute -scale-x-100 rounded-lg object-cover shadow-lg ring-2 ring-white/20"
+               :class="call.fullscreen ? 'bottom-28 right-6 h-40 w-32' : 'right-4 top-4 h-28 w-24'"></video>
+        <!-- развернуть/свернуть -->
+        <button v-if="call.status === 'connected'" class="absolute right-3 top-3 z-10 rounded-full bg-black/40 p-2 text-white transition hover:bg-black/60" :title="call.fullscreen ? 'Свернуть' : 'На весь экран'" @click="toggleCallFullscreen">
+          <AppIcon :name="call.fullscreen ? 'minimize' : 'maximize'" :size="20" />
+        </button>
+        <!-- панель кнопок -->
+        <div class="flex items-end gap-8" :class="[call.status === 'connected' && call.remoteVideo ? 'absolute bottom-0 left-0 right-0 justify-center bg-gradient-to-t from-black/60 to-transparent pb-6 pt-10' : 'pb-8']">
           <button class="flex flex-col items-center gap-2" @click="toggleCallVideo">
-            <span class="flex h-14 w-14 items-center justify-center rounded-full text-white transition" :class="call.localVideo ? 'bg-sky-600' : 'bg-sky-500 hover:bg-sky-600'"><AppIcon name="video" :size="24" /></span>
+            <span class="flex h-14 w-14 items-center justify-center rounded-full text-white transition" :class="call.localVideo ? 'bg-sky-600' : 'bg-white/15 hover:bg-white/25'"><AppIcon name="video" :size="24" /></span>
             <span class="text-xs text-white/60">{{ call.localVideo ? 'Выкл. видео' : 'Вкл. видео' }}</span>
           </button>
           <button class="flex flex-col items-center gap-2" @click="endCall">

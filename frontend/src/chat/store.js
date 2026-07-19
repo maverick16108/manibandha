@@ -210,10 +210,13 @@ async function refreshMessages() {
   chatState.members = await db.all('SELECT * FROM members WHERE chat_id=?', [chatState.activeChatId]);
 }
 
+const chatWindowMem = {}; // chatId → msgWindow: сохраняем размер окна рендера, чтобы при
+                          // возврате контент был той же высоты (иначе сохранённый scrollTop «съезжает»)
 export async function openChat(chatId) {
   const id = Number(chatId);
+  if (chatState.activeChatId && chatState.activeChatId !== id) chatWindowMem[chatState.activeChatId] = msgWindow;
   chatState.activeChatId = id;
-  msgWindow = MSG_WINDOW;
+  msgWindow = chatWindowMem[id] || MSG_WINDOW;
   // граница непрочитанного до показа — из локальной БД (быстро), для разделителя «Непрочитанные»
   try {
     const row = await db.get('SELECT my_last_read_seq FROM chats WHERE id=?', [id]);

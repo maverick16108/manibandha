@@ -136,40 +136,46 @@ function renderChatBody(b) {
 const activeId = computed(() => (route.params.id ? Number(route.params.id) : null))
 const activeChat = computed(() => chatState.chats.find((c) => c.id === activeId.value) || null)
 
-const chatScrollMem = {} // chatId → { top, atBottom } — сохраняем позицию прокрутки чата
+// Память позиций прокрутки чатов. Держим в sessionStorage, чтобы позиция сохранялась и при
+// уходе на другую страницу (компонент перемонтируется), и при перезагрузке вкладки.
+const SCROLL_MEM_KEY = 'chatScrollMem'
+const chatScrollMem = (() => { try { return JSON.parse(sessionStorage.getItem(SCROLL_MEM_KEY) || '{}') || {} } catch { return {} } })()
+let scrollMemTimer = null
+function saveScrollMem() { if (scrollMemTimer) return; scrollMemTimer = setTimeout(() => { scrollMemTimer = null; try { sessionStorage.setItem(SCROLL_MEM_KEY, JSON.stringify(chatScrollMem)) } catch { /* ignore */ } }, 400) }
+function rememberScroll(id) { if (!id || !scroller.value) return; chatScrollMem[id] = { top: scroller.value.scrollTop, atBottom: stickBottom.value, anchor: computeAnchor() }; saveScrollMem() }
+// Позиционируем ленту после открытия чата (общее для смены чата и монтирования роута).
+function positionAfterOpen(id, saved) {
+  const restore = !!saved && !saved.atBottom
+  // по ЯКОРНОМУ сообщению, а не по пикселю — при догрузке превью/картинок ResizeObserver держит его на месте
+  pendingAnchor = restore ? (saved.anchor || null) : null
+  const setPos = () => {
+    const el = scroller.value; if (!el) return
+    if (restore) { if (!(pendingAnchor && restoreAnchor(pendingAnchor))) el.scrollTop = saved.top }
+    else el.scrollTop = el.scrollHeight
+  }
+  setPos(); updateFloatingDate()
+  ;[80, 220, 450, 800].forEach((d) => setTimeout(() => {
+    if (activeId.value !== id) return
+    if (!openSettled.value) { setPos(); if (!restore) stickBottom.value = true }
+    updateFloatingDate()
+  }, d))
+  setTimeout(() => { openSettled.value = true }, 500)
+  setTimeout(() => { if (activeId.value === id) pendingAnchor = null }, 1500)
+}
 watch(activeId, async (id, oldId) => {
   if (oldId && !editingMsg.value) saveDraft(oldId, body.value) // сохранить черновик прежнего чата
-  if (oldId && scroller.value) chatScrollMem[oldId] = { top: scroller.value.scrollTop, atBottom: stickBottom.value, anchor: computeAnchor() }
+  if (oldId) rememberScroll(oldId)
   pendingAnchor = null
   replyTo.value = null; editingMsg.value = null; closeCtx()
   body.value = id ? loadDraft(id) : ''
   openSettled.value = false
   if (id) {
-    // если чат был проскроллен вверх — восстанавливаем позицию; иначе к низу
     const saved = chatScrollMem[id]
-    const restore = !!saved && !saved.atBottom
-    stickBottom.value = !restore
+    stickBottom.value = !(saved && !saved.atBottom)
     nextTick(() => inputEl.value?.focus()) // фокус сразу, не ждём загрузки истории
     await openChat(id) // обновляет сообщения (единый рендер) и резолвится синхронно после
-    // выставляем позицию в nextTick — это микротаск ДО первой отрисовки нового чата,
-    // поэтому нет ни пустого кадра, ни видимой перемотки
-    await nextTick()
-    // Восстанавливаем по ЯКОРНОМУ СООБЩЕНИЮ (не по пикселю): когда позже догружаются превью
-    // ссылок/картинки и высота меняется, ResizeObserver держит это сообщение на месте — не «съезжает».
-    pendingAnchor = restore ? (saved.anchor || null) : null
-    const setPos = () => {
-      const el = scroller.value; if (!el) return
-      if (restore) { if (!(pendingAnchor && restoreAnchor(pendingAnchor))) el.scrollTop = saved.top }
-      else el.scrollTop = el.scrollHeight
-    }
-    setPos(); updateFloatingDate()
-    ;[80, 220, 450, 800].forEach((d) => setTimeout(() => {
-      if (activeId.value !== id) return
-      if (!openSettled.value) { setPos(); if (!restore) stickBottom.value = true }
-      updateFloatingDate()
-    }, d))
-    setTimeout(() => { openSettled.value = true }, 500) // после открытия — авто-читаем живые входящие
-    setTimeout(() => { if (activeId.value === id) pendingAnchor = null }, 1500) // держим якорь до оседания превью
+    await nextTick() // позицию ставим в микротаске ДО первой отрисовки — нет пустого кадра/перемотки
+    positionAfterOpen(id, saved)
   } else closeChat()
   nextTick(autoGrow)
 }, { immediate: false })
@@ -1490,6 +1496,10 @@ const incoming = reactive({ open: false, name: '', avatar: '', video: false, fro
 const callRemoteVideo = ref(null); const callLocalVideo = ref(null)
 let pc = null; let localStream = null; let remoteStream = null; let remoteAudioEl = null; let pendingIce = []
 let makingOffer = false; let politePeer = false
+// вкладки одного браузера общаются напрямую — надёжно гасим входящий на других вкладках
+let callBC = null
+try { callBC = new BroadcastChannel('mani-call'); callBC.onmessage = (e) => { if (e.data === 'handled') dropIncoming() } } catch { /* нет поддержки */ }
+function dropIncoming() { if (incoming.open) { incoming.open = false; incoming.offer = null; stopRingtone() } }
 const callStatusText = computed(() => call.status === 'connected' ? 'Соединено' : (call.status === 'calling' ? 'Вызов…' : 'Готов к звонку'))
 function attachRemoteVideo() { if (callRemoteVideo.value && remoteStream) { callRemoteVideo.value.srcObject = remoteStream; callRemoteVideo.value.muted = true; callRemoteVideo.value.play?.().catch(() => {}) } }
 // удалённое видео привязываем НАДЁЖНО: элемент появляется только при connected+remoteVideo,
@@ -1547,6 +1557,7 @@ async function acceptIncoming() {
   call.video = incoming.video; call.localVideo = incoming.video; call.remoteVideo = false
   const offer = incoming.offer; incoming.open = false
   sendCallSignal({ to: chatState.meId, subtype: 'handled' }) // погасить звонок на своих других вкладках
+  callBC?.postMessage('handled')
   stopRingtone()
   call.open = true; call.status = 'calling'
   try { await ensureLocalStream(call.localVideo) }
@@ -1565,6 +1576,7 @@ async function acceptIncoming() {
 function rejectIncoming() {
   if (incoming.from) sendCallSignal({ to: incoming.from, subtype: 'reject' })
   sendCallSignal({ to: chatState.meId, subtype: 'handled' }) // погасить звонок на своих других вкладках
+  callBC?.postMessage('handled')
   incoming.open = false; incoming.offer = null; stopRingtone()
 }
 function endCall() {
@@ -1935,8 +1947,11 @@ onMounted(async () => {
   }
   if (!auth.isPending && auth.user) {
     await initChat({ meId: auth.user.id, getToken: () => auth.token })
-    if (activeId.value) { stickBottom.value = true; await openChat(activeId.value); scrollToBottom(); setTimeout(() => { openSettled.value = true }, 500) }
-    else maybeAutoOpen()
+    if (activeId.value) {
+      const id = activeId.value; const saved = chatScrollMem[id]
+      stickBottom.value = !(saved && !saved.atBottom)
+      await openChat(id); await nextTick(); positionAfterOpen(id, saved) // вернуться на прежнее место, а не всегда вниз
+    } else maybeAutoOpen()
   }
 })
 onBeforeUnmount(() => {
@@ -1950,6 +1965,8 @@ onBeforeUnmount(() => {
   cancelCompose()
   if (draftTimer) clearTimeout(draftTimer)
   if (activeId.value && !editingMsg.value) saveDraft(activeId.value, body.value) // сохранить черновик при уходе
+  if (activeId.value) rememberScroll(activeId.value) // сохранить позицию прокрутки при уходе с роута
+  try { if (scrollMemTimer) { clearTimeout(scrollMemTimer); scrollMemTimer = null } sessionStorage.setItem(SCROLL_MEM_KEY, JSON.stringify(chatScrollMem)) } catch { /* ignore */ }
   if (recording.value) { recCanceled = true; stopRec() }
   cleanupRec(); closeChat()
 })

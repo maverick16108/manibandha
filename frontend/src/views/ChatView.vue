@@ -16,7 +16,7 @@ import {
   chatState, initChat, openChat, closeChat, sendMessage, sendMessageTo, sendTyping,
   editMessage, deleteMessage, retryFailed, loadOlder, loadContacts, startDirect, startGroup,
   reactMessage, REACTION_EMOJIS, updateChat, pinChat, leaveChat, forwardMessages, loadAroundSeq, markActiveRead, imageAspect, expandWindow, reorderPins,
-  pinMessageInChat, unpinMessageInChat, localCacheStats, wipeLocalChatCache, onCallSignal, sendCallSignal, chatScrollMem,
+  pinMessageInChat, unpinMessageInChat, localCacheStats, wipeLocalChatCache, onCallSignal, sendCallSignal, chatScrollMem, chatNav,
 } from '../chat/store'
 
 usePageTitle('Чат')
@@ -166,6 +166,7 @@ watch(activeId, async (id, oldId) => {
   body.value = id ? loadDraft(id) : ''
   openSettled.value = false
   if (id) {
+    chatNav.lastId = id // запоминаем последний открытый чат
     const saved = chatScrollMem[id]
     stickBottom.value = !(saved && !saved.atBottom)
     nextTick(() => inputEl.value?.focus()) // фокус сразу, не ждём загрузки истории
@@ -179,7 +180,9 @@ watch(activeId, async (id, oldId) => {
 // автооткрытие самого верхнего чата, когда стоим на пустом экране (десктоп)
 function maybeAutoOpen() {
   if (chatState.ready && !activeId.value && chatState.chats.length && window.innerWidth >= 640) {
-    router.replace({ name: 'chat', params: { id: chatState.chats[0].id } })
+    // вернуться в ПОСЛЕДНИЙ открытый чат (если он ещё существует), иначе — верхний
+    const last = chatNav.lastId && chatState.chats.find((c) => c.id === chatNav.lastId) ? chatNav.lastId : chatState.chats[0].id
+    router.replace({ name: 'chat', params: { id: last } })
   }
 }
 watch(() => [chatState.ready, chatState.chats.length, activeId.value], maybeAutoOpen)

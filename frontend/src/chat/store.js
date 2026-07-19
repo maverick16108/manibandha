@@ -232,6 +232,8 @@ async function refreshMessages() {
 // Позиции прокрутки чатов. В памяти модуля: переживают SPA-навигацию (уход на другую
 // страницу и возврат), но обнуляются при полной перезагрузке страницы — как и просили.
 export const chatScrollMem = {};
+// последний открытый чат — чтобы при возврате на роут чатов попадать в него, а не в верхний
+export const chatNav = { lastId: null };
 const chatWindowMem = {}; // chatId → msgWindow: сохраняем размер окна рендера, чтобы при
                           // возврате контент был той же высоты (иначе сохранённый scrollTop «съезжает»)
 export async function openChat(chatId) {

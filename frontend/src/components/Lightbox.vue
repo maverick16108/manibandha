@@ -55,10 +55,23 @@ function download() {
 }
 async function copyImage() {
   const url = lightboxSrc.value; if (!url) return
+  // Буфер обмена умеет писать только image/png (webp молча отклоняется) — перегоняем через canvas.
+  // ClipboardItem с промисом — чтобы Safari не терял пользовательский жест во время конвертации.
+  const toPng = async () => {
+    const img = new Image(); img.crossOrigin = 'anonymous'; img.src = url
+    await img.decode()
+    const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight
+    c.getContext('2d').drawImage(img, 0, 0)
+    const b = await new Promise((r) => c.toBlob(r, 'image/png'))
+    if (!b) throw new Error('toBlob failed')
+    return b
+  }
   try {
-    const blob = await (await fetch(url)).blob()
-    await navigator.clipboard.write([new window.ClipboardItem({ [blob.type]: blob })])
-  } catch { /* не поддерживается — тихо */ }
+    await navigator.clipboard.write([new window.ClipboardItem({ 'image/png': toPng() })])
+  } catch {
+    // фолбэк: если картинку скопировать нельзя — кладём в буфер её ссылку
+    try { await navigator.clipboard.writeText(new URL(url, location.origin).href) } catch { /* тихо */ }
+  }
 }
 
 // свайп

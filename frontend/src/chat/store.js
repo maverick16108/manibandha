@@ -110,14 +110,15 @@ async function prefetchPhotos() {
   if (!db) return;
   try {
     const rows = await db.all(
-      "SELECT body FROM messages WHERE deleted=0 AND (body LIKE '%![]%' OR body LIKE '%@[video]%') ORDER BY (seq IS NULL), seq DESC LIMIT 400",
+      "SELECT body FROM messages WHERE deleted=0 AND (body LIKE '%![]%' OR body LIKE '%@[video]%' OR body LIKE '%@[videonote]%') ORDER BY (seq IS NULL), seq DESC LIMIT 400",
     );
     const need = new Set();
     for (const r of rows) {
       const b = r.body || '';
       b.replace(/!\[[^\]]*\]\(([^)]+)\)/g, (_x, u) => { warmImage(thumbUrl(u)); if (!imageAspect(u)) need.add(u); return ''; });
-      // постеры видео тоже прогреваем (для мгновенного показа и точного резерва места)
+      // постеры видео и кружков тоже прогреваем (для мгновенного показа и точного резерва места)
       b.replace(/@\[video\]\([^|)]+\|([^|)]*)/g, (_x, poster) => { if (poster) { warmImage(thumbUrl(poster)); if (!imageAspect(poster)) need.add(poster); } return ''; });
+      b.replace(/@\[videonote\]\([^|)]+\|([^|)]*)/g, (_x, poster) => { if (poster) warmImage(thumbUrl(poster)); return ''; });
     }
     // размеры картинок с СЕРВЕРА — чтобы бокс резервировался правильно (переживает очистку кэша)
     const list = [...need].slice(0, 200);
@@ -236,6 +237,30 @@ export const chatScrollMem = {};
 export const chatNav = { lastId: null };
 const chatWindowMem = {}; // chatId → msgWindow: сохраняем размер окна рендера, чтобы при
                           // возврате контент был той же высоты (иначе сохранённый scrollTop «съезжает»)
+// Узнаём точные пропорции картинок/постеров окна ДО рендера (чтобы бокс не менял размер).
+// Ходит на сервер только за теми, что ещё не кэшированы; жёсткий таймаут, чтобы не тормозить открытие.
+async function ensureImageDims(chatId) {
+  if (!db) return;
+  try {
+    const rows = await db.all(
+      "SELECT body FROM messages WHERE chat_id=? AND deleted=0 AND (hidden IS NULL OR hidden=0) ORDER BY (seq IS NULL) DESC, seq DESC, local_ts DESC LIMIT ?",
+      [chatId, msgWindow],
+    );
+    const need = new Set();
+    for (const r of rows) {
+      const b = r.body || '';
+      b.replace(/!\[[^\]]*\]\(([^)]+)\)/g, (_x, u) => { if (!imageAspect(u)) need.add(u); return ''; });
+      b.replace(/@\[video\]\([^|)]+\|([^|)]*)/g, (_x, p) => { if (p && !imageAspect(p)) need.add(p); return ''; });
+    }
+    const list = [...need].slice(0, 120);
+    if (!list.length) return;
+    const dims = await Promise.race([chatApi.uploadsDims(list), new Promise((r) => setTimeout(() => r(null), 700))]);
+    if (dims) {
+      for (const [u, a] of Object.entries(dims)) { if (a > 0 && !imgDims[u]) { imgDims[u] = a; imgDims[thumbUrl(u)] = a; } }
+      saveDims();
+    }
+  } catch { /* ignore */ }
+}
 export async function openChat(chatId) {
   const id = Number(chatId);
   if (chatState.activeChatId && chatState.activeChatId !== id) chatWindowMem[chatState.activeChatId] = msgWindow;
@@ -246,7 +271,11 @@ export async function openChat(chatId) {
     const row = await db.get('SELECT my_last_read_seq FROM chats WHERE id=?', [id]);
     chatState.unreadBeforeSeq = row ? (row.my_last_read_seq || 0) : 0;
   } catch { chatState.unreadBeforeSeq = 0; }
+  // ПРАВИЛО: элементы чата не меняют размер. Перед первой отрисовкой узнаём точные размеры
+  // картинок/постеров этого окна (с сервера, короткий таймаут) → боксы сразу правильные, без «прыжка».
+  await ensureImageDims(id);
   // АТОМАРНО подменяем содержимое на новый чат (без пустого мигания): читаем и присваиваем разом
+  if (chatState.activeChatId !== id) return;
   await refreshMessages();
   const c = chatState.chats.find((x) => x.id === id);
   if (c) c.unread = 0;

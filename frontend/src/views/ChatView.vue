@@ -2320,7 +2320,7 @@ onBeforeUnmount(() => {
             <!-- кружок (видео-запись) — круглый плеер: авто muted+loop, клик → звук + кольцо прогресса -->
             <div v-if="isVideoNote(m)" class="flex flex-col gap-1" @contextmenu="onContext($event, m)">
               <div class="relative h-[19.5rem] w-[19.5rem]">
-                <div class="h-full w-full overflow-hidden rounded-full shadow-sm">
+                <div class="h-full w-full overflow-hidden rounded-full bg-ink-900/[0.06] shadow-sm">
                   <video :ref="(el) => setVnEl(m.id, el)" :src="videoNoteOf(m).url" :poster="thumbUrl(videoNoteOf(m).poster || '')"
                          autoplay muted loop playsinline disablepictureinpicture controlslist="nodownload noremoteplayback nofullscreen"
                          class="pointer-events-none h-full w-full -scale-x-100 object-cover"

@@ -34,7 +34,10 @@ const playingId = ref(null)  // id видео-сообщения, которое
 const videoState = reactive({})
 function onVideoTime(e, m) {
   const v = e.target
-  videoState[m.id] = { remain: fmtSec(Math.max(0, (v.duration || 0) - (v.currentTime || 0))) }
+  const fin = Number.isFinite(v.duration) && v.duration > 0
+  // webm из MediaRecorder часто отдаёт duration=Infinity — тогда показываем прошедшее время
+  const rem = fin ? Math.max(0, v.duration - (v.currentTime || 0)) : (v.currentTime || 0)
+  videoState[m.id] = { remain: fmtSec(rem), progress: fin ? (v.currentTime || 0) / v.duration : 0 }
 }
 function openVideoFull(e, m) {
   const v = e.currentTarget.closest('.video-box')?.querySelector('video')
@@ -965,6 +968,7 @@ function cancelRec() { recCanceled = true; stopRec() }
 
 // ── кружки (видео-записи с камеры) ─────────────────────────────────────────
 const vnRecording = ref(false)
+const vnReady = ref(false)
 const vnSeconds = ref(0)
 const vnPreview = ref(null)
 let vnRecorder = null; let vnChunks = []; let vnStream = null; let vnTimer = null; let vnStart = 0; let vnCanceled = false
@@ -979,20 +983,25 @@ async function startVideoNote() {
   if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) { alert('Запись не поддерживается'); return }
   try { vnStream = await navigator.mediaDevices.getUserMedia({ video: { width: 480, height: 480, facingMode: 'user' }, audio: true }) }
   catch { alert('Нет доступа к камере'); return }
-  vnChunks = []; vnCanceled = false
-  vnRecording.value = true; vnSeconds.value = 0; vnStart = Date.now()
+  vnChunks = []; vnCanceled = false; vnReady.value = false
+  vnRecording.value = true; vnSeconds.value = 0
   await nextTick()
-  if (vnPreview.value) { vnPreview.value.srcObject = vnStream; vnPreview.value.muted = true; vnPreview.value.play().catch(() => {}) }
+  if (vnPreview.value) { vnPreview.value.srcObject = vnStream; vnPreview.value.muted = true; try { await vnPreview.value.play() } catch { /* ignore */ } }
+  // прогрев камеры: первые кадры тёмные (авто-экспозиция/баланс белого ещё не выставились).
+  // стартуем запись только после стабилизации, иначе на зацикленном кружке мигают чёрные кадры.
+  await new Promise((r) => setTimeout(r, 800))
+  if (!vnRecording.value || vnCanceled) { cleanupVN(); return }
   const mime = pickVideoMime()
   vnRecorder = new MediaRecorder(vnStream, mime ? { mimeType: mime } : undefined)
   vnRecorder.ondataavailable = (e) => { if (e.data && e.data.size) vnChunks.push(e.data) }
   vnRecorder.onstop = onVideoNoteStop
   vnRecorder.start()
+  vnReady.value = true; vnStart = Date.now()
   clearInterval(vnTimer)
   vnTimer = setInterval(() => { vnSeconds.value = Math.floor((Date.now() - vnStart) / 1000); if (vnSeconds.value >= 60) stopVideoNote() }, 250)
 }
 function cleanupVN() {
-  clearInterval(vnTimer); vnTimer = null; vnRecording.value = false
+  clearInterval(vnTimer); vnTimer = null; vnRecording.value = false; vnReady.value = false
   if (vnStream) { vnStream.getTracks().forEach((t) => t.stop()); vnStream = null }
 }
 async function onVideoNoteStop() {
@@ -1015,12 +1024,42 @@ async function onVideoNoteStop() {
     await sendMessage(`@[videonote](${vurl}|${purl})`); scrollToBottom()
   } catch { showToast('Не удалось отправить кружок') } finally { uploading.value = false }
 }
-function stopVideoNote() { if (vnRecorder && vnRecorder.state !== 'inactive') vnRecorder.stop() }
-function cancelVideoNote() { vnCanceled = true; stopVideoNote() }
+function stopVideoNote() {
+  if (vnRecorder && vnRecorder.state !== 'inactive') { vnRecorder.stop(); return }
+  cancelVideoNote() // ещё идёт прогрев камеры — записи нет, просто отменяем
+}
+function cancelVideoNote() { vnCanceled = true; if (vnRecorder && vnRecorder.state !== 'inactive') vnRecorder.stop(); else cleanupVN() }
 // маркер кружка @[videonote](url|poster)
 const VIDEONOTE_RE = /@\[videonote\]\(([^|)\s]+)\|([^)]*)\)/
 function isVideoNote(m) { return VIDEONOTE_RE.test(m?.body || '') }
 function videoNoteOf(m) { const mm = contentBody(m).match(VIDEONOTE_RE); return mm ? { url: mm[1], poster: mm[2] || '' } : null }
+// воспроизведение кружка со звуком по клику (как в телеге): круг прокручивается со звуком,
+// вокруг — прогресс; по завершении/повторном клике возвращаемся к беззвучному циклу.
+const vnEls = {}
+const vnSound = reactive({})
+function setVnEl(id, el) { if (el) vnEls[id] = el; else delete vnEls[id] }
+// webm из MediaRecorder часто отдаёт duration=Infinity — «пинаем» перемоткой, чтобы узнать длину
+function fixVnDuration(e) {
+  const v = e.target
+  if (v && v.duration === Infinity) {
+    const onSeek = () => { v.removeEventListener('seeked', onSeek); try { v.currentTime = 0 } catch { /* ignore */ } }
+    v.addEventListener('seeked', onSeek)
+    try { v.currentTime = 1e101 } catch { /* ignore */ }
+  }
+}
+function muteVn(v, id) { if (v) { v.muted = true; v.loop = true } vnSound[id] = false }
+function toggleVnSound(m) {
+  const v = vnEls[m.id]; if (!v) return
+  if (vnSound[m.id]) { muteVn(v, m.id); return }
+  for (const id in vnSound) if (vnSound[id]) muteVn(vnEls[id], id) // глушим другие кружки
+  v.muted = false; v.loop = false; try { v.currentTime = 0 } catch { /* ignore */ }
+  vnSound[m.id] = true; v.play().catch(() => {})
+}
+function onVnEnded(m) {
+  const v = vnEls[m.id]; if (!v) return
+  v.muted = true; v.loop = true; vnSound[m.id] = false
+  try { v.currentTime = 0 } catch { /* ignore */ } ; v.play().catch(() => {})
+}
 
 // ── участники / статусы ───────────────────────────────────────────────────
 const isMine = (m) => m.author_id === chatState.meId
@@ -1605,14 +1644,24 @@ onBeforeUnmount(() => {
               <span v-else class="h-10 w-10 shrink-0"></span>
             </template>
             <!-- ФОТО-сообщение: без «полей» пузыря (как в телеге) -->
-            <!-- кружок (видео-запись) — круглый плеер, авто muted+loop, клик → на весь экран -->
+            <!-- кружок (видео-запись) — круглый плеер: авто muted+loop, клик → звук + кольцо прогресса -->
             <div v-if="isVideoNote(m)" class="flex flex-col gap-1" @contextmenu="onContext($event, m)">
-              <div class="relative h-52 w-52 overflow-hidden rounded-full bg-black shadow-sm">
-                <video :src="videoNoteOf(m).url" :poster="thumbUrl(videoNoteOf(m).poster || '')" autoplay muted loop playsinline
-                       class="h-full w-full -scale-x-100 object-cover" @timeupdate="onVideoTime($event, m)"></video>
-                <div class="absolute inset-0 cursor-pointer rounded-full" @click.stop="openVideoNote(m)"></div>
+              <div class="relative h-52 w-52">
+                <div class="h-full w-full overflow-hidden rounded-full bg-black shadow-sm">
+                  <video :ref="(el) => setVnEl(m.id, el)" :src="videoNoteOf(m).url" :poster="thumbUrl(videoNoteOf(m).poster || '')"
+                         autoplay muted loop playsinline disablepictureinpicture controlslist="nodownload noremoteplayback nofullscreen"
+                         class="pointer-events-none h-full w-full -scale-x-100 object-cover"
+                         @loadedmetadata="fixVnDuration" @timeupdate="onVideoTime($event, m)" @ended="onVnEnded(m)"></video>
+                </div>
+                <!-- кольцо прогресса при проигрывании со звуком -->
+                <svg v-if="vnSound[m.id]" class="pointer-events-none absolute inset-0 h-full w-full -rotate-90" viewBox="0 0 100 100">
+                  <circle cx="50" cy="50" r="48.5" fill="none" stroke="rgba(255,255,255,0.3)" stroke-width="2" />
+                  <circle cx="50" cy="50" r="48.5" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round"
+                          :stroke-dasharray="304.7" :stroke-dashoffset="304.7 * (1 - (videoState[m.id]?.progress || 0))" style="transition: stroke-dashoffset .15s linear" />
+                </svg>
+                <div class="absolute inset-0 cursor-pointer rounded-full" @click.stop="toggleVnSound(m)" title="Включить звук"></div>
                 <span class="pointer-events-none absolute bottom-2.5 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-full bg-black/55 px-2.5 py-0.5 text-xs text-white">
-                  <AppIcon name="volume-x" :size="13" /><span class="tabular-nums">{{ videoState[m.id]?.remain || '' }}</span>
+                  <AppIcon :name="vnSound[m.id] ? 'volume' : 'volume-x'" :size="13" /><span class="tabular-nums">{{ videoState[m.id]?.remain || '' }}</span>
                 </span>
               </div>
               <div class="flex items-center gap-2 px-1" :class="isMine(m) ? 'justify-end' : ''">
@@ -1643,7 +1692,8 @@ onBeforeUnmount(() => {
               <div class="video-box relative flex justify-center overflow-hidden bg-black" :style="videoBoxStyle(videoOf(m)?.poster || '')">
                 <template v-if="videoAuto(m)">
                   <video :src="videoOf(m).url" :poster="thumbUrl(videoOf(m).poster || '')" autoplay muted loop playsinline
-                         class="block h-full w-full object-cover" @timeupdate="onVideoTime($event, m)"></video>
+                         disablepictureinpicture controlslist="nodownload noremoteplayback nofullscreen"
+                         class="pointer-events-none block h-full w-full object-cover" @timeupdate="onVideoTime($event, m)"></video>
                   <div class="absolute inset-0 cursor-pointer" @click.stop="openVideoLightbox(m)"></div>
                   <span class="pointer-events-none absolute left-2 top-2 flex items-center gap-1 rounded-full bg-black/55 px-2.5 py-1 text-sm text-white">
                     <span class="tabular-nums">{{ videoState[m.id]?.remain || '' }}</span>
@@ -1662,7 +1712,7 @@ onBeforeUnmount(() => {
                 <div class="flex flex-wrap gap-1">
                   <button v-for="r in parseReactions(m)" :key="r.emoji" @click.stop="onChip(m, r.emoji)" @contextmenu.prevent.stop="openWho($event, r)" title="ПКМ — кто поставил"
                           class="flex items-center gap-1 rounded-full px-2 py-0.5 leading-none ring-1 transition"
-                          :class="m.my_reaction === r.emoji ? 'bg-saffron-500/25 text-saffron-800 ring-saffron-400' : 'bg-saffron-500/10 text-ink-700 ring-transparent hover:bg-saffron-500/20'"><span class="text-lg leading-none">{{ r.emoji }}</span><span v-if="r.count < 4 && r.who && r.who.length" class="flex items-center"><template v-for="(w, wi) in r.who" :key="wi"><img v-if="w.avatar" :src="thumbUrl(w.avatar)" class="block h-[17px] w-[17px] rounded-full object-cover" :class="wi > 0 && '-ml-1.5'" /><span v-else class="flex h-[17px] w-[17px] items-center justify-center rounded-full bg-sage-500 text-[8px] font-semibold text-white" :class="wi > 0 && '-ml-1.5'">{{ initials(w.name) }}</span></template></span><span v-else-if="r.count > 1" class="text-sm font-semibold tabular-nums">{{ r.count }}</span></button>
+                          :class="m.my_reaction === r.emoji ? 'bg-saffron-500/25 text-saffron-800 ring-saffron-400' : 'bg-saffron-500/10 text-ink-700 ring-transparent hover:bg-saffron-500/20'"><span class="text-lg leading-none">{{ r.emoji }}</span><span v-if="r.count < 4 && r.who && r.who.length" class="-my-0.5 -mr-2 flex items-center"><template v-for="(w, wi) in r.who" :key="wi"><img v-if="w.avatar" :src="thumbUrl(w.avatar)" class="block h-[22px] w-[22px] rounded-full object-cover" :class="wi > 0 && '-ml-2'" /><span v-else class="flex h-[22px] w-[22px] items-center justify-center rounded-full bg-sage-500 text-[9px] font-semibold text-white" :class="wi > 0 && '-ml-2'">{{ initials(w.name) }}</span></template></span><span v-else-if="r.count > 1" class="text-sm font-semibold tabular-nums">{{ r.count }}</span></button>
                 </div>
                 <div class="flex shrink-0 items-center gap-1 pb-0.5 text-[11px]" :class="isMine(m) ? 'text-white/70' : 'text-ink-700/40'">
                   <span>{{ fmtTime(m.created_at) }}</span>
@@ -1703,7 +1753,7 @@ onBeforeUnmount(() => {
                 <div class="flex flex-wrap gap-1">
                   <button v-for="r in parseReactions(m)" :key="r.emoji" @click.stop="onChip(m, r.emoji)" @contextmenu.prevent.stop="openWho($event, r)" title="ПКМ — кто поставил"
                           class="flex items-center gap-1 rounded-full px-2 py-0.5 leading-none ring-1 transition"
-                          :class="m.my_reaction === r.emoji ? 'bg-saffron-500/25 text-saffron-800 ring-saffron-400' : 'bg-saffron-500/10 text-ink-700 ring-transparent hover:bg-saffron-500/20'"><span class="text-lg leading-none">{{ r.emoji }}</span><span v-if="r.count < 4 && r.who && r.who.length" class="flex items-center"><template v-for="(w, wi) in r.who" :key="wi"><img v-if="w.avatar" :src="thumbUrl(w.avatar)" class="block h-[17px] w-[17px] rounded-full object-cover" :class="wi > 0 && '-ml-1.5'" /><span v-else class="flex h-[17px] w-[17px] items-center justify-center rounded-full bg-sage-500 text-[8px] font-semibold text-white" :class="wi > 0 && '-ml-1.5'">{{ initials(w.name) }}</span></template></span><span v-else-if="r.count > 1" class="text-sm font-semibold tabular-nums">{{ r.count }}</span></button>
+                          :class="m.my_reaction === r.emoji ? 'bg-saffron-500/25 text-saffron-800 ring-saffron-400' : 'bg-saffron-500/10 text-ink-700 ring-transparent hover:bg-saffron-500/20'"><span class="text-lg leading-none">{{ r.emoji }}</span><span v-if="r.count < 4 && r.who && r.who.length" class="-my-0.5 -mr-2 flex items-center"><template v-for="(w, wi) in r.who" :key="wi"><img v-if="w.avatar" :src="thumbUrl(w.avatar)" class="block h-[22px] w-[22px] rounded-full object-cover" :class="wi > 0 && '-ml-2'" /><span v-else class="flex h-[22px] w-[22px] items-center justify-center rounded-full bg-sage-500 text-[9px] font-semibold text-white" :class="wi > 0 && '-ml-2'">{{ initials(w.name) }}</span></template></span><span v-else-if="r.count > 1" class="text-sm font-semibold tabular-nums">{{ r.count }}</span></button>
                 </div>
                 <div class="flex shrink-0 items-center gap-1 pb-0.5 text-[11px]" :class="isMine(m) ? 'text-white/70' : 'text-ink-700/40'">
                   <span>{{ fmtTime(m.created_at) }}</span>
@@ -1715,7 +1765,7 @@ onBeforeUnmount(() => {
                 <div class="pointer-events-auto flex flex-wrap gap-1">
                   <button v-for="r in parseReactions(m)" :key="r.emoji" @click.stop="onChip(m, r.emoji)" @contextmenu.prevent.stop="openWho($event, r)" title="ПКМ — кто поставил"
                           class="inline-flex items-center gap-1 rounded-full bg-black/45 px-1.5 py-0.5 text-white ring-1 ring-white/20"
-                          :class="m.my_reaction === r.emoji && 'ring-2 ring-white/70'"><span class="text-base leading-none">{{ r.emoji }}</span><span v-if="r.count < 4 && r.who && r.who.length" class="flex items-center"><template v-for="(w, wi) in r.who" :key="wi"><img v-if="w.avatar" :src="thumbUrl(w.avatar)" class="block h-4 w-4 rounded-full object-cover ring-1 ring-black/20" :class="wi > 0 && '-ml-1.5'" /><span v-else class="flex h-4 w-4 items-center justify-center rounded-full bg-sage-500 text-[7px] font-semibold text-white ring-1 ring-black/20" :class="wi > 0 && '-ml-1.5'">{{ initials(w.name) }}</span></template></span><span v-else-if="r.count > 1" class="text-xs font-semibold tabular-nums">{{ r.count }}</span></button>
+                          :class="m.my_reaction === r.emoji && 'ring-2 ring-white/70'"><span class="text-base leading-none">{{ r.emoji }}</span><span v-if="r.count < 4 && r.who && r.who.length" class="-my-0.5 -mr-2 flex items-center"><template v-for="(w, wi) in r.who" :key="wi"><img v-if="w.avatar" :src="thumbUrl(w.avatar)" class="block h-[22px] w-[22px] rounded-full object-cover ring-1 ring-black/20" :class="wi > 0 && '-ml-2'" /><span v-else class="flex h-[22px] w-[22px] items-center justify-center rounded-full bg-sage-500 text-[9px] font-semibold text-white ring-1 ring-black/20" :class="wi > 0 && '-ml-2'">{{ initials(w.name) }}</span></template></span><span v-else-if="r.count > 1" class="text-xs font-semibold tabular-nums">{{ r.count }}</span></button>
                 </div>
                 <div class="pointer-events-auto ml-auto flex shrink-0 items-center gap-1 rounded-full bg-black/45 px-1.5 py-0.5 text-[11px] text-white">
                   <span>{{ fmtTime(m.created_at) }}</span>
@@ -1770,7 +1820,7 @@ onBeforeUnmount(() => {
                           :class="isMine(m)
                             ? (m.my_reaction === r.emoji ? 'bg-white/25 ring-white/60' : 'bg-white/15 ring-white/20 hover:bg-white/25')
                             : (m.my_reaction === r.emoji ? 'bg-saffron-500/25 text-saffron-800 ring-saffron-400' : 'bg-saffron-500/10 text-ink-700 ring-transparent hover:bg-saffron-500/20')">
-                    <span class="text-lg leading-none">{{ r.emoji }}</span><span v-if="r.count < 4 && r.who && r.who.length" class="flex items-center"><template v-for="(w, wi) in r.who" :key="wi"><img v-if="w.avatar" :src="thumbUrl(w.avatar)" class="block h-[17px] w-[17px] rounded-full object-cover" :class="wi > 0 && '-ml-1.5'" /><span v-else class="flex h-[17px] w-[17px] items-center justify-center rounded-full bg-sage-500 text-[8px] font-semibold text-white" :class="wi > 0 && '-ml-1.5'">{{ initials(w.name) }}</span></template></span><span v-else-if="r.count > 1" class="text-sm font-semibold tabular-nums">{{ r.count }}</span>
+                    <span class="text-lg leading-none">{{ r.emoji }}</span><span v-if="r.count < 4 && r.who && r.who.length" class="-my-0.5 -mr-2 flex items-center"><template v-for="(w, wi) in r.who" :key="wi"><img v-if="w.avatar" :src="thumbUrl(w.avatar)" class="block h-[22px] w-[22px] rounded-full object-cover" :class="wi > 0 && '-ml-2'" /><span v-else class="flex h-[22px] w-[22px] items-center justify-center rounded-full bg-sage-500 text-[9px] font-semibold text-white" :class="wi > 0 && '-ml-2'">{{ initials(w.name) }}</span></template></span><span v-else-if="r.count > 1" class="text-sm font-semibold tabular-nums">{{ r.count }}</span>
                   </button>
                 </div>
                 <span v-else></span>
@@ -1880,18 +1930,26 @@ onBeforeUnmount(() => {
 
           <!-- запись кружка: круглое превью с камеры + таймер + отправить/отмена -->
           <div v-if="vnRecording" class="absolute inset-0 z-40 flex flex-col items-center justify-center gap-5 bg-parchment-100/95 backdrop-blur-sm">
-            <div class="relative h-64 w-64 overflow-hidden rounded-full bg-black shadow-xl ring-4 ring-saffron-400">
-              <video ref="vnPreview" class="h-full w-full -scale-x-100 object-cover" muted playsinline></video>
+            <div class="relative h-64 w-64">
+              <div class="h-full w-full overflow-hidden rounded-full bg-black shadow-xl">
+                <video ref="vnPreview" class="pointer-events-none h-full w-full -scale-x-100 object-cover" muted playsinline></video>
+              </div>
+              <!-- кольцо прогресса записи (до 1 минуты) -->
+              <svg class="pointer-events-none absolute inset-0 h-full w-full -rotate-90" viewBox="0 0 100 100">
+                <circle cx="50" cy="50" r="48.5" fill="none" stroke="rgba(0,0,0,0.15)" stroke-width="2.5" />
+                <circle cx="50" cy="50" r="48.5" fill="none" :stroke="vnReady ? '#e0902a' : 'rgba(224,144,42,0.4)'" stroke-width="3" stroke-linecap="round"
+                        :stroke-dasharray="304.7" :stroke-dashoffset="304.7 * (1 - vnSeconds / 60)" style="transition: stroke-dashoffset .25s linear" />
+              </svg>
               <span class="absolute left-1/2 top-3 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-black/55 px-3 py-1 text-sm text-white">
-                <span class="h-2 w-2 animate-pulse rounded-full bg-red-500"></span>
-                <span class="tabular-nums">{{ fmtRec(vnSeconds) }}</span>
+                <span class="h-2 w-2 rounded-full bg-red-500" :class="vnReady && 'animate-pulse'"></span>
+                <span class="tabular-nums">{{ vnReady ? fmtRec(vnSeconds) : 'подготовка…' }}</span>
               </span>
             </div>
             <div class="flex items-center gap-4">
               <button class="flex h-12 w-12 items-center justify-center rounded-full bg-white text-ink-700 shadow ring-1 ring-parchment-200 hover:bg-parchment-50" title="Отмена" @click="cancelVideoNote">
                 <AppIcon name="close" :size="24" />
               </button>
-              <button class="flex h-14 w-14 items-center justify-center rounded-full bg-saffron-500 text-white shadow-lg hover:bg-saffron-600" title="Отправить кружок" @click="stopVideoNote">
+              <button class="flex h-14 w-14 items-center justify-center rounded-full bg-saffron-500 text-white shadow-lg transition hover:bg-saffron-600 disabled:opacity-40" title="Отправить кружок" :disabled="!vnReady" @click="stopVideoNote">
                 <AppIcon name="send" :size="24" />
               </button>
             </div>

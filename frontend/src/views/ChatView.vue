@@ -109,8 +109,9 @@ watch(activeId, async (id, oldId) => {
     stickBottom.value = true
     nextTick(() => inputEl.value?.focus()) // фокус сразу, не ждём загрузки истории
     await openChat(id); scrollToBottom()
-    // досводим к низу по мере поздней загрузки картинок — убирает «прыжок» при открытии
-    ;[60, 180, 400].forEach((d) => setTimeout(() => { if (stickBottom.value) scrollToBottom() }, d))
+    // при ОТКРЫТИИ всегда доводим к низу (безусловно, пока не «осел»): первый scrollToBottom
+    // мог не долистать из-за поздней раскладки, а onScroll успел сбросить stickBottom.
+    ;[60, 180, 400].forEach((d) => setTimeout(() => { if (activeId.value === id && !openSettled.value) { scrollToBottom(); stickBottom.value = true } }, d))
     setTimeout(() => { openSettled.value = true }, 500) // после открытия — авто-читаем живые входящие
   } else closeChat()
   nextTick(autoGrow)
@@ -970,6 +971,7 @@ function cancelRec() { recCanceled = true; stopRec() }
 const vnRecording = ref(false)
 const vnReady = ref(false)
 const vnSeconds = ref(0)
+const vnFrac = ref(0) // дробный прогресс записи 0..1 (для плавного кольца)
 const vnPreview = ref(null)
 let vnRecorder = null; let vnChunks = []; let vnStream = null; let vnTimer = null; let vnStart = 0; let vnCanceled = false
 function pickVideoMime() {
@@ -996,9 +998,13 @@ async function startVideoNote() {
   vnRecorder.ondataavailable = (e) => { if (e.data && e.data.size) vnChunks.push(e.data) }
   vnRecorder.onstop = onVideoNoteStop
   vnRecorder.start()
-  vnReady.value = true; vnStart = Date.now()
+  vnReady.value = true; vnStart = Date.now(); vnFrac.value = 0
   clearInterval(vnTimer)
-  vnTimer = setInterval(() => { vnSeconds.value = Math.floor((Date.now() - vnStart) / 1000); if (vnSeconds.value >= 60) stopVideoNote() }, 250)
+  vnTimer = setInterval(() => {
+    const el = Date.now() - vnStart
+    vnSeconds.value = Math.floor(el / 1000); vnFrac.value = Math.min(1, el / 60000)
+    if (el >= 60000) stopVideoNote()
+  }, 100)
 }
 function cleanupVN() {
   clearInterval(vnTimer); vnTimer = null; vnRecording.value = false; vnReady.value = false
@@ -1015,14 +1021,24 @@ async function onVideoNoteStop() {
   cleanupVN()
   if (vnCanceled || !vnChunks.length) { vnChunks = []; return }
   const blob = new Blob(vnChunks, { type: mime }); vnChunks = []
-  uploading.value = true
+  // мгновенно показываем кружок с лоадером (оптимистично), загрузка идёт в фоне
+  const pn = reactive({ id: `vn-${uploadSeq++}`, chatId: activeId.value, poster: posterBlob ? URL.createObjectURL(posterBlob) : null, blob, posterBlob, mime, failed: false })
+  pendingNotes.push(pn); nextTick(scrollToBottom)
+  runVideoNoteUpload(pn)
+}
+const pendingNotes = reactive([])
+function removeNote(pn) { const i = pendingNotes.indexOf(pn); if (i >= 0) pendingNotes.splice(i, 1); if (pn.poster) URL.revokeObjectURL(pn.poster) }
+function retryNote(pn) { runVideoNoteUpload(pn) }
+async function runVideoNoteUpload(pn) {
+  pn.failed = false
   try {
-    const ext = mime.includes('mp4') ? 'mp4' : 'webm'
-    const vurl = await uploadOne(new File([blob], `videonote.${ext}`, { type: mime }))
+    const ext = pn.mime.includes('mp4') ? 'mp4' : 'webm'
+    const vurl = await uploadOne(new File([pn.blob], `videonote.${ext}`, { type: pn.mime }))
     let purl = ''
-    if (posterBlob) { try { purl = await uploadOne(new File([posterBlob], 'poster.jpg', { type: 'image/jpeg' })) } catch { purl = '' } }
-    await sendMessage(`@[videonote](${vurl}|${purl})`); scrollToBottom()
-  } catch { showToast('Не удалось отправить кружок') } finally { uploading.value = false }
+    if (pn.posterBlob) { try { purl = await uploadOne(new File([pn.posterBlob], 'poster.jpg', { type: 'image/jpeg' })) } catch { purl = '' } }
+    await sendMessageTo(pn.chatId, `@[videonote](${vurl}|${purl})`)
+    removeNote(pn); scrollToBottom()
+  } catch { pn.failed = true }
 }
 function stopVideoNote() {
   if (vnRecorder && vnRecorder.state !== 'inactive') { vnRecorder.stop(); return }
@@ -1037,7 +1053,7 @@ function videoNoteOf(m) { const mm = contentBody(m).match(VIDEONOTE_RE); return 
 // вокруг — прогресс; по завершении/повторном клике возвращаемся к беззвучному циклу.
 const vnEls = {}
 const vnSound = reactive({})
-function setVnEl(id, el) { if (el) vnEls[id] = el; else delete vnEls[id] }
+function setVnEl(id, el) { if (el) { vnEls[id] = el } else { delete vnEls[id]; vnSound[id] = false } } // размонтировался (смена чата) — сбрасываем звук/кольцо
 // webm из MediaRecorder часто отдаёт duration=Infinity — «пинаем» перемоткой, чтобы узнать длину
 function fixVnDuration(e) {
   const v = e.target
@@ -1048,12 +1064,26 @@ function fixVnDuration(e) {
   }
 }
 function muteVn(v, id) { if (v) { v.muted = true; v.loop = true } vnSound[id] = false }
+// плавное кольцо прогресса: обновляем каждый кадр, пока хоть один кружок играет со звуком
+let vnRaf = 0
+function vnTick() {
+  let any = false
+  for (const id in vnSound) {
+    if (!vnSound[id]) continue
+    const v = vnEls[id]; if (!v) continue
+    any = true
+    const fin = Number.isFinite(v.duration) && v.duration > 0
+    videoState[id] = { remain: fmtSec(fin ? Math.max(0, v.duration - v.currentTime) : v.currentTime), progress: fin ? v.currentTime / v.duration : 0 }
+  }
+  vnRaf = any ? requestAnimationFrame(vnTick) : 0
+}
 function toggleVnSound(m) {
   const v = vnEls[m.id]; if (!v) return
   if (vnSound[m.id]) { muteVn(v, m.id); return }
   for (const id in vnSound) if (vnSound[id]) muteVn(vnEls[id], id) // глушим другие кружки
   v.muted = false; v.loop = false; try { v.currentTime = 0 } catch { /* ignore */ }
   vnSound[m.id] = true; v.play().catch(() => {})
+  if (!vnRaf) vnRaf = requestAnimationFrame(vnTick)
 }
 function onVnEnded(m) {
   const v = vnEls[m.id]; if (!v) return
@@ -1710,11 +1740,11 @@ onBeforeUnmount(() => {
                 <svg v-if="vnSound[m.id]" class="pointer-events-none absolute inset-0 h-full w-full -rotate-90" viewBox="0 0 100 100">
                   <circle cx="50" cy="50" r="48.5" fill="none" stroke="rgba(255,255,255,0.3)" stroke-width="2" />
                   <circle cx="50" cy="50" r="48.5" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round"
-                          :stroke-dasharray="304.7" :stroke-dashoffset="304.7 * (1 - (videoState[m.id]?.progress || 0))" style="transition: stroke-dashoffset .15s linear" />
+                          :stroke-dasharray="304.7" :stroke-dashoffset="304.7 * (1 - (videoState[m.id]?.progress || 0))" />
                 </svg>
                 <div class="absolute inset-0 cursor-pointer rounded-full" @click.stop="toggleVnSound(m)" title="Включить звук"></div>
-                <span class="pointer-events-none absolute bottom-2.5 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-full bg-black/55 px-2.5 py-0.5 text-xs text-white">
-                  <AppIcon :name="vnSound[m.id] ? 'volume' : 'volume-x'" :size="13" /><span class="tabular-nums">{{ videoState[m.id]?.remain || '' }}</span>
+                <span class="pointer-events-none absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-black/55 px-3 py-1 text-[15px] text-white">
+                  <AppIcon :name="vnSound[m.id] ? 'volume' : 'volume-x'" :size="19" /><span class="tabular-nums">{{ videoState[m.id]?.remain || '' }}</span>
                 </span>
               </div>
               <div class="flex items-center gap-2 px-1" :class="isMine(m) ? 'justify-end' : ''">
@@ -1913,6 +1943,17 @@ onBeforeUnmount(() => {
               <div v-if="pu.cap" class="px-3.5 py-1.5 text-[15px] text-white">{{ pu.cap }}</div>
             </div>
           </div>
+
+          <!-- оптимистичный кружок (появляется мгновенно с лоадером) -->
+          <div v-for="pn in pendingNotes.filter((p) => p.chatId === activeId)" :key="pn.id" class="flex justify-end px-1">
+            <div class="relative h-[19.5rem] w-[19.5rem] overflow-hidden rounded-full bg-black shadow-sm">
+              <img v-if="pn.poster" :src="pn.poster" class="h-full w-full -scale-x-100 object-cover" />
+              <div class="absolute inset-0 flex items-center justify-center bg-black/30">
+                <span v-if="!pn.failed" class="h-9 w-9 animate-spin rounded-full border-2 border-white/40 border-t-white"></span>
+                <button v-else class="flex items-center gap-1 rounded-full bg-black/55 px-3 py-1.5 text-xs font-medium text-white" @click="retryNote(pn)"><AppIcon name="reply" :size="14" class="-scale-x-100" /> Повторить</button>
+              </div>
+            </div>
+          </div>
           </div>
         </div>
 
@@ -1983,7 +2024,7 @@ onBeforeUnmount(() => {
 
           <!-- запись кружка: круглое превью с камеры + таймер + отправить/отмена -->
           <div v-if="vnRecording" class="absolute inset-0 z-40 flex flex-col items-center justify-center gap-5 bg-parchment-100/95 backdrop-blur-sm">
-            <div class="relative h-64 w-64">
+            <div class="relative h-96 w-96">
               <div class="h-full w-full overflow-hidden rounded-full bg-black shadow-xl">
                 <video ref="vnPreview" muted playsinline disablepictureinpicture controlslist="nodownload noremoteplayback nofullscreen" class="pointer-events-none h-full w-full -scale-x-100 object-cover"></video>
               </div>
@@ -1991,7 +2032,7 @@ onBeforeUnmount(() => {
               <svg class="pointer-events-none absolute inset-0 h-full w-full -rotate-90" viewBox="0 0 100 100">
                 <circle cx="50" cy="50" r="48.5" fill="none" stroke="rgba(0,0,0,0.15)" stroke-width="2.5" />
                 <circle cx="50" cy="50" r="48.5" fill="none" :stroke="vnReady ? '#e0902a' : 'rgba(224,144,42,0.4)'" stroke-width="3" stroke-linecap="round"
-                        :stroke-dasharray="304.7" :stroke-dashoffset="304.7 * (1 - vnSeconds / 60)" style="transition: stroke-dashoffset .25s linear" />
+                        :stroke-dasharray="304.7" :stroke-dashoffset="304.7 * (1 - vnFrac)" style="transition: stroke-dashoffset .12s linear" />
               </svg>
               <span class="absolute left-1/2 top-3 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-black/55 px-3 py-1 text-sm text-white">
                 <span class="h-2 w-2 rounded-full bg-red-500" :class="vnReady && 'animate-pulse'"></span>

@@ -1940,9 +1940,12 @@ onMounted(async () => {
   })
   document.addEventListener('visibilitychange', onChatVisible)
   window.addEventListener('focus', onChatVisible)
-  if (convEl.value && typeof ResizeObserver !== 'undefined') {
-    resizeObs = new ResizeObserver((entries) => { for (const e of entries) wide.value = e.contentRect.width > 900 })
-    resizeObs.observe(convEl.value)
+  if (convEl.value) {
+    wide.value = convEl.value.clientWidth > 900 // синхронно ДО первой отрисовки — иначе свои медиа встают справа (narrow) и прыгают влево, когда обсервер выставит wide
+    if (typeof ResizeObserver !== 'undefined') {
+      resizeObs = new ResizeObserver((entries) => { for (const e of entries) wide.value = e.contentRect.width > 900 })
+      resizeObs.observe(convEl.value)
+    }
   }
   if (!auth.isPending && auth.user) {
     await initChat({ meId: auth.user.id, getToken: () => auth.token })

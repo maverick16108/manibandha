@@ -16,7 +16,7 @@ import {
   chatState, initChat, openChat, closeChat, sendMessage, sendMessageTo, sendTyping,
   editMessage, deleteMessage, retryFailed, loadOlder, loadContacts, startDirect, startGroup,
   reactMessage, REACTION_EMOJIS, updateChat, pinChat, leaveChat, forwardMessages, loadAroundSeq, markActiveRead, imageAspect, expandWindow, reorderPins,
-  pinMessageInChat, unpinMessageInChat, localCacheStats, wipeLocalChatCache, onCallSignal, sendCallSignal,
+  pinMessageInChat, unpinMessageInChat, localCacheStats, wipeLocalChatCache, onCallSignal, sendCallSignal, chatScrollMem,
 } from '../chat/store'
 
 usePageTitle('Чат')
@@ -136,13 +136,9 @@ function renderChatBody(b) {
 const activeId = computed(() => (route.params.id ? Number(route.params.id) : null))
 const activeChat = computed(() => chatState.chats.find((c) => c.id === activeId.value) || null)
 
-// Память позиций прокрутки чатов. Держим в sessionStorage, чтобы позиция сохранялась и при
-// уходе на другую страницу (компонент перемонтируется), и при перезагрузке вкладки.
-const SCROLL_MEM_KEY = 'chatScrollMem'
-const chatScrollMem = (() => { try { return JSON.parse(sessionStorage.getItem(SCROLL_MEM_KEY) || '{}') || {} } catch { return {} } })()
-let scrollMemTimer = null
-function saveScrollMem() { if (scrollMemTimer) return; scrollMemTimer = setTimeout(() => { scrollMemTimer = null; try { sessionStorage.setItem(SCROLL_MEM_KEY, JSON.stringify(chatScrollMem)) } catch { /* ignore */ } }, 400) }
-function rememberScroll(id) { if (!id || !scroller.value) return; chatScrollMem[id] = { top: scroller.value.scrollTop, atBottom: stickBottom.value, anchor: computeAnchor() }; saveScrollMem() }
+// Память позиций прокрутки чатов — в памяти модуля store (переживает уход на другую
+// страницу и возврат, но обнуляется при полной перезагрузке страницы).
+function rememberScroll(id) { if (!id || !scroller.value) return; chatScrollMem[id] = { top: scroller.value.scrollTop, atBottom: stickBottom.value, anchor: computeAnchor() } }
 // Позиционируем ленту после открытия чата (общее для смены чата и монтирования роута).
 function positionAfterOpen(id, saved) {
   const restore = !!saved && !saved.atBottom
@@ -420,8 +416,10 @@ function particleBurst(el) {
     const color = (bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent') ? bg : '#e0902a'
     const layer = document.createElement('div')
     layer.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:60;overflow:hidden'
-    const cols = Math.max(20, Math.min(90, Math.round(rect.width / 5)))
-    const rows = Math.max(12, Math.min(90, Math.round(rect.height / 5)))
+    let cols = Math.max(30, Math.round(rect.width / 3))
+    let rows = Math.max(20, Math.round(rect.height / 3))
+    const MAX_PARTS = 7000 // потолок, чтобы удаление больших сообщений не подвешивало
+    if (cols * rows > MAX_PARTS) { const k = Math.sqrt(MAX_PARTS / (cols * rows)); cols = Math.max(1, Math.round(cols * k)); rows = Math.max(1, Math.round(rows * k)) }
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
         const p = document.createElement('div')
@@ -430,18 +428,18 @@ function particleBurst(el) {
         const cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2
         const size = 2 + Math.floor((px * py) % 3)
         // разлёт от центра наружу + немного вверх
-        const dx = (px - cx) * (1.5 + ((c * 7 + r * 3) % 12) / 10) + ((c % 3) - 1) * 26
-        const dy = (py - cy) * (1.3 + ((c * 3 + r * 5) % 12) / 10) - 34 - (r % 4) * 12
+        const dx = (px - cx) * (1.6 + ((c * 7 + r * 3) % 14) / 10) + ((c % 3) - 1) * 28
+        const dy = (py - cy) * (1.4 + ((c * 3 + r * 5) % 14) / 10) - 40 - (r % 4) * 14
         p.style.cssText = `position:absolute;left:${px}px;top:${py}px;width:${size}px;height:${size}px;border-radius:50%;background:${color};will-change:transform,opacity`
         layer.appendChild(p)
         p.animate(
-          [{ transform: 'translate(0,0) scale(1)', opacity: 1 }, { transform: `translate(${dx}px,${dy}px) scale(0.15)`, opacity: 0 }],
-          { duration: 1100 + ((c * r) % 700), easing: 'cubic-bezier(.2,.65,.3,1)', fill: 'forwards' },
+          [{ transform: 'translate(0,0) scale(1)', opacity: 1 }, { transform: `translate(${dx}px,${dy}px) scale(0.12)`, opacity: 0 }],
+          { duration: 1700 + ((c * r) % 1100), easing: 'cubic-bezier(.2,.6,.25,1)', fill: 'forwards' },
         )
       }
     }
     document.body.appendChild(layer)
-    setTimeout(() => layer.remove(), 2100)
+    setTimeout(() => layer.remove(), 3200)
   } catch { /* эффект необязателен */ }
 }
 function cleanBody(b) {
@@ -1416,12 +1414,15 @@ watch(() => player.visible, (v) => {
   })
 })
 
+let scrollSaveTimer = null
 async function onScroll() {
   if (ctx.open) closeCtx()
   const el = scroller.value
   if (!el) return
   updateFloatingDate()
   stickBottom.value = (el.scrollHeight - el.scrollTop - el.clientHeight) < 60
+  // всегда держим память позиции свежей (переживёт уход с роута любым способом)
+  if (openSettled.value && activeId.value) { clearTimeout(scrollSaveTimer); scrollSaveTimer = setTimeout(() => rememberScroll(activeId.value), 250) }
   if (el.scrollTop < 40 && !loadingOlder) {
     loadingOlder = true
     const prevH = el.scrollHeight
@@ -1971,7 +1972,6 @@ onBeforeUnmount(() => {
   if (draftTimer) clearTimeout(draftTimer)
   if (activeId.value && !editingMsg.value) saveDraft(activeId.value, body.value) // сохранить черновик при уходе
   if (activeId.value) rememberScroll(activeId.value) // сохранить позицию прокрутки при уходе с роута
-  try { if (scrollMemTimer) { clearTimeout(scrollMemTimer); scrollMemTimer = null } sessionStorage.setItem(SCROLL_MEM_KEY, JSON.stringify(chatScrollMem)) } catch { /* ignore */ }
   if (recording.value) { recCanceled = true; stopRec() }
   cleanupRec(); closeChat()
 })

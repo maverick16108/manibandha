@@ -2,8 +2,10 @@ package web
 
 import (
 	"bytes"
+	"encoding/base64"
 	"fmt"
 	"image"
+	"image/jpeg"
 	"io"
 	"math"
 	"net/http"
@@ -13,11 +15,40 @@ import (
 	"strings"
 
 	_ "image/gif"
-	_ "image/jpeg"
 	_ "image/png"
 
 	_ "golang.org/x/image/webp"
 )
+
+// microPreview — крошечное (≈24px) превью в data-URI (JPEG q35). Фронт показывает его
+// мгновенно как размытую подложку и «проявляет» из неё картинку (blur-up, как в Telegram).
+func microPreview(img image.Image) string {
+	b := img.Bounds()
+	if b.Dx() <= 0 || b.Dy() <= 0 {
+		return ""
+	}
+	const W = 24
+	h := W * b.Dy() / b.Dx()
+	if h < 1 {
+		h = 1
+	}
+	if h > 48 {
+		h = 48
+	}
+	dst := image.NewRGBA(image.Rect(0, 0, W, h))
+	for y := 0; y < h; y++ {
+		for x := 0; x < W; x++ {
+			sx := b.Min.X + x*b.Dx()/W
+			sy := b.Min.Y + y*b.Dy()/h
+			dst.Set(x, y, img.At(sx, sy))
+		}
+	}
+	var buf bytes.Buffer
+	if err := jpeg.Encode(&buf, dst, &jpeg.Options{Quality: 35}); err != nil {
+		return ""
+	}
+	return "data:image/jpeg;base64," + base64.StdEncoding.EncodeToString(buf.Bytes())
+}
 
 // avgColor — грубый средний цвет картинки (по сетке сэмплов) для мгновенной подложки «в цвет».
 func avgColor(img image.Image) string {
@@ -77,6 +108,7 @@ func (s *Server) uploadsDims(w http.ResponseWriter, r *http.Request) {
 		out[u] = map[string]any{
 			"a": math.Round(float64(b.Dx())/float64(b.Dy())*1000) / 1000,
 			"c": avgColor(img),
+			"m": microPreview(img),
 		}
 	}
 	writeJSON(w, http.StatusOK, out)

@@ -35,11 +35,46 @@ function onEphemeral(e) {
   }
 }
 
+// ── снимок чата в localStorage: мгновенный рендер списка+сообщений при перезагрузке страницы,
+// пока открывается локальная БД (wasm/OPFS). Потом сверяется/перетирается реальными данными.
+const SNAP_KEY = 'chatSnapshotV1';
+let snapTimer = null;
+function saveChatSnapshot() {
+  if (snapTimer) return;
+  snapTimer = setTimeout(() => {
+    snapTimer = null;
+    try {
+      const chats = chatState.chats.slice(0, 60).map((c) => ({
+        id: c.id, type: c.type, title: c.title, avatar_url: c.avatar_url,
+        unread: c.unread, pinned: c.pinned, pinned_message_id: c.pinned_message_id, updated_at: c.updated_at,
+        members: c.members || [],
+        last: c.last ? { body: c.last.body, author_id: c.last.author_id, author_name: c.last.author_name, created_at: c.last.created_at, seq: c.last.seq, status: c.last.status, deleted: c.last.deleted } : null,
+      }));
+      localStorage.setItem(SNAP_KEY, JSON.stringify({ chats, activeId: chatState.activeChatId, messages: chatState.activeChatId ? chatState.messages.slice(-60) : [] }));
+    } catch { /* ignore */ }
+  }, 500);
+}
+function hydrateFromSnapshot() {
+  try {
+    const snap = JSON.parse(localStorage.getItem(SNAP_KEY) || 'null');
+    if (!snap) return;
+    if (Array.isArray(snap.chats) && snap.chats.length) chatState.chats = snap.chats;
+    if (snap.activeId && Array.isArray(snap.messages) && snap.messages.length) {
+      chatState.activeChatId = snap.activeId;
+      chatState.messages = snap.messages;
+      const c = (snap.chats || []).find((x) => x.id === snap.activeId);
+      chatState.members = c?.members || [];
+    }
+    chatState.ready = true; // показываем снимок мгновенно (реальные данные догонят и сверят)
+  } catch { /* ignore */ }
+}
+
 export async function initChat({ meId, getToken }) {
   if (engine) return;
   if (starting) return starting;
   starting = (async () => {
     chatState.meId = meId;
+    hydrateFromSnapshot(); // мгновенно показать список+чат из снимка, пока открывается БД
     db = await openDatabase();
     engine = new ChatEngine({ db, api: chatApi, meId, onEphemeral });
     socket = new ChatSocket({
@@ -95,12 +130,16 @@ const warmed = new Set();
 // запоминаем пропорции (w/h) миниатюр, чтобы зарезервировать место и лента не «прыгала»
 const IMG_DIMS_KEY = 'chatImgDims';
 const IMG_COLOR_KEY = 'chatImgColors';
+const IMG_MICRO_KEY = 'chatImgMicros';
 let imgDims = {}; try { imgDims = JSON.parse(localStorage.getItem(IMG_DIMS_KEY) || '{}') || {}; } catch { imgDims = {}; }
 let imgColors = {}; try { imgColors = JSON.parse(localStorage.getItem(IMG_COLOR_KEY) || '{}') || {}; } catch { imgColors = {}; }
+let imgMicros = {}; try { imgMicros = JSON.parse(localStorage.getItem(IMG_MICRO_KEY) || '{}') || {}; } catch { imgMicros = {}; }
 // средний цвет картинки (для мгновенной подложки «в цвет» до загрузки)
 export function imageColor(url) { const t = thumbUrl(url); return imgColors[t] || imgColors[url] || null; }
+// крошечное размытое превью (data-URI) — мгновенная подложка, из которой «проявляется» картинка
+export function imageMicro(url) { const t = thumbUrl(url); return imgMicros[t] || imgMicros[url] || null; }
 let dimsTimer = null;
-function saveDims() { if (dimsTimer) return; dimsTimer = setTimeout(() => { dimsTimer = null; try { localStorage.setItem(IMG_DIMS_KEY, JSON.stringify(imgDims)); localStorage.setItem(IMG_COLOR_KEY, JSON.stringify(imgColors)); } catch { /* ignore */ } }, 800); }
+function saveDims() { if (dimsTimer) return; dimsTimer = setTimeout(() => { dimsTimer = null; try { localStorage.setItem(IMG_DIMS_KEY, JSON.stringify(imgDims)); localStorage.setItem(IMG_COLOR_KEY, JSON.stringify(imgColors)); localStorage.setItem(IMG_MICRO_KEY, JSON.stringify(imgMicros)); } catch { /* ignore */ } }, 800); }
 export function imageAspect(url) { const t = thumbUrl(url); return imgDims[t] || imgDims[url] || null; }
 function warmImage(url) {
   if (!url || warmed.has(url)) return; warmed.add(url);
@@ -119,9 +158,9 @@ async function prefetchPhotos() {
     const need = new Set();
     for (const r of rows) {
       const b = r.body || '';
-      b.replace(/!\[[^\]]*\]\(([^)]+)\)/g, (_x, u) => { warmImage(thumbUrl(u)); if (!imageAspect(u)) need.add(u); return ''; });
+      b.replace(/!\[[^\]]*\]\(([^)]+)\)/g, (_x, u) => { warmImage(thumbUrl(u)); if (!imageAspect(u) || !imageMicro(u)) need.add(u); return ''; });
       // постеры видео и кружков тоже прогреваем (для мгновенного показа и точного резерва места)
-      b.replace(/@\[video\]\([^|)]+\|([^|)]*)/g, (_x, poster) => { if (poster) { warmImage(thumbUrl(poster)); if (!imageAspect(poster)) need.add(poster); } return ''; });
+      b.replace(/@\[video\]\([^|)]+\|([^|)]*)/g, (_x, poster) => { if (poster) { warmImage(thumbUrl(poster)); if (!imageAspect(poster) || !imageMicro(poster)) need.add(poster); } return ''; });
       b.replace(/@\[videonote\]\([^|)]+\|([^|)]*)/g, (_x, poster) => { if (poster) warmImage(thumbUrl(poster)); return ''; });
     }
     // размеры картинок с СЕРВЕРА — чтобы бокс резервировался правильно (переживает очистку кэша)
@@ -130,7 +169,7 @@ async function prefetchPhotos() {
       chatApi.uploadsDims(list).then((dims) => {
         if (!dims) return;
         let changed = false;
-        for (const [u, v] of Object.entries(dims)) { const a = typeof v === 'object' ? v.a : v; const c = typeof v === 'object' ? v.c : null; if (a > 0 && !imgDims[u]) { imgDims[u] = a; imgDims[thumbUrl(u)] = a; changed = true; } if (c && !imgColors[u]) { imgColors[u] = c; imgColors[thumbUrl(u)] = c; changed = true; } }
+        for (const [u, v] of Object.entries(dims)) { const a = typeof v === 'object' ? v.a : v; const c = typeof v === 'object' ? v.c : null; const mm = typeof v === 'object' ? v.m : null; if (a > 0 && !imgDims[u]) { imgDims[u] = a; imgDims[thumbUrl(u)] = a; changed = true; } if (c && !imgColors[u]) { imgColors[u] = c; imgColors[thumbUrl(u)] = c; changed = true; } if (mm && !imgMicros[u]) { imgMicros[u] = mm; imgMicros[thumbUrl(u)] = mm; changed = true; } }
         if (changed) { saveDims(); if (chatState.activeChatId) refreshMessages(); } // перерисуем с точным резервом (якорь удержит)
       }).catch(() => { /* ignore */ });
     }
@@ -207,6 +246,7 @@ async function refreshChats() {
   }
   chatState.chats = out;
   chatState.totalUnread = total;
+  saveChatSnapshot();
 }
 
 // Рендерим ОКНО последних сообщений (не всю историю) — иначе на больших чатах отрисовка
@@ -232,6 +272,7 @@ async function refreshMessages() {
   if (chatState.activeChatId !== cid) return;
   chatState.members = members;
   chatState.messages = rows; // ПОСЛЕДНИМ, без await после
+  saveChatSnapshot();
 }
 
 // Позиции прокрутки чатов. В памяти модуля: переживают SPA-навигацию (уход на другую
@@ -253,14 +294,14 @@ async function ensureImageDims(chatId) {
     const need = new Set();
     for (const r of rows) {
       const b = r.body || '';
-      b.replace(/!\[[^\]]*\]\(([^)]+)\)/g, (_x, u) => { if (!imageAspect(u)) need.add(u); return ''; });
-      b.replace(/@\[video\]\([^|)]+\|([^|)]*)/g, (_x, p) => { if (p && !imageAspect(p)) need.add(p); return ''; });
+      b.replace(/!\[[^\]]*\]\(([^)]+)\)/g, (_x, u) => { if (!imageAspect(u) || !imageMicro(u)) need.add(u); return ''; });
+      b.replace(/@\[video\]\([^|)]+\|([^|)]*)/g, (_x, p) => { if (p && (!imageAspect(p) || !imageMicro(p))) need.add(p); return ''; });
     }
     const list = [...need].slice(0, 120);
     if (!list.length) return;
     const dims = await Promise.race([chatApi.uploadsDims(list), new Promise((r) => setTimeout(() => r(null), 700))]);
     if (dims) {
-      for (const [u, v] of Object.entries(dims)) { const a = typeof v === 'object' ? v.a : v; const c = typeof v === 'object' ? v.c : null; if (a > 0 && !imgDims[u]) { imgDims[u] = a; imgDims[thumbUrl(u)] = a; } if (c && !imgColors[u]) { imgColors[u] = c; imgColors[thumbUrl(u)] = c; } }
+      for (const [u, v] of Object.entries(dims)) { const a = typeof v === 'object' ? v.a : v; const c = typeof v === 'object' ? v.c : null; const mm = typeof v === 'object' ? v.m : null; if (a > 0 && !imgDims[u]) { imgDims[u] = a; imgDims[thumbUrl(u)] = a; } if (c && !imgColors[u]) { imgColors[u] = c; imgColors[thumbUrl(u)] = c; } if (mm && !imgMicros[u]) { imgMicros[u] = mm; imgMicros[thumbUrl(u)] = mm; } }
       saveDims();
     }
   } catch { /* ignore */ }

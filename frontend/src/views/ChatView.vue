@@ -15,7 +15,7 @@ import { usePageTitle } from '../composables/pageTitle'
 import {
   chatState, initChat, openChat, closeChat, sendMessage, sendMessageTo, sendTyping,
   editMessage, deleteMessage, retryFailed, loadOlder, loadContacts, startDirect, startGroup,
-  reactMessage, REACTION_EMOJIS, updateChat, pinChat, leaveChat, forwardMessages, loadAroundSeq, markActiveRead, imageAspect, imageColor, expandWindow, reorderPins,
+  reactMessage, REACTION_EMOJIS, updateChat, pinChat, leaveChat, forwardMessages, loadAroundSeq, markActiveRead, imageAspect, imageColor, imageMicro, expandWindow, reorderPins,
   pinMessageInChat, unpinMessageInChat, localCacheStats, wipeLocalChatCache, onCallSignal, sendCallSignal, chatScrollMem, chatNav,
 } from '../chat/store'
 
@@ -410,9 +410,9 @@ async function confirmDelete() {
   if (!m?.id) return
   const isDir = activeChat.value?.type === 'direct'
   const everyone = !isDir ? true : (isMine(m) ? deleteForAll.value : false)
-  // лёгкий CSS-эффект удаления (без DOM-частиц — не тормозит): «скомкал и зашвырнул»
+  // лёгкий CSS-эффект удаления: «взрывается и исчезает» (быстрое расширение + растворение)
   const el = document.getElementById(`msg-${m.id}`)
-  if (el) { el.classList.add(isMine(m) ? 'msg-toss-l' : 'msg-toss-r'); await new Promise((r) => setTimeout(r, 440)) }
+  if (el) { el.classList.add('msg-boom'); await new Promise((r) => setTimeout(r, 300)) }
   await deleteMessage(m.id, everyone)
 }
 function cleanBody(b) {
@@ -958,8 +958,10 @@ function boxWH(aspect, maxW, maxH) {
 // резерв места под одиночное фото + подложка «в цвет» (мгновенно, до загрузки).
 function photoBoxStyle(u) {
   const aspect = imgAspects[u] || imageAspect(u) || 1.4
-  return { ...boxWH(aspect, wide.value ? 420 : 300, 400), background: imageColor(u) || 'rgba(190,170,145,.35)' }
+  return { ...boxWH(aspect, wide.value ? 512 : 340, 620), background: imageColor(u) || 'rgba(190,170,145,.35)' }
 }
+// стиль размытой подложки-микропревью (blur-up, как в Telegram); null → нет микро
+function microBg(u) { const m = imageMicro(u); return m ? { backgroundImage: `url(${m})` } : null }
 // резерв места под видео. Приоритет — размеры из маркера (@[video](...|ШxВ)), иначе — по постеру.
 function videoBoxStyle(v) {
   const u = v?.poster || ''
@@ -2344,7 +2346,7 @@ onBeforeUnmount(() => {
             <div v-else-if="isVideoMsg(m)" class="relative overflow-hidden rounded-2xl shadow-sm"
                  :class="[wide ? 'max-w-[560px]' : 'max-w-[85%]', isMine(m) ? 'bg-saffron-500 text-white' : 'bg-white text-ink-900 ring-1 ring-parchment-200']"
                  @contextmenu="onContext($event, m)">
-              <div v-if="showAuthor(m, i)" class="cursor-pointer px-3 pt-2 text-sm font-semibold text-sage-600 hover:underline" @click.stop="openUserInfo(m.author_id)">{{ nameOf(m) }}</div>
+              <div v-if="showAuthor(m, i)" class="cursor-pointer px-3 pt-2 text-sm font-semibold text-sage-600" @click.stop="openUserInfo(m.author_id)">{{ nameOf(m) }}</div>
               <div v-if="fwdName(m)" class="flex items-center gap-1.5 px-3 pt-2 text-sm font-semibold" :class="isMine(m) ? 'text-white/90' : 'text-saffron-700'">
                 <AppIcon name="reply" :size="12" class="-scale-x-100" /> <span>Переслано от</span>
                 <img v-if="fwdAvatar(m)" :src="thumbUrl(fwdAvatar(m))" class="h-4 w-4 shrink-0 rounded-full object-cover" />
@@ -2390,7 +2392,7 @@ onBeforeUnmount(() => {
             <div v-else-if="isPhoto(m)" class="relative overflow-hidden rounded-2xl shadow-sm"
                  :class="[wide ? 'max-w-[420px]' : 'max-w-[80%]', (captionText(m) || fwdName(m) || showAuthor(m, i)) && (isMine(m) ? 'bg-saffron-500 text-white' : 'bg-white text-ink-900 ring-1 ring-parchment-200')]"
                  @contextmenu="onContext($event, m)">
-              <div v-if="showAuthor(m, i)" class="cursor-pointer px-3 pt-2 text-sm font-semibold text-sage-600 hover:underline" @click.stop="openUserInfo(m.author_id)">{{ nameOf(m) }}</div>
+              <div v-if="showAuthor(m, i)" class="cursor-pointer px-3 pt-2 text-sm font-semibold text-sage-600" @click.stop="openUserInfo(m.author_id)">{{ nameOf(m) }}</div>
               <div v-if="fwdName(m)" class="flex items-center gap-1.5 px-3 pt-2 text-sm font-semibold" :class="isMine(m) ? 'text-white/90' : 'text-saffron-700'">
                 <AppIcon name="reply" :size="12" class="-scale-x-100" /> <span>Переслано от</span>
                 <img v-if="fwdAvatar(m)" :src="thumbUrl(fwdAvatar(m))" class="h-4 w-4 shrink-0 rounded-full object-cover" />
@@ -2405,15 +2407,17 @@ onBeforeUnmount(() => {
                 </div>
               </div>
               <div v-if="photoUrls(m).length === 1" class="ph-box relative w-full overflow-hidden" :style="photoBoxStyle(photoUrls(m)[0])">
+                <div v-if="microBg(photoUrls(m)[0])" class="ph-blur" :style="microBg(photoUrls(m)[0])"></div>
                 <span class="ph-spin pointer-events-none absolute inset-0 flex items-center justify-center"><span class="h-7 w-7 animate-spin rounded-full border-2 border-white/45 border-t-white/90"></span></span>
-                <img :src="thumbUrl(photoUrls(m)[0])" @error="imgFull($event, photoUrls(m)[0]); markImgLoaded($event)" @load="onImgLoad($event, photoUrls(m)[0])"
-                     style="opacity:0;transition:opacity .35s ease" class="relative block h-full max-h-[400px] w-full cursor-zoom-in object-cover" @click.stop="openPhoto(m, 0)" />
+                <img :src="photoUrls(m)[0]" @error="imgFull($event, photoUrls(m)[0]); markImgLoaded($event)" @load="onImgLoad($event, photoUrls(m)[0])"
+                     class="relative block h-full w-full cursor-zoom-in object-cover" @click.stop="openPhoto(m, 0)" />
               </div>
-              <div v-else class="grid gap-0.5" :class="albumCols(photoUrls(m).length)" :style="{ width: (wide ? 420 : 300) + 'px' }">
+              <div v-else class="grid gap-0.5" :class="albumCols(photoUrls(m).length)" :style="{ width: (wide ? 512 : 340) + 'px' }">
                 <div v-for="(u, k) in photoUrls(m).slice(0, 10)" :key="k" class="ph-box relative aspect-square overflow-hidden" :class="albumItemClass(photoUrls(m).length, k)" :style="{ background: imageColor(u) || 'rgba(190,170,145,.35)' }">
+                  <div v-if="microBg(u)" class="ph-blur" :style="microBg(u)"></div>
                   <span class="ph-spin pointer-events-none absolute inset-0 flex items-center justify-center"><span class="h-6 w-6 animate-spin rounded-full border-2 border-white/45 border-t-white/90"></span></span>
                   <img :src="thumbUrl(u)" @error="imgFull($event, u); markImgLoaded($event)" @load="markImgLoaded($event)"
-                       style="opacity:0;transition:opacity .35s ease" class="relative h-full w-full cursor-zoom-in object-cover" @click.stop="openPhoto(m, k)" />
+                       class="relative h-full w-full cursor-zoom-in object-cover" @click.stop="openPhoto(m, k)" />
                 </div>
               </div>
               <div v-if="captionText(m)" class="markdown-body break-words px-3.5 pt-1.5 text-[15px]" :class="isMine(m) && 'markdown-on-accent'" v-html="renderChatBody(captionText(m))"></div>
@@ -2448,7 +2452,7 @@ onBeforeUnmount(() => {
                  :class="[isMine(m) ? 'bg-saffron-500 text-white' : 'bg-white text-ink-900 ring-1 ring-parchment-200', wide ? 'max-w-[600px]' : 'max-w-[78%]']"
                  :data-audio-label="`${nameOf(m) || 'Голосовое'} · ${fmtTime(m.created_at)}`"
                  @contextmenu="onContext($event, m)">
-              <div v-if="showAuthor(m, i)" class="mb-0.5 cursor-pointer text-sm font-semibold text-sage-600 hover:underline" @click.stop="openUserInfo(m.author_id)">{{ nameOf(m) }}</div>
+              <div v-if="showAuthor(m, i)" class="mb-0.5 cursor-pointer text-sm font-semibold text-sage-600" @click.stop="openUserInfo(m.author_id)">{{ nameOf(m) }}</div>
               <div v-if="fwdName(m)" class="mb-1 flex items-center gap-1.5 text-sm font-semibold" :class="isMine(m) ? 'text-white/90' : 'text-saffron-700'">
                 <AppIcon name="reply" :size="12" class="-scale-x-100" /> <span>Переслано от</span>
                 <img v-if="fwdAvatar(m)" :src="thumbUrl(fwdAvatar(m))" class="h-4 w-4 shrink-0 rounded-full object-cover" />
@@ -3062,19 +3066,14 @@ onBeforeUnmount(() => {
 .datefade-leave-to { opacity: 0; transform: translateY(6px); }
 /* подложка медиа: спиннер поверх цветной подложки, пока не загрузилось; после загрузки — прячем */
 .ph-done .ph-spin { display: none; }
+/* размытая подложка-микропревью (blur-up): картинка «проявляется» из неё, как в Telegram */
+.ph-blur { position: absolute; inset: 0; background-size: cover; background-position: center; filter: blur(14px); transform: scale(1.18); }
 
-/* прикольный лёгкий эффект удаления (без DOM-частиц): «скомкал и зашвырнул» — замах, затем
-   закручиваясь улетает вверх-в-сторону, сжимаясь в точку */
-.msg-toss-l, .msg-toss-r { pointer-events: none; will-change: transform, opacity; }
-.msg-toss-l { animation: msgTossL .44s cubic-bezier(.5,-0.4,.3,1) forwards; }
-.msg-toss-r { animation: msgTossR .44s cubic-bezier(.5,-0.4,.3,1) forwards; }
-@keyframes msgTossL {
-  18% { transform: scale(1.05) rotate(4deg); }
-  100% { transform: translate(-120px, -150px) scale(.06) rotate(-70deg); opacity: 0; filter: blur(2px); }
-}
-@keyframes msgTossR {
-  18% { transform: scale(1.05) rotate(-4deg); }
-  100% { transform: translate(120px, -150px) scale(.06) rotate(70deg); opacity: 0; filter: blur(2px); }
+/* лёгкий эффект удаления: «взрывается и исчезает» (быстрое расширение + растворение) */
+.msg-boom { pointer-events: none; will-change: transform, opacity, filter; animation: msgBoom .3s ease-out forwards; }
+@keyframes msgBoom {
+  0% { transform: scale(1); opacity: 1; filter: blur(0); }
+  100% { transform: scale(1.45); opacity: 0; filter: blur(9px); }
 }
 /* подсветка сообщения при переходе из поиска */
 .msg-flash { animation: msgFlash 1.6s ease; border-radius: 0.75rem; }

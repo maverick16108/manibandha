@@ -407,9 +407,9 @@ async function confirmDelete() {
   if (!m?.id) return
   const isDir = activeChat.value?.type === 'direct'
   const everyone = !isDir ? true : (isMine(m) ? deleteForAll.value : false)
-  // лёгкий CSS-эффект удаления (без DOM-частиц — не тормозит): пузырь растворяется с уменьшением
+  // лёгкий CSS-эффект удаления (без DOM-частиц — не тормозит): «скомкал и зашвырнул»
   const el = document.getElementById(`msg-${m.id}`)
-  if (el) { el.classList.add('msg-poof'); await new Promise((r) => setTimeout(r, 280)) }
+  if (el) { el.classList.add(isMine(m) ? 'msg-toss-l' : 'msg-toss-r'); await new Promise((r) => setTimeout(r, 440)) }
   await deleteMessage(m.id, everyone)
 }
 function cleanBody(b) {
@@ -3046,11 +3046,18 @@ onBeforeUnmount(() => {
 .datefade-enter-active, .datefade-leave-active { transition: opacity .28s ease, transform .28s ease; }
 .datefade-enter-from { opacity: 0; transform: translateY(-6px); }
 .datefade-leave-to { opacity: 0; transform: translateY(6px); }
-/* лёгкий эффект удаления (без DOM-частиц): сообщение растворяется с уменьшением и лёгким размытием */
-.msg-poof { animation: msgPoof .28s cubic-bezier(.4,0,.6,1) forwards; transform-origin: center; pointer-events: none; }
-@keyframes msgPoof {
-  40% { opacity: .6; filter: blur(2px); transform: scale(1.04); }
-  100% { opacity: 0; filter: blur(8px); transform: scale(.4); }
+/* прикольный лёгкий эффект удаления (без DOM-частиц): «скомкал и зашвырнул» — замах, затем
+   закручиваясь улетает вверх-в-сторону, сжимаясь в точку */
+.msg-toss-l, .msg-toss-r { pointer-events: none; will-change: transform, opacity; }
+.msg-toss-l { animation: msgTossL .44s cubic-bezier(.5,-0.4,.3,1) forwards; }
+.msg-toss-r { animation: msgTossR .44s cubic-bezier(.5,-0.4,.3,1) forwards; }
+@keyframes msgTossL {
+  18% { transform: scale(1.05) rotate(4deg); }
+  100% { transform: translate(-120px, -150px) scale(.06) rotate(-70deg); opacity: 0; filter: blur(2px); }
+}
+@keyframes msgTossR {
+  18% { transform: scale(1.05) rotate(-4deg); }
+  100% { transform: translate(120px, -150px) scale(.06) rotate(70deg); opacity: 0; filter: blur(2px); }
 }
 /* подсветка сообщения при переходе из поиска */
 .msg-flash { animation: msgFlash 1.6s ease; border-radius: 0.75rem; }

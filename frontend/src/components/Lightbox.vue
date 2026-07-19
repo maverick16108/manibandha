@@ -8,25 +8,31 @@ const rot = ref(0)
 const menu = ref(null)      // { x, y } контекстного меню или null
 const grid = ref(false)     // показать сетку «Все фотографии»
 
-// blur-up: миниатюра (из кэша) как размытый плейсхолдер, пока грузится полное фото
-const displaySrc = ref(null)
+// Два слоя: снизу — размытая миниатюра (появляется мгновенно, из кэша, поэтому НИКОГДА
+// не мелькает белым), сверху — резкое полноразмерное фото, которое показываем только после
+// декодирования. Пока полное грузится — крутим лоадер поверх размытого фона.
+const fullSrc = ref(null)   // резкое фото (готово к показу)
+const thumbSrc = ref(null)  // размытый плейсхолдер
 const loading = ref(false)
+function preload(u) { if (!u) return; const i = new Image(); i.decoding = 'async'; i.src = u }
 watch(lightboxSrc, (u) => {
-  if (!u || lightboxItem.value?.video) { displaySrc.value = null; loading.value = false; return }
-  loading.value = true
-  displaySrc.value = thumbUrl(u)
+  if (!u || lightboxItem.value?.video) { fullSrc.value = null; thumbSrc.value = null; loading.value = false; return }
+  thumbSrc.value = thumbUrl(u)              // размытый фон — сразу
   const full = new Image()
-  full.onload = () => { if (lightboxSrc.value === u) { displaySrc.value = u; loading.value = false } }
-  full.onerror = () => { if (lightboxSrc.value === u) { loading.value = false } }
+  const done = () => { if (lightboxSrc.value === u) { fullSrc.value = u; loading.value = false } }
   full.src = u
+  if (full.complete && full.naturalWidth) { done(); return }   // уже в кэше — мгновенно
+  fullSrc.value = null; loading.value = true                    // не в кэше — лоадер на размытом фоне
+  if (full.decode) full.decode().then(done).catch(() => { full.onload = done; full.onerror = () => { if (lightboxSrc.value === u) loading.value = false } })
+  else { full.onload = done; full.onerror = () => { if (lightboxSrc.value === u) loading.value = false } }
 }, { immediate: true })
 watch(lightboxSrc, () => { rot.value = 0; menu.value = null })
 watch(() => lb.index, () => {
   menu.value = null
-  // предзагружаем пару фото слева и справа — при листании нет лоадера
+  // предзагружаем по 2 фото слева и справа (и их миниатюры) — при листании ни лоадера, ни белого
   for (const d of [1, -1, 2, -2]) {
     const it = lb.items[lb.index + d]
-    if (it && it.url) { const im = new Image(); im.decoding = 'async'; im.src = it.url }
+    if (it && it.url) { preload(it.url); preload(thumbUrl(it.poster || it.url)) }
   }
 }, { immediate: true })
 
@@ -92,11 +98,16 @@ onBeforeUnmount(() => { document.removeEventListener('click', onDocClick, true);
         <video v-if="lightboxItem?.video" :src="lightboxSrc" :poster="thumbUrl(lightboxItem.poster || '')" controls autoplay playsinline
                controlslist="nodownload noremoteplayback" disablepictureinpicture
                class="max-h-full max-w-full rounded-lg shadow-2xl" @click.stop @contextmenu.prevent.stop="openMenu"></video>
-        <img v-else :src="displaySrc" :style="{ transform: `rotate(${rot}deg)` }"
-             class="lb-img max-h-full max-w-full select-none rounded-lg object-contain shadow-2xl transition-[filter] duration-300"
-             :class="loading && 'blur-lg'"
-             @click.stop @contextmenu.prevent.stop="openMenu" @mousedown="down" @mouseup="up" @touchstart.passive="down" @touchend="up" />
-        <span v-if="loading && !lightboxItem?.video" class="pointer-events-none absolute h-11 w-11 animate-spin rounded-full border-[3px] border-white/30 border-t-white"></span>
+        <template v-else>
+          <!-- размытая миниатюра снизу — чтобы под лоадером/при листании не было белого -->
+          <img v-if="thumbSrc" :src="thumbSrc" :style="{ transform: `rotate(${rot}deg)` }" aria-hidden="true"
+               class="pointer-events-none absolute max-h-full max-w-full select-none rounded-lg object-contain opacity-90 blur-xl" />
+          <!-- резкое фото сверху -->
+          <img v-if="fullSrc" :src="fullSrc" :style="{ transform: `rotate(${rot}deg)` }"
+               class="lb-img relative max-h-full max-w-full select-none rounded-lg object-contain shadow-2xl"
+               @click.stop @contextmenu.prevent.stop="openMenu" @mousedown="down" @mouseup="up" @touchstart.passive="down" @touchend="up" />
+          <span v-if="loading" class="pointer-events-none absolute h-11 w-11 animate-spin rounded-full border-[3px] border-white/30 border-t-white"></span>
+        </template>
 
         <button v-if="lbHasList && lb.index > 0" class="absolute left-3 top-1/2 -translate-y-1/2 rounded-full bg-white/10 p-2.5 text-white transition hover:bg-white/20" title="Назад (←)" @click.stop="lbPrev"><AppIcon name="chevron" :size="28" class="rotate-90" /></button>
         <button v-if="lbHasList && lb.index < lb.items.length - 1" class="absolute right-3 top-1/2 -translate-y-1/2 rounded-full bg-white/10 p-2.5 text-white transition hover:bg-white/20" title="Вперёд (→)" @click.stop="lbNext"><AppIcon name="chevron" :size="28" class="-rotate-90" /></button>

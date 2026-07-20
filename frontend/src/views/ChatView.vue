@@ -1515,10 +1515,16 @@ const incoming = reactive({ open: false, name: '', avatar: '', video: false, fro
 const callRemoteVideo = ref(null); const callLocalVideo = ref(null)
 let pc = null; let localStream = null; let remoteStream = null; let remoteAudioEl = null; let pendingIce = []
 let makingOffer = false; let politePeer = false
+// какие звонки (по id звонящего) уже приняты/отклонены на ЛЮБОЙ вкладке — чтобы поздний offer
+// (гонка сигналов) не открывал входящий заново, а также чтобы «догоняющий» handled сработал.
+const handledFrom = new Map() // fromUserId -> timestamp
+function markHandled(from) { if (from != null) handledFrom.set(String(from), Date.now()) }
+function isHandled(from) { const t = handledFrom.get(String(from)); return t != null && (Date.now() - t) < 15000 }
 // вкладки одного браузера общаются напрямую — надёжно гасим входящий на других вкладках
 let callBC = null
-try { callBC = new BroadcastChannel('mani-call'); callBC.onmessage = (e) => { if (e.data === 'handled') dropIncoming() } } catch { /* нет поддержки */ }
-function dropIncoming() { if (incoming.open) { incoming.open = false; incoming.offer = null; stopRingtone() } }
+function onBCHandled(from) { markHandled(from); dropIncoming(from) }
+try { callBC = new BroadcastChannel('mani-call'); callBC.onmessage = (e) => { const d = e.data; if (d === 'handled') dropIncoming(); else if (d && d.t === 'handled') onBCHandled(d.from) } } catch { /* нет поддержки */ }
+function dropIncoming(from) { if (incoming.open && (from == null || String(incoming.from) === String(from))) { incoming.open = false; incoming.offer = null; stopRingtone() } }
 const callStatusText = computed(() => call.status === 'connected' ? 'Соединено' : (call.status === 'calling' ? 'Вызов…' : 'Готов к звонку'))
 function attachRemoteVideo() { if (callRemoteVideo.value && remoteStream) { callRemoteVideo.value.srcObject = remoteStream; callRemoteVideo.value.muted = true; callRemoteVideo.value.play?.().catch(() => {}) } }
 // удалённое видео привязываем НАДЁЖНО: элемент появляется только при connected+remoteVideo,
@@ -1574,9 +1580,10 @@ async function placeCall() {
 async function acceptIncoming() {
   call.peerId = incoming.from; call.name = incoming.name; call.avatar = incoming.avatar
   call.video = incoming.video; call.localVideo = incoming.video; call.remoteVideo = false
-  const offer = incoming.offer; incoming.open = false
-  sendCallSignal({ to: chatState.meId, subtype: 'handled' }) // погасить звонок на своих других вкладках
-  callBC?.postMessage('handled')
+  const offer = incoming.offer; const callFrom = incoming.from; incoming.open = false
+  markHandled(callFrom)
+  sendCallSignal({ to: chatState.meId, subtype: 'handled', callFrom }) // погасить звонок на своих других вкладках
+  callBC?.postMessage({ t: 'handled', from: callFrom })
   stopRingtone()
   call.open = true; call.status = 'calling'
   try { await ensureLocalStream(call.localVideo) }
@@ -1593,9 +1600,11 @@ async function acceptIncoming() {
   call.status = 'connected'
 }
 function rejectIncoming() {
-  if (incoming.from) sendCallSignal({ to: incoming.from, subtype: 'reject' })
-  sendCallSignal({ to: chatState.meId, subtype: 'handled' }) // погасить звонок на своих других вкладках
-  callBC?.postMessage('handled')
+  const callFrom = incoming.from
+  if (callFrom) sendCallSignal({ to: callFrom, subtype: 'reject' })
+  markHandled(callFrom)
+  sendCallSignal({ to: chatState.meId, subtype: 'handled', callFrom }) // погасить звонок на своих других вкладках
+  callBC?.postMessage({ t: 'handled', from: callFrom })
   incoming.open = false; incoming.offer = null; stopRingtone()
 }
 function endCall() {
@@ -1643,6 +1652,7 @@ async function handleCallSignal(evt) {
       } catch { /* ignore */ }
       return
     }
+    if (isHandled(evt.from)) return // звонок уже принят/отклонён на другой вкладке — не открываем повторно (гонка сигналов)
     if (call.status === 'connected' || call.status === 'calling' || incoming.open) { sendCallSignal({ to: evt.from, subtype: 'busy' }); return }
     incoming.open = true; incoming.from = evt.from; incoming.name = evt.name || evt.from_name || 'Вызов'
     incoming.avatar = evt.from_avatar || ''; incoming.video = !!evt.video; incoming.offer = evt.sdp
@@ -1655,7 +1665,8 @@ async function handleCallSignal(evt) {
     if (pc && pc.remoteDescription) { try { await pc.addIceCandidate(cand) } catch { /* ignore */ } } else pendingIce.push(cand)
   } else if (sub === 'handled') {
     // звонок принят/отклонён на другой вкладке этого же пользователя — гасим входящий здесь
-    if (incoming.open) { incoming.open = false; incoming.offer = null; stopRingtone() }
+    markHandled(evt.callFrom)
+    dropIncoming(evt.callFrom)
   } else if (sub === 'end' || sub === 'reject' || sub === 'busy') {
     if (sub === 'busy') showToast('Абонент занят')
     else if (sub === 'reject') showToast('Звонок отклонён')

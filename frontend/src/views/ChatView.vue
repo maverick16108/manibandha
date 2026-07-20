@@ -2408,7 +2408,7 @@ onBeforeUnmount(() => {
                   <div v-if="microBg(photoUrls(m)[0])" class="ph-blur" :style="microBg(photoUrls(m)[0])"></div>
                   <span class="ph-spin pointer-events-none absolute inset-0 flex items-center justify-center"><span class="h-7 w-7 animate-spin rounded-full border-2 border-white/45 border-t-white/90"></span></span>
                   <img :src="photoUrls(m)[0]" @error="imgFull($event, photoUrls(m)[0]); markImgLoaded($event)" @load="onImgLoad($event, photoUrls(m)[0])"
-                       class="relative block h-full w-full cursor-zoom-in object-contain" @click.stop="openPhoto(m, 0)" />
+                       class="relative block h-full w-full cursor-zoom-in object-cover" @click.stop="openPhoto(m, 0)" />
                 </div>
                 <div v-else class="grid gap-0.5" :class="albumCols(photoUrls(m).length)" :style="{ width: albumWidth() + 'px' }">
                   <div v-for="(u, k) in photoUrls(m).slice(0, 10)" :key="k" class="ph-box relative aspect-square overflow-hidden" :class="albumItemClass(photoUrls(m).length, k)" :style="{ background: imageColor(u) || 'rgba(190,170,145,.35)' }">
@@ -2522,7 +2522,7 @@ onBeforeUnmount(() => {
             <div class="relative overflow-hidden rounded-2xl shadow-sm" :class="pu.cap && 'bg-saffron-500'">
               <!-- одиночное фото: ТОТ ЖЕ бокс, что и у итогового сообщения (размер не меняется при загрузке) -->
               <div v-if="pu.previews.length === 1" class="relative overflow-hidden" :style="photoBox(pu.previews[0].aspect)">
-                <img v-if="pu.previews[0].url" :src="pu.previews[0].url" class="h-full w-full object-contain" />
+                <img v-if="pu.previews[0].url" :src="pu.previews[0].url" class="h-full w-full object-cover" />
                 <div v-else class="flex h-full w-full items-center justify-center bg-ink-900/80"><AppIcon name="play" :size="30" class="text-white/70" /></div>
                 <div class="absolute inset-0 flex items-center justify-center bg-black/25">
                   <span v-if="!pu.failed" class="h-7 w-7 animate-spin rounded-full border-2 border-white/40 border-t-white"></span>

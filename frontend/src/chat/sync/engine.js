@@ -301,22 +301,26 @@ export class ChatEngine {
   }
 
   async react(chatId, messageId, emoji) {
-    // оптимистично: мгновенно показываем свою реакцию, потом синхронизируем с сервером
+    // оптимистично: мгновенно показываем свою реакцию (и СВОЙ аватар в who), потом сверяем с сервером
     const row = await this.db.get('SELECT reactions, my_reaction FROM messages WHERE chat_id=? AND id=?', [chatId, messageId]);
+    const me = await this.db.get('SELECT full_name, avatar_url FROM members WHERE chat_id=? AND user_id=?', [chatId, this.meId]);
+    const myWho = { id: this.meId, name: me?.full_name || '', avatar: me?.avatar_url || null };
+    const withoutMe = (arr) => (arr || []).filter((w) => String(w.id) !== String(this.meId));
     if (row) {
       let list = [];
       try { list = JSON.parse(row.reactions || '[]'); } catch { list = []; }
       const prev = row.my_reaction || null;
       const dec = (em) => {
         const it = list.find((r) => r.emoji === em);
-        if (it) { it.count = (it.count || 1) - 1; if (it.count <= 0) list = list.filter((r) => r.emoji !== em); }
+        if (it) { it.count = (it.count || 1) - 1; it.who = withoutMe(it.who); if (it.count <= 0) list = list.filter((r) => r.emoji !== em); }
       };
-      if (prev) dec(prev);                 // снять прошлый голос
+      if (prev) dec(prev);                 // снять прошлый голос (убрать себя из who)
       let mine = null;
-      if (prev !== emoji) {                // не тот же смайл — ставим новый
+      if (prev !== emoji) {                // не тот же смайл — ставим новый (добавить себя в who сразу)
         mine = emoji;
         const it = list.find((r) => r.emoji === emoji);
-        if (it) it.count = (it.count || 0) + 1; else list.push({ emoji, count: 1 });
+        if (it) { it.count = (it.count || 0) + 1; it.who = [...withoutMe(it.who), myWho]; }
+        else list.push({ emoji, count: 1, who: [myWho] });
       }
       await this.db.run('UPDATE messages SET reactions=?, my_reaction=? WHERE chat_id=? AND id=?',
         [JSON.stringify(list), mine, chatId, messageId], ['messages']);

@@ -1420,7 +1420,7 @@ const winH = ref(typeof window !== 'undefined' ? window.innerHeight : 800)
 // Порог «широкой» ленты (свыше — всё слева, ниже — свои справа/чужие слева). Держим высоким (как в
 // Telegram: раскладка по разным сторонам включается уже на довольно широком чате), «всё слева» — только
 // для действительно широких экранов.
-const WIDE_THRESHOLD = 1400
+const WIDE_THRESHOLD = 1000
 const wide = computed(() => {
   const w = winW.value
   const lw = w >= 640 ? listWidth.value : 0

@@ -70,12 +70,17 @@ async function load(silent = false, force = false) {
     loading.value = false
   }
 }
-watch([kind, filterDisciple, filterMentor], () => load())
+// ВАЖНО (keep-alive): kind в watch НЕ включаем. У конкретного инстанса kind фиксирован (Вопросы — всегда
+// question); «меняется» он только потому, что деактивированный инстанс читает ОБЩИЙ route (когда открыт
+// раздел Отчёты) → иначе watch грузил бы отчёты в список Вопросов, и при возврате мелькали чужие записи.
+// Плюс isActive-гейт — на всякий случай не грузим неактивный раздел.
+let isActive = true
+watch([filterDisciple, filterMentor], () => { if (isActive) load() })
 
 // живое обновление списка (новые вопросы/отчёты появляются сразу)
 let poll = null
 function startPoll() { clearInterval(poll); poll = setInterval(() => load(true, true), 15000) } // force — держим кэш свежим (живые обновления)
-function onVisible() { if (document.visibilityState === 'visible') load(true, true) }
+function onVisible() { if (isActive && document.visibilityState === 'visible') load(true, true) }
 onMounted(() => {
   startPoll()
   document.addEventListener('visibilitychange', onVisible)
@@ -86,8 +91,8 @@ onBeforeUnmount(() => { clearInterval(poll); document.removeEventListener('visib
 let firstActivate = true
 // при возврате — ФОРСИРОВАННЫЙ тихий рефреш: keep-alive показывает актуальный список мгновенно, а
 // force не даёт подставить устаревший снимок кеша (иначе мелькали удалённые записи 7→4)
-onActivated(() => { startPoll(); if (firstActivate) { firstActivate = false; return } load(true, true) })
-onDeactivated(() => clearInterval(poll))
+onActivated(() => { isActive = true; startPoll(); if (firstActivate) { firstActivate = false; return } load(true, true) })
+onDeactivated(() => { isActive = false; clearInterval(poll) })
 
 function periodLabel(p) {
   if (!p) return ''

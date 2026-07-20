@@ -42,7 +42,8 @@ function onDocClick(e) {
 }
 function onKey(e) {
   if (!lightboxSrc.value) return
-  if (e.key === 'Escape') { if (grid.value) { grid.value = false } else if (menu.value) { menu.value = null } else closeLightbox(); return }
+  // лайтбокс открыт — забираем Escape себе и НЕ пускаем дальше (иначе закроется и попап под ним)
+  if (e.key === 'Escape') { e.stopImmediatePropagation(); if (grid.value) { grid.value = false } else if (menu.value) { menu.value = null } else closeLightbox(); return }
   // в сетке «Все фотографии»: Enter открывает выделенный элемент (стрелки двигают выделение)
   if (e.key === 'Enter' && grid.value) { e.preventDefault(); grid.value = false; return }
   if (e.key === 'ArrowRight') { e.preventDefault(); lbNext() }

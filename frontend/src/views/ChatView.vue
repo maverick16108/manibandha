@@ -1420,7 +1420,7 @@ const winH = ref(typeof window !== 'undefined' ? window.innerHeight : 800)
 // Порог «широкой» ленты (свыше — всё слева, ниже — свои справа/чужие слева). Держим высоким (как в
 // Telegram: раскладка по разным сторонам включается уже на довольно широком чате), «всё слева» — только
 // для действительно широких экранов.
-const WIDE_THRESHOLD = 1000
+const WIDE_THRESHOLD = 1200
 const wide = computed(() => {
   const w = winW.value
   const lw = w >= 640 ? listWidth.value : 0
@@ -1617,7 +1617,15 @@ const peerStatusText = computed(() => {
   if (d.toDateString() === y.toDateString()) return `был(а) вчера в ${d.toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })}`
   return `был(а) ${d.toLocaleDateString('ru', { day: 'numeric', month: 'short' })}`
 })
-watch(activeId, () => { clearInterval(peerStatusTimer); peerStatus.value = null; refreshPeerStatus(); peerStatusTimer = setInterval(refreshPeerStatus, 30000) }, { immediate: true })
+watch(activeId, () => {
+  clearInterval(peerStatusTimer)
+  // мгновенно берём статус собеседника из кэша (иначе мигает «в сети»→«не в сети»: фолбэк раньше
+  // показывал МОЁ подключение, а не собеседника)
+  const cached = activeId.value ? infoCache[activeId.value]?.peer : null
+  peerStatus.value = cached ? { online: cached.online, last_seen: cached.last_seen, id: cached.id } : null
+  refreshPeerStatus()
+  peerStatusTimer = setInterval(refreshPeerStatus, 30000)
+}, { immediate: true })
 
 // ── звонок ─────────────────────────────────────────────────────────────────
 // Вся логика/UI звонков вынесены в глобальный composables/callCenter.js (+ components/CallCenter.vue,
@@ -2199,7 +2207,7 @@ onBeforeUnmount(() => {
               <div class="truncate text-xs">
                 <span v-if="typingLabel" class="text-saffron-600">{{ typingLabel }}</span>
                 <span v-else-if="activeChat.type === 'group'" class="text-ink-700/50">{{ activeChat.members.length }} участников</span>
-                <span v-else :class="peerStatus?.online ? 'text-saffron-600' : 'text-ink-700/50'">{{ peerStatusText || (chatState.connection === 'online' ? 'в сети' : 'не в сети') }}</span>
+                <span v-else :class="peerStatus?.online ? 'text-saffron-600' : 'text-ink-700/50'">{{ peerStatusText || 'не в сети' }}</span>
               </div>
             </div>
           </div>

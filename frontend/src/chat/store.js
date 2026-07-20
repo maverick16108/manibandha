@@ -63,7 +63,8 @@ function hydrateFromSnapshot() {
     if (Array.isArray(snap.chats) && snap.chats.length) chatState.chats = snap.chats;
     if (snap.activeId && Array.isArray(snap.messages) && snap.messages.length) {
       chatState.activeChatId = snap.activeId;
-      chatState.messages = snap.messages;
+      chatState.renderedChatId = snap.activeId; // чтобы isGroup был верен СРАЗУ — иначе аватары в группе
+      chatState.messages = snap.messages;        // появляются через ~секунду и текст «скачет» влево
       const c = (snap.chats || []).find((x) => x.id === snap.activeId);
       chatState.members = c?.members || [];
     }

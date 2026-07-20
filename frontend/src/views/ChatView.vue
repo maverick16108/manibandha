@@ -2371,7 +2371,7 @@ onBeforeUnmount(() => {
           </div>
           <div :id="`msg-${m.id}`"
                class="group relative flex items-end gap-2 rounded-xl px-1 transition-colors"
-               :class="[rowJustify(m), selectMode && 'cursor-pointer select-none pr-10', selectMode && selected.has(m.id) && 'bg-saffron-500/10']"
+               :class="[rowJustify(m), sameGroup(chatState.messages[i - 1], m) && '!mt-0.5', selectMode && 'cursor-pointer select-none pr-10', selectMode && selected.has(m.id) && 'bg-saffron-500/10']"
                @click.capture="onRowClick($event, m)"
                @mousedown="selDragStart($event, m, i)" @mouseenter="selDragEnter(i)">
             <!-- чекбокс выбора: у ПРАВОГО края (сообщения остаются на своих сторонах) -->

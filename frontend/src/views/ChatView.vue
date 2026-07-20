@@ -2312,10 +2312,9 @@ onBeforeUnmount(() => {
                   <template v-if="statusOf(m)"><AppIcon v-if="statusOf(m) === 'pending'" name="clock" :size="15" /><AppIcon v-else-if="statusOf(m) === 'read'" name="check-double" :size="16" /><AppIcon v-else-if="statusOf(m) === 'sent'" name="check" :size="15" /></template>
                 </span>
               </div>
-              <div v-if="parseReactions(m).length" class="flex flex-wrap gap-1 px-1" :class="isMine(m) ? 'justify-end' : ''">
-                <button v-for="r in parseReactions(m)" :key="r.emoji" @click.stop="onChip(m, r.emoji)" @contextmenu.prevent.stop="openWho($event, r)"
-                        class="flex items-center gap-1 rounded-full px-2 py-0.5 leading-none ring-1 transition"
-                        :class="m.my_reaction === r.emoji ? 'bg-saffron-500/25 text-saffron-800 ring-saffron-400' : 'bg-saffron-500/10 text-ink-700 ring-transparent hover:bg-saffron-500/20'"><span class="text-base leading-none">{{ r.emoji }}</span><span v-if="r.count > 1" class="text-sm font-semibold tabular-nums">{{ r.count }}</span></button>
+              <div v-if="parseReactions(m).length" class="flex flex-wrap gap-1 px-0.5" :class="isMine(m) ? 'justify-end' : ''">
+                <button v-for="r in parseReactions(m)" :key="r.emoji" @click.stop="onChip(m, r.emoji)" @contextmenu.prevent.stop="openWho($event, r)" title="ПКМ — кто поставил"
+                        class="flex items-center gap-1 rounded-full py-0.5 pl-0.5 pr-1 leading-none transition hover:bg-black/5" :class="m.my_reaction === r.emoji && 'ring-1 ring-saffron-400'"><span class="text-xl leading-none">{{ r.emoji }}</span><span v-if="r.count < 4 && r.who && r.who.length" class="flex items-center"><template v-for="(w, wi) in r.who" :key="wi"><img v-if="w.avatar" :src="thumbUrl(w.avatar)" class="block h-[22px] w-[22px] rounded-full object-cover" :class="wi > 0 && '-ml-2'" /><span v-else class="flex h-[22px] w-[22px] items-center justify-center rounded-full bg-sage-500 text-[9px] font-semibold text-white" :class="wi > 0 && '-ml-2'">{{ initials(w.name) }}</span></template></span><span v-else-if="r.count > 1" class="text-sm font-semibold tabular-nums text-ink-700">{{ r.count }}</span></button>
               </div>
             </div>
             <!-- видео-сообщение -->

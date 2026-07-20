@@ -3,7 +3,7 @@
 // когда чат не открыт. Раньше вся логика жила в ChatView и работала только при открытом чате.
 import { reactive, ref, computed, watch, nextTick } from 'vue'
 import client from '../api/client'
-import { chatState, sendCallSignal, onCallSignal } from '../chat/store'
+import { chatState, sendCallSignal, onCallSignal, startDirect, sendMessageTo } from '../chat/store'
 import { showToast } from './toast'
 
 const RTC_FALLBACK = { iceServers: [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }] }
@@ -50,6 +50,14 @@ export function startCall({ peerId, name, avatar, video }) {
   call.peerId = peerId; call.name = name || ''; call.avatar = avatar || ''
   call.localVideo = !!video; call.video = !!video; call.remoteVideo = false
   call.status = 'idle-outgoing'; call.open = true
+  call.outgoing = true; call.connectedAt = 0; call.eventSent = false // для сообщения-события в чат
+}
+// событие о звонке в чат отправляет ВЫЗЫВАЮЩИЙ (чтобы не дублировать): @[call](ok|no|длит.сек)
+async function postCallEvent(peerId, answered, dur) {
+  try {
+    const chatId = await startDirect(peerId)
+    if (chatId) await sendMessageTo(chatId, `@[call](${answered ? 'ok' : 'no'}|${dur})`)
+  } catch { /* ignore */ }
 }
 function setupPc(peerId, cfg, polite) {
   politePeer = !!polite; makingOffer = false
@@ -65,7 +73,7 @@ function setupPc(peerId, cfg, polite) {
   }
   pc.onconnectionstatechange = () => {
     if (!pc) return
-    if (pc.connectionState === 'connected') call.status = 'connected'
+    if (pc.connectionState === 'connected') { call.status = 'connected'; if (!call.connectedAt) call.connectedAt = Date.now() }
     if (['failed', 'closed'].includes(pc.connectionState)) endCall()
   }
 }
@@ -83,6 +91,7 @@ export async function placeCall() {
 export async function acceptIncoming() {
   call.peerId = incoming.from; call.name = incoming.name; call.avatar = incoming.avatar
   call.video = incoming.video; call.localVideo = incoming.video; call.remoteVideo = false
+  call.outgoing = false; call.connectedAt = 0; call.eventSent = false // принимающий сообщение НЕ шлёт
   const offer = incoming.offer; const callFrom = incoming.from; incoming.open = false
   markHandled(callFrom)
   sendCallSignal({ to: chatState.meId, subtype: 'handled', callFrom }) // погасить звонок на своих других вкладках
@@ -113,6 +122,13 @@ export function rejectIncoming() {
 export function endCall() {
   const to = call.peerId || incoming.from
   if (to && (call.open || incoming.open)) sendCallSignal({ to, subtype: 'end' })
+  // сообщение-событие о звонке в чат (только вызывающий, один раз)
+  if (call.outgoing && call.peerId && !call.eventSent) {
+    call.eventSent = true
+    const answered = !!call.connectedAt
+    const dur = answered ? Math.max(1, Math.round((Date.now() - call.connectedAt) / 1000)) : 0
+    postCallEvent(call.peerId, answered, dur)
+  }
   cleanupCall()
 }
 function cleanupCall() {
@@ -160,7 +176,7 @@ async function handleCallSignal(evt) {
     incoming.open = true; incoming.from = evt.from; incoming.name = evt.name || evt.from_name || 'Вызов'
     incoming.avatar = evt.from_avatar || ''; incoming.video = !!evt.video; incoming.offer = evt.sdp
   } else if (sub === 'answer') {
-    if (pc && pc.signalingState === 'have-local-offer') { await pc.setRemoteDescription(new RTCSessionDescription(evt.sdp)); if (call.status !== 'connected') call.status = 'connected' }
+    if (pc && pc.signalingState === 'have-local-offer') { await pc.setRemoteDescription(new RTCSessionDescription(evt.sdp)); if (call.status !== 'connected') call.status = 'connected'; if (!call.connectedAt) call.connectedAt = Date.now() }
     for (const c of pendingIce) { try { await pc.addIceCandidate(c) } catch { /* ignore */ } }
     pendingIce = []
   } else if (sub === 'ice') {

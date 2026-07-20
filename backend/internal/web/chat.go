@@ -76,6 +76,7 @@ func (s *Server) nextChatSeq() int64 {
 func chatSnippet(body string) string {
 	x := reAudio.ReplaceAllString(body, "🎤 Голосовое сообщение")
 	x = reVideonote.ReplaceAllString(x, "📹 Видеосообщение")
+	x = reCall.ReplaceAllString(x, "📞 Звонок")
 	x = reContact.ReplaceAllString(x, "👤 Контакт")
 	x = rePhoto.ReplaceAllString(x, "🖼 Фото")
 	x = strings.TrimSpace(reWS.ReplaceAllString(x, " "))

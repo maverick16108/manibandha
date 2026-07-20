@@ -458,7 +458,7 @@ async function confirmDelete() {
   setTimeout(() => { pendingAnchor = null }, 500)
 }
 function cleanBody(b) {
-  return (b || '').replace(/@\[audio\]\([^)]*\)/g, '🎤 Голосовое сообщение').replace(/@\[videonote\]\([^)]*\)/g, '📹 Видеосообщение').replace(/@\[contact\]\([^|)]*\|([^|)]*)\|[^)]*\)/g, (_m, n) => { try { return '👤 ' + decodeURIComponent(n) } catch { return '👤 Контакт' } }).replace(/!\[[^\]]*\]\([^)]*\)/g, '').trim()
+  return (b || '').replace(/@\[audio\]\([^)]*\)/g, '🎤 Голосовое сообщение').replace(/@\[videonote\]\([^)]*\)/g, '📹 Видеосообщение').replace(/@\[call\]\([^)]*\)/g, '📞 Звонок').replace(/@\[contact\]\([^|)]*\|([^|)]*)\|[^)]*\)/g, (_m, n) => { try { return '👤 ' + decodeURIComponent(n) } catch { return '👤 Контакт' } }).replace(/!\[[^\]]*\]\([^)]*\)/g, '').trim()
 }
 
 // ── выделение нескольких сообщений (переслать / удалить) ───────────────────
@@ -581,7 +581,7 @@ function replyThumb(m) {
 function quoteText(b) {
   return (b || '')
     .replace(/@\[audio\]\([^)]*\)/g, '🎤 Голосовое')
-    .replace(/@\[videonote\]\([^)]*\)/g, '📹 Видеосообщение')
+    .replace(/@\[videonote\]\([^)]*\)/g, '📹 Видеосообщение').replace(/@\[call\]\([^)]*\)/g, '📞 Звонок')
     .replace(/@\[video\]\([^)]*\)/g, 'Видео')
     .replace(/@\[contact\]\([^|)]*\|([^|)]*)\|[^)]*\)/g, (_m, n) => { try { return '👤 ' + decodeURIComponent(n) } catch { return '👤 Контакт' } })
     .replace(/@\[file\]\([^|)]*\|([^)]*)\)/g, (_m, name) => { try { return '📎 ' + decodeURIComponent(name) } catch { return '📎 файл' } })
@@ -606,7 +606,7 @@ function snippet(b) {
   return (b || '')
     .replace(FWD_RE, '')
     .replace(/@\[audio\]\([^)]*\)/g, '🎤 Голосовое')
-    .replace(/@\[videonote\]\([^)]*\)/g, '📹 Видеосообщение')
+    .replace(/@\[videonote\]\([^)]*\)/g, '📹 Видеосообщение').replace(/@\[call\]\([^)]*\)/g, '📞 Звонок')
     .replace(/@\[video\]\([^)]*\)/g, 'Видео')
     .replace(/@\[contact\]\([^|)]*\|([^|)]*)\|[^)]*\)/g, (_m, n) => { try { return '👤 ' + decodeURIComponent(n) } catch { return '👤 Контакт' } })
     .replace(/@\[file\]\([^|)]*\|([^)]*)\)/g, (_m, name) => { try { return '📎 ' + decodeURIComponent(name) } catch { return '📎 файл' } })
@@ -1830,6 +1830,13 @@ function shareContact(peerArg) {
   const marker = `@[contact](${p.id || ''}|${enc(p.name)}|${enc(p.phone)}|${enc(p.avatar)})`
   closeInfo(); closeProfilePopup(); openForward([marker])
 }
+// событие о звонке: @[call](ok|no|длительность_сек). Направление берём из isMine (кто позвонил)
+const CALL_RE = /@\[call\]\((ok|no)\|(\d+)\)/
+function isCallMsg(m) { return CALL_RE.test(m?.body || '') }
+function callOf(m) { const mm = (m.body || '').match(CALL_RE); return mm ? { answered: mm[1] === 'ok', dur: Number(mm[2]) || 0 } : null }
+function callMissed(m) { const c = callOf(m); return !!c && !isMine(m) && !c.answered } // пропущенный — у принимающей стороны
+function callTitle(m) { const c = callOf(m); if (!c) return ''; if (isMine(m)) return 'Исходящий звонок'; return c.answered ? 'Входящий звонок' : 'Пропущенный звонок' }
+function fmtCallDur(s) { if (!s || s <= 0) return ''; const m = Math.floor(s / 60), sec = s % 60; return m > 0 ? `${m} мин. ${sec} сек.` : `${sec} сек.` }
 const CONTACT_RE = /@\[contact\]\(([^|)]*)\|([^|)]*)\|([^|)]*)\|([^)]*)\)/
 function isContact(m) { return CONTACT_RE.test(m?.body || '') }
 function contactOf(m) {
@@ -2613,6 +2620,20 @@ onBeforeUnmount(() => {
                         class="flex items-center gap-1 rounded-full px-2 py-0.5 leading-none ring-1 transition" :class="m.my_reaction === r.emoji ? 'bg-saffron-500/25 text-saffron-800 ring-saffron-400' : 'bg-saffron-500/20 text-ink-700 ring-saffron-500/25 hover:bg-saffron-500/30'"><span class="text-xl leading-none">{{ r.emoji }}</span><span v-if="r.count < 4 && r.who && r.who.length" class="flex items-center"><template v-for="(w, wi) in r.who" :key="wi"><img v-if="w.avatar" :src="thumbUrl(w.avatar)" class="block h-[22px] w-[22px] rounded-full object-cover" :class="wi > 0 && '-ml-2'" /><span v-else class="flex h-[22px] w-[22px] items-center justify-center rounded-full bg-sage-500 text-[9px] font-semibold text-white" :class="wi > 0 && '-ml-2'">{{ initials(w.name) }}</span></template></span><span v-else-if="r.count > 1" class="text-sm font-semibold tabular-nums text-ink-700">{{ r.count }}</span></button>
               </div>
             </div>
+
+            <!-- событие звонка -->
+            <button v-else-if="isCallMsg(m)" class="flex items-center gap-3 rounded-2xl px-3.5 py-2.5 text-left shadow-sm transition"
+                    :class="isMine(m) ? 'bg-saffron-500 text-white hover:bg-saffron-600' : 'bg-white text-ink-900 ring-1 ring-parchment-200 hover:bg-parchment-50'"
+                    title="Позвонить" @click.stop="activeChat.type === 'direct' && startCall(false)" @contextmenu="onContext($event, m)">
+              <div class="min-w-0">
+                <div class="font-semibold leading-tight" :class="callMissed(m) && 'text-red-500'">{{ callTitle(m) }}</div>
+                <div class="mt-0.5 flex items-center gap-1.5 text-sm" :class="isMine(m) ? 'text-white/75' : 'text-ink-700/55'">
+                  <span class="leading-none">{{ isMine(m) ? '↗' : '↙' }}</span>
+                  <span>{{ fmtTime(m.created_at) }}<template v-if="callOf(m).dur">, {{ fmtCallDur(callOf(m).dur) }}</template></span>
+                </div>
+              </div>
+              <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full" :class="callMissed(m) ? 'bg-red-500/15 text-red-500' : (isMine(m) ? 'bg-white/20 text-white' : 'bg-saffron-500/15 text-saffron-600')"><AppIcon name="phone" :size="20" /></span>
+            </button>
 
             <!-- карточка контакта -->
             <div v-else-if="isContact(m)" class="relative w-[280px] max-w-full overflow-hidden rounded-2xl shadow-sm"

@@ -1587,6 +1587,45 @@ async function openInfo() {
   } catch { /* оставляем кэш */ }
 }
 function closeInfo() { showInfo.value = false; infoData.value = null }
+// ── управление участниками группы (только создатель) ───────────────────────
+const isInfoGroup = computed(() => infoData.value?.type === 'group')
+const isInfoOwner = computed(() => isInfoGroup.value && infoData.value?.created_by === chatState.meId)
+const infoMembers = computed(() => infoData.value?.members || [])
+const panelAvatar = computed(() => isInfoGroup.value ? (infoData.value?.photo || activeChat.value?.avatar_url || null) : infoAvatar.value)
+function memberStatusText(m) {
+  if (m.online) return 'в сети'
+  if (!m.last_seen) return 'не в сети'
+  const d = new Date(m.last_seen); if (isNaN(d.getTime())) return 'не в сети'
+  const now = new Date(); const diff = (now - d) / 1000
+  if (diff < 90) return 'был(а) недавно'
+  if (diff < 3600) return `был(а) ${Math.floor(diff / 60)} мин назад`
+  if (d.toDateString() === now.toDateString()) return `был(а) в ${d.toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })}`
+  return `был(а) ${d.toLocaleDateString('ru', { day: 'numeric', month: 'short' })}`
+}
+const addMembersOpen = ref(false)
+const addMembersSel = ref([])
+const addMembersSearch = ref('')
+async function openAddMembers() { addMembersSel.value = []; addMembersSearch.value = ''; addMembersOpen.value = true; await loadContacts() }
+const addMembersCandidates = computed(() => {
+  const have = new Set(infoMembers.value.map((m) => m.id))
+  const q = addMembersSearch.value.trim().toLowerCase()
+  return (chatState.contacts || []).filter((u) => !have.has(u.id) && (!q || (u.full_name || '').toLowerCase().includes(q)))
+})
+function toggleAddMember(uid) { const i = addMembersSel.value.indexOf(uid); if (i >= 0) addMembersSel.value.splice(i, 1); else addMembersSel.value.push(uid) }
+async function confirmAddMembers() {
+  const ids = [...addMembersSel.value]; addMembersOpen.value = false
+  if (!ids.length || !activeId.value) return
+  try { const { data } = await client.post(`/chats/${activeId.value}/members`, { user_ids: ids }); infoData.value = data; infoCache[activeId.value] = data } catch { showToast('Не удалось добавить') }
+}
+async function kickMember(uid) {
+  if (!activeId.value || !confirm('Удалить участника из группы?')) return
+  try { const { data } = await client.delete(`/chats/${activeId.value}/members/${uid}`); infoData.value = data; infoCache[activeId.value] = data } catch { showToast('Не удалось удалить') }
+}
+async function leaveGroupConfirm() {
+  if (!activeId.value || !confirm('Покинуть группу?')) return
+  const id = activeId.value; closeInfo()
+  try { await leaveChat(id); router.push({ name: 'chat' }) } catch { showToast('Не удалось покинуть') }
+}
 // инфо о конкретном пользователе (клик по имени автора в группе)
 async function openUserInfo(uid) {
   if (!uid || uid === chatState.meId) return
@@ -2035,7 +2074,7 @@ onBeforeUnmount(() => {
         </header>
         <header v-else class="flex items-center gap-3 border-b border-parchment-200 px-4 py-2.5">
           <button class="rounded-lg p-1.5 text-ink-700/60 hover:bg-parchment-100 sm:hidden" @click="backToList"><AppIcon name="chevron" :size="18" class="rotate-90" /></button>
-          <div class="flex min-w-0 flex-1 cursor-pointer items-center gap-3" @click="isGroup ? openGroupEdit() : openInfo()">
+          <div class="flex min-w-0 flex-1 cursor-pointer items-center gap-3" @click="openInfo()">
             <img v-if="activeChat.avatar_url" :src="thumbUrl(activeChat.avatar_url)" @error="imgFull($event, activeChat.avatar_url)" class="photo-bw h-9 w-9 shrink-0 rounded-full object-cover" />
             <span v-else class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-semibold text-white"
                   :class="activeChat.type === 'group' ? 'bg-gradient-to-br from-sage-400 to-sage-600' : 'bg-gradient-to-br from-saffron-400 to-saffron-600'">{{ initials(activeChat.title) }}</span>
@@ -2056,7 +2095,7 @@ onBeforeUnmount(() => {
             <button v-if="activeChat.type === 'direct'" class="rounded-full p-2 text-ink-700/55 transition hover:bg-parchment-100 hover:text-saffron-600" title="Позвонить" @click.stop="startCall(false)">
               <AppIcon name="phone" :size="26" />
             </button>
-            <button class="rounded-full p-2 text-ink-700/55 transition hover:bg-parchment-100 hover:text-saffron-600" title="Информация" @click.stop="isGroup ? openGroupEdit() : openInfo()">
+            <button class="rounded-full p-2 text-ink-700/55 transition hover:bg-parchment-100 hover:text-saffron-600" title="Информация" @click.stop="openInfo()">
               <AppIcon name="info" :size="26" />
             </button>
           </div>
@@ -2073,14 +2112,16 @@ onBeforeUnmount(() => {
               </header>
               <div class="flex-1 overflow-y-auto">
                 <div class="flex flex-col items-center gap-3 p-6">
-                  <img v-if="infoAvatar" :src="infoAvatar" class="h-28 w-28 cursor-zoom-in rounded-full object-cover ring-1 ring-parchment-200" @click="openLightbox(infoAvatar)" />
-                  <span v-else class="flex h-28 w-28 items-center justify-center rounded-full bg-gradient-to-br from-saffron-400 to-saffron-600 text-3xl font-semibold text-white">{{ initials(activeChat.title) }}</span>
+                  <img v-if="panelAvatar" :src="panelAvatar" class="h-28 w-28 cursor-zoom-in rounded-full object-cover ring-1 ring-parchment-200" @click="openLightbox(panelAvatar)" />
+                  <span v-else class="flex h-28 w-28 items-center justify-center rounded-full text-3xl font-semibold text-white" :class="isInfoGroup ? 'bg-gradient-to-br from-sage-400 to-sage-600' : 'bg-gradient-to-br from-saffron-400 to-saffron-600'">{{ initials(activeChat.title) }}</span>
                   <div class="text-center">
-                    <div class="text-lg font-semibold text-ink-900">{{ infoData?.peer?.name || activeChat.title }}</div>
-                    <div class="text-sm" :class="infoData?.peer?.online ? 'text-saffron-600' : 'text-ink-700/50'">{{ infoData?.peer?.online ? 'в сети' : 'не в сети' }}</div>
+                    <div class="text-lg font-semibold text-ink-900">{{ infoData?.peer?.name || infoData?.title || activeChat.title }}</div>
+                    <div v-if="isInfoGroup" class="text-sm text-ink-700/50">{{ infoMembers.length }} {{ pluralWord(infoMembers.length, ['участник', 'участника', 'участников']) }}</div>
+                    <div v-else class="text-sm" :class="infoData?.peer?.online ? 'text-saffron-600' : 'text-ink-700/50'">{{ infoData?.peer?.online ? 'в сети' : 'не в сети' }}</div>
                   </div>
+                  <button v-if="isInfoOwner" class="btn-outline mt-1 text-sm" @click="openGroupEdit"><AppIcon name="edit" :size="15" /> Изменить</button>
                 </div>
-                <div class="divide-y divide-parchment-100 border-t border-parchment-200">
+                <div v-if="!isInfoGroup" class="divide-y divide-parchment-100 border-t border-parchment-200">
                   <div v-if="infoData?.peer?.phone" class="px-6 py-3"><div class="text-[15px] text-ink-900">{{ infoData.peer.phone }}</div><div class="text-xs text-ink-700/50">Телефон</div></div>
                   <div v-if="infoData?.peer?.spiritual_name" class="px-6 py-3"><div class="text-[15px] text-ink-900">{{ infoData.peer.spiritual_name }}</div><div class="text-xs text-ink-700/50">Духовное имя</div></div>
                   <div v-if="cityLine" class="px-6 py-3"><div class="text-[15px] text-ink-900">{{ cityLine }}</div><div class="text-xs text-ink-700/50">Город</div></div>
@@ -2093,10 +2134,31 @@ onBeforeUnmount(() => {
                     <span class="text-[15px] text-ink-900"><b class="tabular-nums">{{ row.n }}</b> {{ row.label }}</span>
                   </button>
                 </div>
-                <!-- поделиться контактом -->
+                <!-- участники группы -->
+                <div v-if="isInfoGroup" class="border-t border-parchment-200 pt-2">
+                  <div class="flex items-center justify-between px-6 py-2">
+                    <div class="text-xs font-semibold uppercase tracking-wide text-ink-700/50">{{ infoMembers.length }} {{ pluralWord(infoMembers.length, ['участник', 'участника', 'участников']) }}</div>
+                    <button v-if="isInfoOwner" class="flex items-center gap-1 rounded-lg px-2 py-1 text-sm text-saffron-700 hover:bg-parchment-100" @click="openAddMembers"><AppIcon name="plus" :size="16" /> Добавить</button>
+                  </div>
+                  <div v-for="m in infoMembers" :key="m.id" class="group flex items-center gap-3 px-6 py-2 hover:bg-parchment-50">
+                    <button class="flex min-w-0 flex-1 items-center gap-3 text-left" @click="closeInfo(); openUserInfo(m.id)">
+                      <img v-if="m.avatar" :src="thumbUrl(m.avatar)" class="h-10 w-10 shrink-0 rounded-full object-cover" />
+                      <span v-else class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-sage-400 to-sage-600 text-sm font-semibold text-white">{{ initials(m.name) }}</span>
+                      <span class="min-w-0">
+                        <span class="block truncate text-[15px] font-medium text-ink-900">{{ m.name }}<span v-if="m.id === chatState.meId" class="text-ink-700/40"> (вы)</span></span>
+                        <span class="block truncate text-xs" :class="m.online ? 'text-saffron-600' : 'text-ink-700/50'">{{ m.is_owner ? 'владелец' : memberStatusText(m) }}</span>
+                      </span>
+                    </button>
+                    <button v-if="isInfoOwner && m.id !== chatState.meId && !m.is_owner" class="shrink-0 rounded-lg p-1.5 text-ink-700/40 opacity-0 transition hover:bg-red-50 hover:text-red-600 group-hover:opacity-100" title="Удалить из группы" @click="kickMember(m.id)"><AppIcon name="close" :size="16" /></button>
+                  </div>
+                </div>
+                <!-- действия -->
                 <div class="border-t border-parchment-200 p-2">
-                  <button class="flex w-full items-center gap-3 rounded-lg px-4 py-2.5 text-left text-[15px] text-saffron-700 hover:bg-parchment-100" @click="shareContact">
+                  <button v-if="!isInfoGroup" class="flex w-full items-center gap-3 rounded-lg px-4 py-2.5 text-left text-[15px] text-saffron-700 hover:bg-parchment-100" @click="shareContact">
                     <AppIcon name="reply" :size="19" class="-scale-x-100" /> Поделиться контактом
+                  </button>
+                  <button v-if="isInfoGroup" class="flex w-full items-center gap-3 rounded-lg px-4 py-2.5 text-left text-[15px] text-red-600 hover:bg-red-50" @click="leaveGroupConfirm">
+                    <AppIcon name="logout" :size="19" /> Покинуть группу
                   </button>
                 </div>
               </div>
@@ -2914,6 +2976,35 @@ onBeforeUnmount(() => {
         <div class="flex justify-end gap-2 border-t border-parchment-200 p-3">
           <button class="btn-ghost" @click="showGroupEdit = false">Отмена</button>
           <button class="btn-primary" :disabled="!gTitle.trim()" @click="saveGroup">Сохранить</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Добавление участников в группу (создатель) -->
+    <div v-if="addMembersOpen" class="fixed inset-0 z-40 flex items-center justify-center bg-ink-900/40 p-4" @click.self="addMembersOpen = false">
+      <div class="flex max-h-[80vh] w-full max-w-md flex-col overflow-hidden rounded-xl bg-white shadow-xl">
+        <div class="flex items-center justify-between border-b border-parchment-200 px-4 py-3">
+          <h3 class="font-medium text-ink-900">Добавить участников</h3>
+          <button class="text-ink-700/40 hover:text-ink-900" @click="addMembersOpen = false"><AppIcon name="close" :size="18" /></button>
+        </div>
+        <div class="border-b border-parchment-200 p-3">
+          <div class="relative">
+            <AppIcon name="search" :size="16" class="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-700/40" />
+            <input v-model="addMembersSearch" class="input h-9 w-full pl-8 pr-3 text-sm" placeholder="Поиск по имени…" />
+          </div>
+        </div>
+        <div class="flex-1 overflow-y-auto">
+          <p v-if="!addMembersCandidates.length" class="p-6 text-center text-sm text-ink-700/50">Никого не найдено</p>
+          <button v-for="u in addMembersCandidates" :key="u.id" class="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-parchment-50" @click="toggleAddMember(u.id)">
+            <img v-if="u.avatar_url" :src="thumbUrl(u.avatar_url)" class="h-10 w-10 shrink-0 rounded-full object-cover" />
+            <span v-else class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-sage-400 to-sage-600 text-sm font-semibold text-white">{{ initials(u.full_name) }}</span>
+            <span class="flex-1 truncate text-[15px] text-ink-900">{{ u.full_name }}</span>
+            <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 transition" :class="addMembersSel.includes(u.id) ? 'border-saffron-500 bg-saffron-500 text-white' : 'border-parchment-400'"><AppIcon v-if="addMembersSel.includes(u.id)" name="check" :size="14" /></span>
+          </button>
+        </div>
+        <div class="flex items-center justify-end gap-3 border-t border-parchment-200 p-3">
+          <button class="btn-ghost" @click="addMembersOpen = false">Отмена</button>
+          <button class="btn-primary" :disabled="!addMembersSel.length" @click="confirmAddMembers">Добавить{{ addMembersSel.length ? ` (${addMembersSel.length})` : '' }}</button>
         </div>
       </div>
     </div>

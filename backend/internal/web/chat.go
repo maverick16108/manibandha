@@ -678,14 +678,95 @@ func (s *Server) chatInfo(w http.ResponseWriter, r *http.Request) {
 		}
 		mems = append(mems, map[string]any{
 			"id": mem.UserID, "name": name, "avatar": av, "role": mem.Role,
-			"is_owner": chat.CreatedBy != nil && *chat.CreatedBy == mem.UserID,
-			"online":   chatH.isOnline(mem.UserID),
+			"is_owner":  chat.CreatedBy != nil && *chat.CreatedBy == mem.UserID,
+			"online":    chatH.isOnline(mem.UserID),
+			"last_seen": lastSeenOrNil(mem.UserID),
 		})
 	}
+	// счётчики медиа группы (как в Telegram)
+	var c struct{ Photos, Videos, Files, Voice, Links int64 }
+	s.DB.Raw(`SELECT
+		count(*) FILTER (WHERE body LIKE '%![](%') AS photos,
+		count(*) FILTER (WHERE body LIKE '%@[video]%') AS videos,
+		count(*) FILTER (WHERE body LIKE '%@[file]%') AS files,
+		count(*) FILTER (WHERE body LIKE '%@[audio]%') AS voice,
+		count(*) FILTER (WHERE body LIKE '%http%' AND body NOT LIKE '%](%') AS links
+		FROM chat_messages WHERE chat_id = ? AND deleted = false`, id).Scan(&c)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"type": "group", "title": chat.Title, "photo": chat.PhotoURL,
 		"created_by": chat.CreatedBy, "members": mems,
+		"counts": map[string]any{
+			"photos": c.Photos, "videos": c.Videos, "files": c.Files, "voice": c.Voice, "links": c.Links,
+		},
 	})
+}
+
+// lastSeenOrNil — время последней активности или nil (для «был(а) …» в списке участников).
+func lastSeenOrNil(uid int) any {
+	if ls := chatH.lastSeenAt(uid); !ls.IsZero() {
+		return ls.UTC()
+	}
+	return nil
+}
+
+// POST /api/chats/{id}/members — добавить участников в группу (только создатель). body: {user_ids:[...]}
+func (s *Server) addGroupMembers(w http.ResponseWriter, r *http.Request) {
+	id, _ := strconv.Atoi(chi.URLParam(r, "id"))
+	u := currentUser(r)
+	var chat models.Chat
+	if err := s.DB.First(&chat, id).Error; err != nil || chat.Type != "group" {
+		httpErr(w, http.StatusNotFound, "Группа не найдена")
+		return
+	}
+	if chat.CreatedBy == nil || *chat.CreatedBy != u.ID {
+		httpErr(w, http.StatusForbidden, "Только создатель может добавлять участников")
+		return
+	}
+	var p struct {
+		UserIDs []int `json:"user_ids"`
+	}
+	if err := decodeJSON(r, &p); err != nil {
+		httpErr(w, http.StatusBadRequest, "Некорректный запрос")
+		return
+	}
+	for _, uid := range p.UserIDs {
+		var peer models.User
+		if err := s.DB.First(&peer, uid).Error; err != nil || !peer.IsActive || s.isPending(&peer) {
+			continue
+		}
+		var cnt int64
+		s.DB.Model(&models.ChatMember{}).Where("chat_id = ? AND user_id = ?", id, uid).Count(&cnt)
+		if cnt == 0 {
+			s.DB.Create(&models.ChatMember{ChatID: id, UserID: uid, Role: "member"})
+		}
+	}
+	s.DB.Model(&models.Chat{}).Where("id = ?", id).Update("updated_at", gorm.Expr("now()"))
+	s.broadcastChat(id, map[string]any{"type": "chat", "chat_id": id})
+	s.chatInfo(w, r) // вернуть обновлённую карточку
+}
+
+// DELETE /api/chats/{id}/members/{uid} — удалить участника (только создатель, не себя)
+func (s *Server) removeGroupMember(w http.ResponseWriter, r *http.Request) {
+	id, _ := strconv.Atoi(chi.URLParam(r, "id"))
+	uid, _ := strconv.Atoi(chi.URLParam(r, "uid"))
+	u := currentUser(r)
+	var chat models.Chat
+	if err := s.DB.First(&chat, id).Error; err != nil || chat.Type != "group" {
+		httpErr(w, http.StatusNotFound, "Группа не найдена")
+		return
+	}
+	if chat.CreatedBy == nil || *chat.CreatedBy != u.ID {
+		httpErr(w, http.StatusForbidden, "Только создатель может удалять участников")
+		return
+	}
+	if uid == u.ID {
+		httpErr(w, http.StatusBadRequest, "Нельзя удалить себя — используйте «Покинуть»")
+		return
+	}
+	s.DB.Where("chat_id = ? AND user_id = ?", id, uid).Delete(&models.ChatMember{})
+	s.DB.Model(&models.Chat{}).Where("id = ?", id).Update("updated_at", gorm.Expr("now()"))
+	s.broadcastChat(id, map[string]any{"type": "chat", "chat_id": id})
+	s.chatInfo(w, r)
 }
 
 // GET /api/users/{id}/card — карточка пользователя (клик по имени в группе). Возвращает ту же

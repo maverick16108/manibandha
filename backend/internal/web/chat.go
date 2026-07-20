@@ -688,15 +688,47 @@ func (s *Server) chatInfo(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// GET /api/users/{id}/card — карточка пользователя (для клика по имени в чате)
+// GET /api/users/{id}/card — карточка пользователя (клик по имени в группе). Возвращает ту же
+// «богатую» карточку, что и /chats/{id}/info для личного чата: счётчики медиа личного чата + общие
+// группы + id личного чата (чтобы открыть его медиа), иначе панель из группы была почти пустой.
 func (s *Server) userCardHandler(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.Atoi(chi.URLParam(r, "id"))
+	me := currentUser(r)
 	var u models.User
 	if err := s.DB.First(&u, id).Error; err != nil {
 		httpErr(w, http.StatusNotFound, "Пользователь не найден")
 		return
 	}
-	writeJSON(w, http.StatusOK, s.userCard(&u))
+	info := map[string]any{"type": "direct", "peer": s.userCard(&u)}
+	if id != me.ID {
+		// личный чат между мной и этим пользователем (если есть) — по нему считаем медиа
+		var directID int64
+		s.DB.Raw(`SELECT c.id FROM chats c
+			JOIN chat_members a ON a.chat_id = c.id AND a.user_id = ?
+			JOIN chat_members b ON b.chat_id = c.id AND b.user_id = ?
+			WHERE c.type = 'direct' LIMIT 1`, me.ID, id).Scan(&directID)
+		var c struct{ Photos, Videos, Files, Voice, Links int64 }
+		if directID > 0 {
+			s.DB.Raw(`SELECT
+				count(*) FILTER (WHERE body LIKE '%![](%') AS photos,
+				count(*) FILTER (WHERE body LIKE '%@[video]%') AS videos,
+				count(*) FILTER (WHERE body LIKE '%@[file]%') AS files,
+				count(*) FILTER (WHERE body LIKE '%@[audio]%') AS voice,
+				count(*) FILTER (WHERE body LIKE '%http%' AND body NOT LIKE '%](%') AS links
+				FROM chat_messages WHERE chat_id = ? AND deleted = false`, directID).Scan(&c)
+		}
+		var common int64
+		s.DB.Raw(`SELECT count(DISTINCT c.id) FROM chats c
+			JOIN chat_members a ON a.chat_id = c.id AND a.user_id = ?
+			JOIN chat_members b ON b.chat_id = c.id AND b.user_id = ?
+			WHERE c.type = 'group'`, me.ID, id).Scan(&common)
+		info["chat_id"] = directID
+		info["counts"] = map[string]any{
+			"photos": c.Photos, "videos": c.Videos, "files": c.Files,
+			"voice": c.Voice, "links": c.Links, "common_groups": common,
+		}
+	}
+	writeJSON(w, http.StatusOK, info)
 }
 
 // карточка пользователя (телефон/город/семейное — из анкеты ученика, если есть)

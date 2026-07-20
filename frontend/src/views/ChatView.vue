@@ -1595,7 +1595,8 @@ async function openUserInfo(uid) {
   infoData.value = infoCache[key] || null
   try {
     const { data } = await client.get(`/users/${uid}/card`)
-    infoData.value = { type: 'direct', peer: data }; infoCache[key] = infoData.value
+    // сервер возвращает ту же «богатую» карточку, что и /chats/{id}/info (peer + counts + chat_id)
+    infoData.value = data; infoCache[key] = data
     try { localStorage.setItem('chatInfoCache', JSON.stringify(infoCache)) } catch { /* ignore */ }
   } catch { /* оставляем кэш */ }
 }
@@ -1623,11 +1624,13 @@ const mediaBrowser = reactive({ open: false, type: null, title: '', items: [], l
 const MEDIA_TITLES = { photos: 'Фотографии', videos: 'Видео', files: 'Файлы', voice: 'Голосовые сообщения', links: 'Общие ссылки' }
 const MONTHS_RU = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь']
 async function openMediaBrowser(type) {
-  if (!type || !activeId.value) return
+  // из карточки участника группы медиа берём из ЛИЧНОГО чата с ним (infoData.chat_id), иначе — из текущего
+  const cid = infoData.value?.chat_id || activeId.value
+  if (!type || !cid) return
   const isGroups = type === 'groups'
   Object.assign(mediaBrowser, { open: true, type, title: isGroups ? 'Общие группы' : (MEDIA_TITLES[type] || 'Медиа'), items: [], q: '', loading: true })
   try {
-    const url = isGroups ? `/chats/${activeId.value}/common-groups` : `/chats/${activeId.value}/media`
+    const url = isGroups ? `/chats/${cid}/common-groups` : `/chats/${cid}/media`
     const { data } = await client.get(url, isGroups ? {} : { params: { type } })
     if (mediaBrowser.type === type) mediaBrowser.items = Array.isArray(data) ? data : []
   } catch { mediaBrowser.items = [] } finally { mediaBrowser.loading = false }

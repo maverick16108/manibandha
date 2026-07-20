@@ -23,14 +23,19 @@ export const GENDER_LABELS = {
 
 // Лёгкое превью загруженного изображения (генерится на бэке: /uploads/<hex>.thumb.webp).
 // Для старых загрузок превью может не быть — используйте @error-фолбэк на оригинал.
+// файлы, у которых нет .thumb.webp (напр. фото учеников) — запоминаем, чтобы БОЛЬШЕ не дёргать
+// несуществующий thumb (иначе каждый ре-рендер: thumb→404→битая иконка→подмена на оригинал = мерцание)
+const noThumb = new Set()
+export function markNoThumb(url) { if (url) noThumb.add(url) }
 export function thumbUrl(url) {
   if (!url || typeof url !== 'string') return url
+  if (noThumb.has(url)) return url
   const m = url.match(/^(\/uploads\/[^.]+)\.(jpe?g|png|webp|gif)$/i)
   return m ? `${m[1]}.thumb.webp` : url
 }
 
-// @error-обработчик для превью: если .thumb.webp нет (старая загрузка) — грузим оригинал
-export function imgFull(e, full) { const el = e.target; if (el.dataset.f || !full) return; el.dataset.f = '1'; el.src = full }
+// @error-обработчик для превью: если .thumb.webp нет (старая загрузка) — грузим оригинал (и помним это)
+export function imgFull(e, full) { const el = e.target; if (el.dataset.f || !full) return; el.dataset.f = '1'; el.src = full; markNoThumb(full) }
 
 export const MARITAL_LABELS = {
   single: 'Не женат / не замужем',

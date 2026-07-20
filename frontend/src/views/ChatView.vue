@@ -6,7 +6,7 @@ import client from '../api/client'
 import AppIcon from '../components/AppIcon.vue'
 import AudioBar from '../components/AudioBar.vue'
 import { renderMarkdown } from '../lib/markdown'
-import { thumbUrl } from '../lib/format'
+import { thumbUrl, imgFull } from '../lib/format'
 import { player, playAudio, seek } from '../composables/audioPlayer'
 import { openLightbox, closeLightbox, setLightboxActions } from '../composables/lightbox'
 import { showToast } from '../composables/toast'
@@ -348,8 +348,7 @@ async function listLeave() {
 }
 
 // ── реакции ──────────────────────────────────────────────────────────────
-// превью-аватар: если .thumb.webp не сгенерён (старая загрузка) — падаем на оригинал
-function imgFull(e, full) { const el = e.target; if (el.dataset.f || !full) return; el.dataset.f = '1'; el.src = full }
+// imgFull (@error → оригинал + запоминание отсутствия thumb) импортируется из lib/format
 function parseReactions(m) { try { return JSON.parse(m.reactions || '[]') } catch { return [] } }
 async function onChip(m, emoji) { if (m.id) await reactMessage(m.id, emoji) }
 
@@ -2573,13 +2572,13 @@ onBeforeUnmount(() => {
                 <img v-if="contactOf(m).avatar" :src="thumbUrl(contactOf(m).avatar)" @error="imgFull($event, contactOf(m).avatar)" class="photo-bw h-12 w-12 shrink-0 rounded-full object-cover" />
                 <span v-else class="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-sage-400 to-sage-600 text-base font-semibold text-white">{{ initials(contactOf(m).name) }}</span>
                 <div class="min-w-0 flex-1">
-                  <div class="truncate font-semibold leading-tight" :class="contactOf(m).id && 'hover:underline'">{{ contactOf(m).name }}</div>
+                  <div class="truncate font-semibold leading-tight">{{ contactOf(m).name }}</div>
                   <div v-if="contactOf(m).phone" class="truncate text-sm" :class="isMine(m) ? 'text-white/80' : 'text-ink-700/60'">{{ contactOf(m).phone }}</div>
                 </div>
               </div>
               <button v-if="contactOf(m).id && contactOf(m).id !== chatState.meId"
-                      class="mx-3 mb-2.5 block rounded-lg border py-2 text-center text-sm font-semibold uppercase tracking-wide transition"
-                      :class="isMine(m) ? 'border-white/55 text-white hover:bg-white/10' : 'border-saffron-400 text-saffron-700 hover:bg-saffron-500/10'"
+                      class="block w-full border-t py-2.5 text-center text-sm font-semibold uppercase tracking-wide transition"
+                      :class="isMine(m) ? 'border-white/25 text-white hover:bg-white/10' : 'border-parchment-200 text-saffron-700 hover:bg-saffron-500/10'"
                       @click.stop="openContactChat(contactOf(m))">Написать</button>
               <div class="flex items-center justify-end gap-1 px-3 pb-1.5 pt-1 text-[11px]" :class="isMine(m) ? 'text-white/70' : 'text-ink-700/40'">
                 <span>{{ fmtTime(m.created_at) }}</span>

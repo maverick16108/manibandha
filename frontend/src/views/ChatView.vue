@@ -2198,7 +2198,7 @@ onBeforeUnmount(() => {
         </header>
         <header v-else class="flex h-14 items-center gap-3 border-b border-parchment-200 px-4 transition-[padding]" :class="sideDockOpen && 'sm:!pr-[25rem]'">
           <button class="rounded-lg p-1.5 text-ink-700/60 hover:bg-parchment-100 sm:hidden" @click="backToList"><AppIcon name="chevron" :size="18" class="rotate-90" /></button>
-          <div class="flex min-w-0 flex-1 cursor-pointer items-center gap-3" @click="openInfo('popup')">
+          <div class="flex min-w-0 flex-1 cursor-pointer items-center gap-3" @click="(showInfo && infoMode === 'side') || openInfo('popup')">
             <img v-if="activeChat.avatar_url" :src="thumbUrl(activeChat.avatar_url)" @error="imgFull($event, activeChat.avatar_url)" class="photo-bw h-9 w-9 shrink-0 rounded-full object-cover" />
             <span v-else class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-semibold text-white"
                   :class="activeChat.type === 'group' ? 'bg-gradient-to-br from-sage-400 to-sage-600' : 'bg-gradient-to-br from-saffron-400 to-saffron-600'">{{ initials(activeChat.title) }}</span>

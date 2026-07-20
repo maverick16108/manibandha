@@ -52,12 +52,22 @@ export function startCall({ peerId, name, avatar, video }) {
   call.status = 'idle-outgoing'; call.open = true
   call.outgoing = true; call.connectedAt = 0; call.eventSent = false // для сообщения-события в чат
 }
-// событие о звонке в чат отправляет ВЫЗЫВАЮЩИЙ (чтобы не дублировать): @[call](ok|no|длит.сек)
-async function postCallEvent(peerId, answered, dur) {
+// событие о звонке в чат отправляет ВЫЗЫВАЮЩИЙ (чтобы не дублировать): @[call](status|длит.сек|видео)
+// status: ok — ответили; cancel — вызывающий отменил до ответа; out — отклонили/не ответили
+async function postCallEvent(peerId, status, dur, video) {
   try {
     const chatId = await startDirect(peerId)
-    if (chatId) await sendMessageTo(chatId, `@[call](${answered ? 'ok' : 'no'}|${dur})`)
+    if (chatId) await sendMessageTo(chatId, `@[call](${status}|${dur}|${video ? 1 : 0})`)
   } catch { /* ignore */ }
+}
+// reasonIfNo — статус, если НЕ ответили (cancel — я отменил; out — отклонили/не ответили)
+function postCallSummary(reasonIfNo) {
+  if (!call.outgoing || !call.peerId || call.eventSent) return
+  call.eventSent = true
+  const answered = !!call.connectedAt
+  const status = answered ? 'ok' : reasonIfNo
+  const dur = answered ? Math.max(1, Math.round((Date.now() - call.connectedAt) / 1000)) : 0
+  postCallEvent(call.peerId, status, dur, !!call.video)
 }
 function setupPc(peerId, cfg, polite) {
   politePeer = !!polite; makingOffer = false
@@ -122,13 +132,7 @@ export function rejectIncoming() {
 export function endCall() {
   const to = call.peerId || incoming.from
   if (to && (call.open || incoming.open)) sendCallSignal({ to, subtype: 'end' })
-  // сообщение-событие о звонке в чат (только вызывающий, один раз)
-  if (call.outgoing && call.peerId && !call.eventSent) {
-    call.eventSent = true
-    const answered = !!call.connectedAt
-    const dur = answered ? Math.max(1, Math.round((Date.now() - call.connectedAt) / 1000)) : 0
-    postCallEvent(call.peerId, answered, dur)
-  }
+  postCallSummary('cancel') // я завершил: если не ответили — «Отменённый»
   cleanupCall()
 }
 function cleanupCall() {
@@ -188,6 +192,7 @@ async function handleCallSignal(evt) {
   } else if (sub === 'end' || sub === 'reject' || sub === 'busy') {
     if (sub === 'busy') showToast('Абонент занят')
     else if (sub === 'reject') showToast('Звонок отклонён')
+    postCallSummary('out') // собеседник завершил/отклонил: если не ответили — «Исходящий» (недозвон)
     cleanupCall()
   }
 }

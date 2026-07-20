@@ -1830,12 +1830,19 @@ function shareContact(peerArg) {
   const marker = `@[contact](${p.id || ''}|${enc(p.name)}|${enc(p.phone)}|${enc(p.avatar)})`
   closeInfo(); closeProfilePopup(); openForward([marker])
 }
-// событие о звонке: @[call](ok|no|длительность_сек). Направление берём из isMine (кто позвонил)
-const CALL_RE = /@\[call\]\((ok|no)\|(\d+)\)/
+// событие о звонке: @[call](status|длит_сек|видео). status: ok — ответили; cancel — отменён; out — не отвечен.
+// Направление берём из isMine (кто позвонил).
+const CALL_RE = /@\[call\]\((ok|out|cancel)\|(\d+)\|(\d)\)/
 function isCallMsg(m) { return CALL_RE.test(m?.body || '') }
-function callOf(m) { const mm = (m.body || '').match(CALL_RE); return mm ? { answered: mm[1] === 'ok', dur: Number(mm[2]) || 0 } : null }
-function callMissed(m) { const c = callOf(m); return !!c && !isMine(m) && !c.answered } // пропущенный — у принимающей стороны
-function callTitle(m) { const c = callOf(m); if (!c) return ''; if (isMine(m)) return 'Исходящий звонок'; return c.answered ? 'Входящий звонок' : 'Пропущенный звонок' }
+function callOf(m) { const mm = (m.body || '').match(CALL_RE); return mm ? { status: mm[1], dur: Number(mm[2]) || 0, video: mm[3] === '1' } : null }
+function callTitle(m) {
+  const c = callOf(m); if (!c) return ''
+  const noun = c.video ? 'видеозвонок' : 'звонок'
+  const pre = isMine(m) ? (c.status === 'cancel' ? 'Отменённый' : 'Исходящий') : (c.status === 'ok' ? 'Входящий' : 'Пропущенный')
+  return `${pre} ${noun}`
+}
+function callArrow(m) { const c = callOf(m); return (c && c.status === 'ok' && isMine(m)) ? '↗' : '↙' }
+function callAnswered(m) { const c = callOf(m); return !!c && c.status === 'ok' }
 function fmtCallDur(s) { if (!s || s <= 0) return ''; const m = Math.floor(s / 60), sec = s % 60; return m > 0 ? `${m} мин. ${sec} сек.` : `${sec} сек.` }
 const CONTACT_RE = /@\[contact\]\(([^|)]*)\|([^|)]*)\|([^|)]*)\|([^)]*)\)/
 function isContact(m) { return CONTACT_RE.test(m?.body || '') }
@@ -2622,17 +2629,17 @@ onBeforeUnmount(() => {
             </div>
 
             <!-- событие звонка -->
-            <button v-else-if="isCallMsg(m)" class="flex items-center gap-3 rounded-2xl px-3.5 py-2.5 text-left shadow-sm transition"
+            <button v-else-if="isCallMsg(m)" class="flex items-center gap-4 rounded-2xl px-3.5 py-2.5 text-left shadow-sm transition"
                     :class="isMine(m) ? 'bg-saffron-500 text-white hover:bg-saffron-600' : 'bg-white text-ink-900 ring-1 ring-parchment-200 hover:bg-parchment-50'"
-                    title="Позвонить" @click.stop="activeChat.type === 'direct' && startCall(false)" @contextmenu="onContext($event, m)">
+                    :title="callOf(m).video ? 'Видеозвонок' : 'Позвонить'" @click.stop="activeChat.type === 'direct' && startCall(callOf(m).video)" @contextmenu="onContext($event, m)">
               <div class="min-w-0">
-                <div class="font-semibold leading-tight" :class="callMissed(m) && 'text-red-500'">{{ callTitle(m) }}</div>
+                <div class="font-semibold leading-tight">{{ callTitle(m) }}</div>
                 <div class="mt-0.5 flex items-center gap-1.5 text-sm" :class="isMine(m) ? 'text-white/75' : 'text-ink-700/55'">
-                  <span class="leading-none">{{ isMine(m) ? '↗' : '↙' }}</span>
-                  <span>{{ fmtTime(m.created_at) }}<template v-if="callOf(m).dur">, {{ fmtCallDur(callOf(m).dur) }}</template></span>
+                  <span class="text-base font-bold leading-none" :class="!callAnswered(m) && 'text-red-500'">{{ callArrow(m) }}</span>
+                  <span>{{ fmtTime(m.created_at) }}<template v-if="callAnswered(m) && callOf(m).dur">, {{ fmtCallDur(callOf(m).dur) }}</template></span>
                 </div>
               </div>
-              <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full" :class="callMissed(m) ? 'bg-red-500/15 text-red-500' : (isMine(m) ? 'bg-white/20 text-white' : 'bg-saffron-500/15 text-saffron-600')"><AppIcon name="phone" :size="20" /></span>
+              <AppIcon :name="callOf(m).video ? 'video' : 'phone'" :size="24" class="shrink-0" :class="isMine(m) ? 'text-white' : 'text-saffron-500'" />
             </button>
 
             <!-- карточка контакта -->

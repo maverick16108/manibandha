@@ -1725,12 +1725,33 @@ const gPhoto = ref('')
 const gUploading = ref(false)
 const groupPhotoInput = ref(null)
 const gTitleInput = ref(null)
+const gIsPublic = ref(false)
+const gHideHistory = ref(false)
+const gInviteToken = ref('')
+const gInviteBusy = ref(false)
+const gInviteLink = computed(() => gInviteToken.value ? `${location.origin}/app/join/${gInviteToken.value}` : '')
 function openGroupEdit() {
   if (!isGroup.value) return
   gTitle.value = activeChat.value.title || ''
   gPhoto.value = activeChat.value.avatar_url || ''
+  gIsPublic.value = !!infoData.value?.is_public
+  gHideHistory.value = !!infoData.value?.hide_history
+  gInviteToken.value = infoData.value?.invite_token || ''
   showGroupEdit.value = true
   nextTick(() => gTitleInput.value?.focus())
+}
+async function ensureInviteLink() {
+  if (gInviteToken.value || gInviteBusy.value) return
+  gInviteBusy.value = true
+  try { const { data } = await client.get(`/chats/${activeId.value}/invite`); gInviteToken.value = data.token || '' } catch { showToast('Не удалось создать ссылку') } finally { gInviteBusy.value = false }
+}
+async function resetInviteLink() {
+  gInviteBusy.value = true
+  try { const { data } = await client.post(`/chats/${activeId.value}/invite/reset`); gInviteToken.value = data.token || '' } catch { showToast('Не удалось') } finally { gInviteBusy.value = false }
+}
+async function copyInviteLink() {
+  if (!gInviteLink.value) return
+  try { await navigator.clipboard.writeText(gInviteLink.value); showToast('Ссылка скопирована') } catch { showToast('Не удалось скопировать') }
 }
 async function onGroupPhoto(ev) {
   const f = (ev.target.files || [])[0]
@@ -1746,7 +1767,8 @@ async function onGroupPhoto(ev) {
 async function saveGroup() {
   const title = gTitle.value.trim()
   if (!title) return
-  await updateChat(activeId.value, { title, photo_url: gPhoto.value || null })
+  await updateChat(activeId.value, { title, photo_url: gPhoto.value || null, is_public: gIsPublic.value, hide_history: gHideHistory.value })
+  if (infoData.value) { infoData.value.is_public = gIsPublic.value; infoData.value.hide_history = gHideHistory.value }
   showGroupEdit.value = false
 }
 
@@ -2921,6 +2943,29 @@ onBeforeUnmount(() => {
           <div>
             <label class="label">Название</label>
             <input ref="gTitleInput" v-model="gTitle" class="input" placeholder="Название группы" />
+          </div>
+          <!-- Тип группы -->
+          <div>
+            <label class="label">Тип группы</label>
+            <div class="flex gap-2">
+              <button type="button" class="flex-1 rounded-lg border px-3 py-2 text-sm transition" :class="!gIsPublic ? 'border-saffron-500 bg-saffron-50 font-semibold text-saffron-700' : 'border-parchment-300 text-ink-700 hover:bg-parchment-100'" @click="gIsPublic = false">Частная</button>
+              <button type="button" class="flex-1 rounded-lg border px-3 py-2 text-sm transition" :class="gIsPublic ? 'border-saffron-500 bg-saffron-50 font-semibold text-saffron-700' : 'border-parchment-300 text-ink-700 hover:bg-parchment-100'" @click="gIsPublic = true">Публичная</button>
+            </div>
+            <p class="mt-1 text-xs text-ink-700/50">Присоединиться в группу можно по пригласительной ссылке.</p>
+          </div>
+          <!-- История для новых участников -->
+          <label class="flex items-center gap-2 text-sm text-ink-800"><input type="checkbox" v-model="gHideHistory" class="h-4 w-4" /> Скрыть историю чата для новых участников</label>
+          <!-- Пригласительная ссылка -->
+          <div>
+            <label class="label">Пригласительная ссылка</label>
+            <div v-if="gInviteLink" class="flex items-center gap-2">
+              <input :value="gInviteLink" readonly class="input flex-1 text-sm text-ink-700" @focus="$event.target.select()" />
+              <button class="btn-outline shrink-0 text-sm" @click="copyInviteLink"><AppIcon name="copy" :size="15" /> Копировать</button>
+            </div>
+            <div v-else class="flex items-center gap-2">
+              <button class="btn-outline text-sm" :disabled="gInviteBusy" @click="ensureInviteLink">{{ gInviteBusy ? '…' : 'Создать ссылку' }}</button>
+            </div>
+            <button v-if="gInviteLink" class="mt-1.5 text-xs text-saffron-600 hover:underline" :disabled="gInviteBusy" @click="resetInviteLink">Сбросить ссылку (старая перестанет работать)</button>
           </div>
         </div>
         <div class="flex justify-end gap-2 border-t border-parchment-200 p-3">

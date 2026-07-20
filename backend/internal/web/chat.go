@@ -280,6 +280,9 @@ func (s *Server) getUpdates(w http.ResponseWriter, r *http.Request) {
 	var rows []models.ChatMessage
 	s.DB.Preload("Author").Preload("ReplyTo").Preload("Reactions").Preload("Reactions.User").
 		Where("chat_id IN ? AND seq > ?", s.myChatIDs(u.ID), since).
+		// скрытая история: не отдаём в догоне сообщения до вступления участника
+		Where(`NOT EXISTS (SELECT 1 FROM chats c JOIN chat_members cm ON cm.chat_id = c.id AND cm.user_id = ?
+			WHERE c.id = chat_messages.chat_id AND c.hide_history AND chat_messages.seq <= cm.joined_seq)`, u.ID).
 		Order("seq ASC").Limit(limit + 1).Find(&rows)
 	hasMore := len(rows) > limit
 	if hasMore {
@@ -399,11 +402,19 @@ func (s *Server) updateChatHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var p struct {
-		Title    *string `json:"title"`
-		PhotoURL *string `json:"photo_url"`
+		Title       *string `json:"title"`
+		PhotoURL    *string `json:"photo_url"`
+		IsPublic    *bool   `json:"is_public"`
+		HideHistory *bool   `json:"hide_history"`
 	}
 	if err := decodeJSON(r, &p); err != nil {
 		httpErr(w, http.StatusBadRequest, "Некорректный запрос")
+		return
+	}
+	// тип/история — только создатель
+	isOwner := chat.CreatedBy != nil && *chat.CreatedBy == u.ID
+	if (p.IsPublic != nil || p.HideHistory != nil) && !isOwner {
+		httpErr(w, http.StatusForbidden, "Эти настройки может менять только создатель")
 		return
 	}
 	upd := map[string]any{}
@@ -421,6 +432,12 @@ func (s *Server) updateChatHandler(w http.ResponseWriter, r *http.Request) {
 		} else {
 			upd["photo_url"] = *p.PhotoURL
 		}
+	}
+	if p.IsPublic != nil {
+		upd["is_public"] = *p.IsPublic
+	}
+	if p.HideHistory != nil {
+		upd["hide_history"] = *p.HideHistory
 	}
 	if len(upd) > 0 {
 		s.DB.Model(&models.Chat{}).Where("id = ?", id).Updates(upd)
@@ -445,6 +462,9 @@ func (s *Server) listMessages(w http.ResponseWriter, r *http.Request) {
 	}
 	q := s.DB.Preload("Author").Preload("ReplyTo").Preload("Reactions").Preload("Reactions.User").
 		Where("chat_id = ?", id)
+	if js := s.joinedSeq(id, u.ID); js > 0 {
+		q = q.Where("seq > ?", js) // скрытая история — не отдаём сообщения до вступления
+	}
 	if v := r.URL.Query().Get("before_seq"); v != "" {
 		q = q.Where("seq < ?", v)
 	}
@@ -695,6 +715,7 @@ func (s *Server) chatInfo(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"type": "group", "title": chat.Title, "photo": chat.PhotoURL,
 		"created_by": chat.CreatedBy, "members": mems,
+		"is_public": chat.IsPublic, "hide_history": chat.HideHistory, "invite_token": chat.InviteToken,
 		"counts": map[string]any{
 			"photos": c.Photos, "videos": c.Videos, "files": c.Files, "voice": c.Voice, "links": c.Links,
 		},
@@ -767,6 +788,90 @@ func (s *Server) removeGroupMember(w http.ResponseWriter, r *http.Request) {
 	s.DB.Model(&models.Chat{}).Where("id = ?", id).Update("updated_at", gorm.Expr("now()"))
 	s.broadcastChat(id, map[string]any{"type": "chat", "chat_id": id})
 	s.chatInfo(w, r)
+}
+
+// requireGroupOwner — вернуть группу, если текущий пользователь её создатель.
+func (s *Server) requireGroupOwner(w http.ResponseWriter, r *http.Request, id int) *models.Chat {
+	u := currentUser(r)
+	var chat models.Chat
+	if err := s.DB.First(&chat, id).Error; err != nil || chat.Type != "group" {
+		httpErr(w, http.StatusNotFound, "Группа не найдена")
+		return nil
+	}
+	if chat.CreatedBy == nil || *chat.CreatedBy != u.ID {
+		httpErr(w, http.StatusForbidden, "Только создатель")
+		return nil
+	}
+	return &chat
+}
+
+func newInviteToken() string { return randHex() + randHex() }
+
+// GET /api/chats/{id}/invite — пригласительная ссылка (создаёт токен, если нет). Только создатель.
+func (s *Server) getInvite(w http.ResponseWriter, r *http.Request) {
+	id, _ := strconv.Atoi(chi.URLParam(r, "id"))
+	chat := s.requireGroupOwner(w, r, id)
+	if chat == nil {
+		return
+	}
+	if chat.InviteToken == nil || *chat.InviteToken == "" {
+		tok := newInviteToken()
+		s.DB.Model(&models.Chat{}).Where("id = ?", id).Update("invite_token", tok)
+		chat.InviteToken = &tok
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"token": *chat.InviteToken})
+}
+
+// POST /api/chats/{id}/invite/reset — перегенерировать токен (старая ссылка перестаёт работать).
+func (s *Server) resetInvite(w http.ResponseWriter, r *http.Request) {
+	id, _ := strconv.Atoi(chi.URLParam(r, "id"))
+	chat := s.requireGroupOwner(w, r, id)
+	if chat == nil {
+		return
+	}
+	tok := newInviteToken()
+	s.DB.Model(&models.Chat{}).Where("id = ?", id).Update("invite_token", tok)
+	writeJSON(w, http.StatusOK, map[string]any{"token": tok})
+}
+
+// POST /api/chats/join/{token} — вступить в группу по пригласительной ссылке.
+func (s *Server) joinByInvite(w http.ResponseWriter, r *http.Request) {
+	token := chi.URLParam(r, "token")
+	u := currentUser(r)
+	var chat models.Chat
+	if err := s.DB.Where("invite_token = ? AND type = 'group'", token).First(&chat).Error; err != nil {
+		httpErr(w, http.StatusNotFound, "Ссылка недействительна")
+		return
+	}
+	var cnt int64
+	s.DB.Model(&models.ChatMember{}).Where("chat_id = ? AND user_id = ?", chat.ID, u.ID).Count(&cnt)
+	if cnt == 0 {
+		var maxSeq int64
+		s.DB.Raw(`SELECT COALESCE(MAX(seq),0) FROM chat_messages WHERE chat_id = ?`, chat.ID).Scan(&maxSeq)
+		js := int64(0)
+		if chat.HideHistory {
+			js = maxSeq // скрытая история — видны только сообщения после вступления
+		}
+		s.DB.Create(&models.ChatMember{ChatID: chat.ID, UserID: u.ID, Role: "member", JoinedSeq: js, LastReadSeq: js})
+		s.DB.Model(&models.Chat{}).Where("id = ?", chat.ID).Update("updated_at", gorm.Expr("now()"))
+		s.broadcastChat(chat.ID, map[string]any{"type": "chat", "chat_id": chat.ID})
+	}
+	writeJSON(w, http.StatusOK, s.chatOut(s.loadChat(chat.ID), u.ID))
+}
+
+// joinedSeq — с какого seq участнику видны сообщения чата (для скрытой истории). 0 = всё.
+func (s *Server) joinedSeq(chatID, userID int) int64 {
+	var m struct {
+		JoinedSeq   int64
+		HideHistory bool
+	}
+	s.DB.Raw(`SELECT cm.joined_seq, c.hide_history FROM chat_members cm
+		JOIN chats c ON c.id = cm.chat_id
+		WHERE cm.chat_id = ? AND cm.user_id = ?`, chatID, userID).Scan(&m)
+	if m.HideHistory {
+		return m.JoinedSeq
+	}
+	return 0
 }
 
 // GET /api/users/{id}/card — карточка пользователя (клик по имени в группе). Возвращает ту же

@@ -29,6 +29,7 @@ const routes = [
       { path: 'threads/:id', name: 'thread', component: () => import('../views/ThreadView.vue') },
       { path: 'chat', name: 'chat-home', component: () => import('../views/ChatView.vue') },
       { path: 'chat/:id', name: 'chat', component: () => import('../views/ChatView.vue') },
+      { path: 'join/:token', name: 'join', component: () => import('../views/JoinView.vue') },
       { path: 'forum', name: 'forum', component: () => import('../views/ForumView.vue') , meta: { keepAlive: true } },
       { path: 'forum/new', name: 'forum-new', component: () => import('../views/ForumNewView.vue') },
       { path: 'forum/:id', name: 'forum-topic', component: () => import('../views/ForumTopicView.vue') },

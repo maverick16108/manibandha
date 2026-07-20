@@ -471,6 +471,9 @@ type Chat struct {
 	CreatedAt       time.Time `gorm:"column:created_at" json:"created_at"`
 	UpdatedAt       time.Time `gorm:"column:updated_at" json:"updated_at"`
 	PinnedMessageID *int64    `gorm:"column:pinned_message_id" json:"pinned_message_id"`
+	InviteToken     *string   `gorm:"column:invite_token" json:"invite_token"`
+	IsPublic        bool      `gorm:"column:is_public" json:"is_public"`
+	HideHistory     bool      `gorm:"column:hide_history" json:"hide_history"`
 
 	Members []ChatMember `gorm:"foreignKey:ChatID" json:"-"`
 }
@@ -485,6 +488,7 @@ type ChatMember struct {
 	Pinned      bool      `gorm:"column:pinned" json:"pinned"`
 	PinOrder    int       `gorm:"column:pin_order" json:"pin_order"`
 	LastReadSeq int64     `gorm:"column:last_read_seq" json:"last_read_seq"`
+	JoinedSeq   int64     `gorm:"column:joined_seq" json:"joined_seq"`
 	JoinedAt    time.Time `gorm:"column:joined_at" json:"-"`
 
 	User *User `gorm:"foreignKey:UserID" json:"-"`

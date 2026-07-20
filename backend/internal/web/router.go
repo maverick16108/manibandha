@@ -221,6 +221,9 @@ func (s *Server) Router() http.Handler {
 		pr.Delete("/chats/{id}/leave", s.leaveChat)
 		pr.Post("/chats/{id}/members", s.addGroupMembers)
 		pr.Delete("/chats/{id}/members/{uid}", s.removeGroupMember)
+		pr.Get("/chats/{id}/invite", s.getInvite)
+		pr.Post("/chats/{id}/invite/reset", s.resetInvite)
+		pr.Post("/chats/join/{token}", s.joinByInvite)
 		pr.Post("/chats/{id}/messages/{mid}/react", s.reactChatMessage)
 		pr.Get("/link-preview", s.linkPreview) // OG-превью ссылок в сообщениях
 		pr.Get("/chats/search", s.searchAllChats)

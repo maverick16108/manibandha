@@ -24,9 +24,18 @@ export const GENDER_LABELS = {
 // Лёгкое превью загруженного изображения (генерится на бэке: /uploads/<hex>.thumb.webp).
 // Для старых загрузок превью может не быть — используйте @error-фолбэк на оригинал.
 // файлы, у которых нет .thumb.webp (напр. фото учеников) — запоминаем, чтобы БОЛЬШЕ не дёргать
-// несуществующий thumb (иначе каждый ре-рендер: thumb→404→битая иконка→подмена на оригинал = мерцание)
-const noThumb = new Set()
-export function markNoThumb(url) { if (url) noThumb.add(url) }
+// несуществующий thumb (иначе каждый ре-рендер: thumb→404→битая иконка→подмена на оригинал = мерцание).
+// ПЕРСИСТИМ в localStorage: после перезагрузки страницы сразу берём оригинал (из HTTP-кэша браузера),
+// без повторного 404 на thumb — аватары появляются мгновенно, а не «через секунду».
+const NO_THUMB_KEY = 'noThumbUrls'
+let noThumb
+try { noThumb = new Set(JSON.parse(localStorage.getItem(NO_THUMB_KEY) || '[]')) } catch { noThumb = new Set() }
+let noThumbSaveT = 0
+export function markNoThumb(url) {
+  if (!url || noThumb.has(url)) return
+  noThumb.add(url)
+  if (!noThumbSaveT) noThumbSaveT = setTimeout(() => { noThumbSaveT = 0; try { localStorage.setItem(NO_THUMB_KEY, JSON.stringify([...noThumb])) } catch { /* ignore */ } }, 500)
+}
 export function thumbUrl(url) {
   if (!url || typeof url !== 'string') return url
   if (noThumb.has(url)) return url

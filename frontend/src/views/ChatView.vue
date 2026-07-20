@@ -1631,6 +1631,9 @@ watch(activeId, (id) => {
 })
 // ── управление участниками группы (только создатель) ───────────────────────
 const infoMenu = ref(false) // ⋮-меню в шапке инфо-панели (создатель): изменить / добавить участников
+// для ⋮-меню в ШАПКЕ ЧАТА (работает без открытой панели) — тип/владелец берём из объекта чата
+const isActiveGroup = computed(() => activeChat.value?.type === 'group')
+const isActiveOwner = computed(() => isActiveGroup.value && activeChat.value?.created_by === chatState.meId)
 const isInfoGroup = computed(() => infoData.value?.type === 'group')
 const isInfoOwner = computed(() => isInfoGroup.value && infoData.value?.created_by === chatState.meId)
 const infoMembers = computed(() => infoData.value?.members || [])
@@ -1648,7 +1651,12 @@ function memberStatusText(m) {
 const addMembersOpen = ref(false)
 const addMembersSel = ref([])
 const addMembersSearch = ref('')
-async function openAddMembers() { addMembersSel.value = []; addMembersSearch.value = ''; addMembersOpen.value = true; await loadContacts() }
+// подгружаем настройки группы, если панель не открыта (⋮-меню теперь в шапке чата)
+async function ensureInfoLoaded() {
+  const id = activeId.value; if (!id) return
+  try { const { data } = await client.get(`/chats/${id}/info`); infoData.value = data; infoCache[id] = data } catch { /* оставляем как есть */ }
+}
+async function openAddMembers() { addMembersSel.value = []; addMembersSearch.value = ''; addMembersOpen.value = true; await ensureInfoLoaded(); await loadContacts() }
 const addMembersCandidates = computed(() => {
   const have = new Set(infoMembers.value.map((m) => m.id))
   const q = addMembersSearch.value.trim().toLowerCase()
@@ -1665,7 +1673,7 @@ async function kickMember(uid) {
   try { const { data } = await client.delete(`/chats/${activeId.value}/members/${uid}`); infoData.value = data; infoCache[activeId.value] = data } catch { showToast('Не удалось удалить') }
 }
 async function leaveGroupConfirm() {
-  const owner = isInfoOwner.value
+  const owner = isActiveOwner.value
   const msg = owner ? 'Удалить группу для всех участников? Это действие необратимо.' : 'Покинуть группу?'
   const confirmText = owner ? 'Покинуть и удалить' : 'Покинуть'
   if (!activeId.value || !(await confirmDialog({ message: msg, confirmText, danger: true }))) return
@@ -1799,8 +1807,9 @@ const gHideHistory = ref(false)
 const gInviteToken = ref('')
 const gInviteBusy = ref(false)
 const gInviteLink = computed(() => gInviteToken.value ? `${location.origin}/app/join/${gInviteToken.value}` : '')
-function openGroupEdit() {
-  if (!isGroup.value) return
+async function openGroupEdit() {
+  if (!isActiveGroup.value) return
+  await ensureInfoLoaded() // панель могла быть закрыта — берём свежие настройки (public/hide/invite)
   gTitle.value = activeChat.value.title || ''
   gPhoto.value = activeChat.value.avatar_url || ''
   gIsPublic.value = !!infoData.value?.is_public
@@ -2183,6 +2192,23 @@ onBeforeUnmount(() => {
             <button class="rounded-full p-2 transition hover:bg-parchment-100 hover:text-saffron-600" :class="showInfo && infoMode === 'side' ? 'text-saffron-600' : 'text-ink-700/55'" title="Боковая панель" @click.stop="showInfo && infoMode === 'side' ? closeInfo() : openInfo('side')">
               <AppIcon name="panel-right" :size="24" />
             </button>
+            <!-- ⋮-меню группы (крайнее справа) -->
+            <div v-if="isActiveGroup" class="relative">
+              <button class="rounded-full p-2 text-ink-700/55 transition hover:bg-parchment-100 hover:text-saffron-600" title="Ещё" @click.stop="infoMenu = !infoMenu">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="12" cy="19" r="2" /></svg>
+              </button>
+              <template v-if="infoMenu">
+                <div class="fixed inset-0 z-10" @click="infoMenu = false"></div>
+                <div class="absolute right-0 top-full z-20 mt-1 w-56 overflow-hidden rounded-xl bg-white py-1 shadow-lg ring-1 ring-parchment-200">
+                  <template v-if="isActiveOwner">
+                    <button class="flex w-full items-center gap-3 px-4 py-2.5 text-left text-[15px] text-ink-700 hover:bg-parchment-50" @click="infoMenu = false; openGroupEdit()"><AppIcon name="edit" :size="18" /> Изменить</button>
+                    <button class="flex w-full items-center gap-3 px-4 py-2.5 text-left text-[15px] text-ink-700 hover:bg-parchment-50" @click="infoMenu = false; openAddMembers()"><AppIcon name="plus" :size="18" /> Добавить участников</button>
+                    <div class="my-1 h-px bg-parchment-100"></div>
+                  </template>
+                  <button class="flex w-full items-center gap-3 px-4 py-2.5 text-left text-[15px] text-red-600 hover:bg-red-50" @click="infoMenu = false; leaveGroupConfirm()"><AppIcon name="trash" :size="18" /> {{ isActiveOwner ? 'Покинуть и удалить' : 'Покинуть' }}</button>
+                </div>
+              </template>
+            </div>
           </div>
         </header>
 
@@ -2197,22 +2223,6 @@ onBeforeUnmount(() => {
                    : 'relative m-auto flex max-h-[92%] w-full max-w-md flex-col overflow-hidden rounded-2xl bg-white shadow-2xl'">
               <header class="flex h-14 shrink-0 items-center gap-2 border-b border-parchment-200 px-4">
                 <div class="flex-1 truncate font-medium text-ink-900">{{ isInfoGroup ? 'Информация о группе' : 'Информация' }}</div>
-                <div v-if="isInfoGroup" class="relative">
-                  <button class="rounded-lg p-1.5 text-ink-700/60 hover:bg-parchment-100" title="Ещё" @click.stop="infoMenu = !infoMenu">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="12" cy="19" r="2" /></svg>
-                  </button>
-                  <template v-if="infoMenu">
-                    <div class="fixed inset-0 z-10" @click="infoMenu = false"></div>
-                    <div class="absolute right-0 top-full z-20 mt-1 w-56 overflow-hidden rounded-xl bg-white py-1 shadow-lg ring-1 ring-parchment-200">
-                      <template v-if="isInfoOwner">
-                        <button class="flex w-full items-center gap-3 px-4 py-2.5 text-left text-[15px] text-ink-700 hover:bg-parchment-50" @click="infoMenu = false; openGroupEdit()"><AppIcon name="edit" :size="18" /> Изменить</button>
-                        <button class="flex w-full items-center gap-3 px-4 py-2.5 text-left text-[15px] text-ink-700 hover:bg-parchment-50" @click="infoMenu = false; openAddMembers()"><AppIcon name="plus" :size="18" /> Добавить участников</button>
-                        <div class="my-1 h-px bg-parchment-100"></div>
-                      </template>
-                      <button class="flex w-full items-center gap-3 px-4 py-2.5 text-left text-[15px] text-red-600 hover:bg-red-50" @click="infoMenu = false; leaveGroupConfirm()"><AppIcon name="trash" :size="18" /> {{ isInfoOwner ? 'Покинуть и удалить' : 'Покинуть' }}</button>
-                    </div>
-                  </template>
-                </div>
                 <button class="rounded-lg p-1.5 text-ink-700/60 hover:bg-parchment-100" title="Закрыть" @click="closeInfo"><AppIcon name="close" :size="24" /></button>
               </header>
               <div class="flex-1 overflow-y-auto">
@@ -2698,7 +2708,7 @@ onBeforeUnmount(() => {
         </transition>
 
         <!-- Композер -->
-        <div class="border-t border-parchment-200 p-3" :class="sideDockOpen && 'sm:!pr-96'">
+        <div class="border-t border-parchment-200 p-3" :class="sideDockOpen && 'sm:!pr-[25rem]'">
           <div v-if="replyTo" class="mb-2 flex items-center gap-2 rounded-lg bg-parchment-100 px-3 py-1.5 text-sm">
             <AppIcon name="reply" :size="19" class="shrink-0 text-saffron-600" />
             <img v-if="replyTo.photo" :src="thumbUrl(replyTo.photo)" class="h-8 w-8 shrink-0 rounded object-cover" />

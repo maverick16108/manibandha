@@ -71,13 +71,14 @@ function updateFloatingDate() {
     const seps = el.querySelectorAll('[data-daysep]')
     for (let i = 0; i < seps.length; i++) {
       const s = seps[i]
-      const stuck = s.getBoundingClientRect().top <= stickyTop + 1 // разделитель прилип к верху
+      const st = s.getBoundingClientRect().top
       let o = 1
-      // прилипший разделитель ГАСНЕТ по мере приближения следующего дня к линии прилипания
-      // (sticky-собратья стоят на одном top — «Вчера» иначе просто лежит под «Сегодня»)
-      if (stuck && seps[i + 1]) {
+      // разделитель, прилипший к верху (st около линии прилипания), ГАСНЕТ по мере приближения
+      // следующего дня к этой линии — sticky-собратья стоят на одном top, иначе «18 июля» просто
+      // лежит под «Вчера». Допуск 14px — на суб-пиксели/паддинг, иначе фейд не срабатывает.
+      if (st <= stickyTop + 14 && seps[i + 1]) {
         const nt = seps[i + 1].getBoundingClientRect().top
-        o = Math.max(0, Math.min(1, (nt - stickyTop) / 40))
+        o = Math.max(0, Math.min(1, (nt - stickyTop) / 42))
       }
       s.style.opacity = o >= 0.999 ? '' : String(o)
     }

@@ -997,7 +997,8 @@ function onImgLoad(e, u) {
 function convWidth() {
   const nav = winW.value >= 640 ? 72 : 0
   const list = winW.value >= 640 ? listWidth.value : 0
-  return Math.max(240, winW.value - nav - list)
+  const dock = (winW.value >= 640 && sideDockOpen.value) ? 384 : 0 // боковая инфо-панель (sm:w-96) отжимает ленту
+  return Math.max(240, winW.value - nav - list - dock)
 }
 // Вписываем медиа в прямоугольник (maxW×maxH), сохраняя пропорции. Возвращаем ЯВНЫЕ px, чтобы бокс
 // не зависел от факта загрузки (иначе пузырь схлопывается по intrinsic-размеру пустого <img>/<video>).
@@ -1535,7 +1536,12 @@ async function createGroup() {
 // ── настройки группы (название + фото) ─────────────────────────────────
 // панель информации о собеседнике (личный чат)
 const showInfo = ref(false)
+// режим инфо-панели: 'side' — из шапки чата, доком справа без подложки (чат остаётся доступен,
+// лента отодвигается вправо-паддингом); 'popup' — по клику на аватар/имя, модалка по центру.
+const infoMode = ref('side')
 const infoData = ref(null)
+// панель сбоку открыта (инфо или медиа-обзор в режиме side) — тогда лента/композер получают правый отступ
+const sideDockOpen = computed(() => infoMode.value === 'side' && (showInfo.value || mediaBrowser.open))
 let infoCache = {}
 try { infoCache = JSON.parse(localStorage.getItem('chatInfoCache') || '{}') || {} } catch { infoCache = {} }
 // статус собеседника в личном чате (в сети / был(а) …)
@@ -1578,6 +1584,7 @@ async function startCall(withVideo) {
 }
 async function openInfo() {
   const id = activeId.value
+  infoMode.value = 'side' // из шапки — панель сбоку, чат остаётся доступен
   showInfo.value = true
   infoData.value = infoCache[id] || null // мгновенно из кэша, если открывали раньше
   try {
@@ -1630,6 +1637,7 @@ async function leaveGroupConfirm() {
 // инфо о конкретном пользователе (клик по имени/аватару автора; свой профиль — тоже открываем)
 async function openUserInfo(uid) {
   if (!uid) return
+  infoMode.value = 'popup' // по клику на аватар/имя — модалка по центру
   showInfo.value = true
   const key = 'u' + uid
   infoData.value = infoCache[key] || null
@@ -2094,7 +2102,7 @@ onBeforeUnmount(() => {
             <AppIcon name="trash" :size="22" /> Удалить <span v-if="selected.size" class="tabular-nums">{{ selected.size }}</span>
           </button>
         </header>
-        <header v-else class="flex items-center gap-3 border-b border-parchment-200 px-4 py-2.5">
+        <header v-else class="flex items-center gap-3 border-b border-parchment-200 px-4 py-2.5 transition-[padding]" :class="sideDockOpen && 'sm:!pr-96'">
           <button class="rounded-lg p-1.5 text-ink-700/60 hover:bg-parchment-100 sm:hidden" @click="backToList"><AppIcon name="chevron" :size="18" class="rotate-90" /></button>
           <div class="flex min-w-0 flex-1 cursor-pointer items-center gap-3" @click="openInfo()">
             <img v-if="activeChat.avatar_url" :src="thumbUrl(activeChat.avatar_url)" @error="imgFull($event, activeChat.avatar_url)" class="photo-bw h-9 w-9 shrink-0 rounded-full object-cover" />
@@ -2123,11 +2131,15 @@ onBeforeUnmount(() => {
           </div>
         </header>
 
-        <!-- Панель информации о собеседнике (личный чат) -->
-        <transition name="info-slide">
-          <div v-if="showInfo" class="absolute inset-0 z-30 flex">
-            <div class="absolute inset-0 bg-ink-900/30" @click="closeInfo"></div>
-            <div class="relative ml-auto flex h-full w-full flex-col bg-white shadow-2xl sm:max-w-sm">
+        <!-- Панель информации: side — доком справа (чат доступен), popup — модалка по центру -->
+        <transition :name="infoMode === 'side' ? 'info-slide' : 'info-pop'">
+          <div v-if="showInfo" :class="infoMode === 'side'
+                 ? 'absolute inset-y-0 right-0 z-30 flex w-full sm:w-96'
+                 : 'absolute inset-0 z-40 flex'">
+            <div v-if="infoMode === 'popup'" class="absolute inset-0 bg-ink-900/40" @click="closeInfo"></div>
+            <div :class="infoMode === 'side'
+                   ? 'relative flex h-full w-full flex-col border-l border-parchment-200 bg-white shadow-xl'
+                   : 'relative m-auto flex max-h-[92%] w-full max-w-sm flex-col overflow-hidden rounded-2xl bg-white shadow-2xl'">
               <header class="flex items-center gap-3 border-b border-parchment-200 px-4 py-3">
                 <button class="rounded-lg p-1.5 text-ink-700/60 hover:bg-parchment-100" title="Закрыть" @click="closeInfo"><AppIcon name="close" :size="18" /></button>
                 <div class="font-medium text-ink-900">{{ isInfoGroup ? 'Информация о группе' : 'Информация' }}</div>
@@ -2199,11 +2211,15 @@ onBeforeUnmount(() => {
           </div>
         </transition>
 
-        <!-- Полноэкранный просмотр медиа по типу (фото/видео/файлы/аудио/ссылки) -->
-        <transition name="info-slide">
-          <div v-if="mediaBrowser.open" class="absolute inset-0 z-[35] flex">
-            <div class="absolute inset-0 bg-ink-900/30" @click="closeMediaBrowser"></div>
-            <div class="relative ml-auto flex h-full w-full flex-col bg-white shadow-2xl sm:max-w-md">
+        <!-- Просмотр медиа по типу — следует режиму инфо-панели (side/popup) -->
+        <transition :name="infoMode === 'side' ? 'info-slide' : 'info-pop'">
+          <div v-if="mediaBrowser.open" :class="infoMode === 'side'
+                 ? 'absolute inset-y-0 right-0 z-[35] flex w-full sm:w-96'
+                 : 'absolute inset-0 z-40 flex'">
+            <div v-if="infoMode === 'popup'" class="absolute inset-0 bg-ink-900/40" @click="closeMediaBrowser"></div>
+            <div :class="infoMode === 'side'
+                   ? 'relative flex h-full w-full flex-col border-l border-parchment-200 bg-white shadow-xl'
+                   : 'relative m-auto flex max-h-[92%] w-full max-w-md flex-col overflow-hidden rounded-2xl bg-white shadow-2xl'">
               <header class="flex items-center gap-2 border-b border-parchment-200 px-3 py-3">
                 <button class="rounded-lg p-1.5 text-ink-700/60 hover:bg-parchment-100" title="Назад" @click="closeMediaBrowser"><AppIcon name="chevron" :size="18" class="rotate-90" /></button>
                 <div class="flex-1 font-medium text-ink-900">{{ mediaBrowser.title }}</div>
@@ -2269,7 +2285,7 @@ onBeforeUnmount(() => {
         </transition>
 
         <!-- Плашка закреплённого сообщения -->
-        <div v-if="activeChat && pinnedMsg" class="flex cursor-pointer items-center gap-2 border-b border-parchment-200 bg-white/70 px-4 py-2 hover:bg-parchment-50" @click="jumpToId(pinnedMsg.id)">
+        <div v-if="activeChat && pinnedMsg" class="flex cursor-pointer items-center gap-2 border-b border-parchment-200 bg-white/70 px-4 py-2 hover:bg-parchment-50" :class="sideDockOpen && 'sm:!pr-96'" @click="jumpToId(pinnedMsg.id)">
           <div class="w-0.5 shrink-0 self-stretch rounded bg-saffron-400"></div>
           <img v-if="pinnedPhoto" :src="thumbUrl(pinnedPhoto)" class="h-8 w-8 shrink-0 rounded object-cover" />
           <div class="min-w-0 flex-1">
@@ -2283,7 +2299,7 @@ onBeforeUnmount(() => {
         <div class="relative flex min-h-0 flex-1 flex-col">
         <div class="pointer-events-none absolute inset-x-0 top-0 z-20 [&>*]:pointer-events-auto"><AudioBar /></div>
 
-        <div ref="scroller" class="chat-bg flex flex-1 flex-col overflow-y-auto p-4"
+        <div ref="scroller" class="chat-bg flex flex-1 flex-col overflow-y-auto p-4" :class="sideDockOpen && 'sm:!pr-96'"
              @scroll="onScroll" @click="onScrollerClick" @mousedown="onScrollerDown" @touchstart="onScrollerDown" @contextmenu.prevent>
           <div ref="listWrap" class="mt-auto space-y-1">
           <template v-for="(m, i) in chatState.messages" :key="m.client_uuid">
@@ -2604,7 +2620,7 @@ onBeforeUnmount(() => {
         </transition>
 
         <!-- Композер -->
-        <div class="border-t border-parchment-200 p-3">
+        <div class="border-t border-parchment-200 p-3" :class="sideDockOpen && 'sm:!pr-96'">
           <div v-if="replyTo" class="mb-2 flex items-center gap-2 rounded-lg bg-parchment-100 px-3 py-1.5 text-sm">
             <AppIcon name="reply" :size="19" class="shrink-0 text-saffron-600" />
             <img v-if="replyTo.photo" :src="thumbUrl(replyTo.photo)" class="h-8 w-8 shrink-0 rounded object-cover" />
@@ -3023,6 +3039,14 @@ onBeforeUnmount(() => {
    новая появляется на том же месте и замирает */
 .datefade-enter-active, .datefade-leave-active { transition: opacity .25s ease; }
 .datefade-enter-from, .datefade-leave-to { opacity: 0; }
+/* инфо-панель доком справа — выезжает сбоку */
+.info-slide-enter-active, .info-slide-leave-active { transition: transform .22s ease, opacity .22s ease; }
+.info-slide-enter-from, .info-slide-leave-to { transform: translateX(16px); opacity: 0; }
+/* инфо-панель попапом — появляется по центру с лёгким зумом */
+.info-pop-enter-active, .info-pop-leave-active { transition: opacity .18s ease; }
+.info-pop-enter-active > .relative, .info-pop-leave-active > .relative { transition: transform .18s ease, opacity .18s ease; }
+.info-pop-enter-from, .info-pop-leave-to { opacity: 0; }
+.info-pop-enter-from > .relative, .info-pop-leave-to > .relative { transform: scale(.96); opacity: 0; }
 /* подложка медиа: спиннер поверх цветной подложки, пока не загрузилось; после загрузки — прячем */
 .ph-done .ph-spin { display: none; }
 /* размытая подложка-микропревью (blur-up): картинка «проявляется» из неё, как в Telegram */

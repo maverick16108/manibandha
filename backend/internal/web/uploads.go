@@ -140,8 +140,12 @@ var uploadAllowed = map[string]string{
 
 var uploadImageTypes = map[string]bool{"image/jpeg": true, "image/png": true, "image/webp": true}
 
-const uploadMainMax = 1600
+// Отображение в чате ограничено ~608px (≈1216px на retina), лайтбокс — обычным экраном. 1280px webp
+// q80 покрывает это с запасом и заметно легче прежних 1600px q85.
+const uploadMainMax = 1280
+const uploadMainQ = 80
 const uploadThumbMax = 320
+const uploadThumbQ = 78
 
 // POST /uploads
 func (s *Server) upload(w http.ResponseWriter, r *http.Request) {
@@ -225,10 +229,10 @@ func (s *Server) saveImage(data []byte, stem string) (string, string, error) {
 	mainPath := filepath.Join(s.Cfg.UploadDir, mainName)
 	thumbPath := filepath.Join(s.Cfg.UploadDir, thumbName)
 
-	if err := cwebp(tmp.Name(), mainPath, cfg.Width, cfg.Height, uploadMainMax, 85); err != nil {
+	if err := cwebp(tmp.Name(), mainPath, cfg.Width, cfg.Height, uploadMainMax, uploadMainQ); err != nil {
 		return "", "", err
 	}
-	if err := cwebp(tmp.Name(), thumbPath, cfg.Width, cfg.Height, uploadThumbMax, 80); err != nil {
+	if err := cwebp(tmp.Name(), thumbPath, cfg.Width, cfg.Height, uploadThumbMax, uploadThumbQ); err != nil {
 		os.Remove(mainPath)
 		return "", "", err
 	}
@@ -237,7 +241,9 @@ func (s *Server) saveImage(data []byte, stem string) (string, string, error) {
 
 // cwebp кодирует webp с ресайзом по длинной стороне (0 = без ресайза для этой оси).
 func cwebp(in, out string, w, h, max, q int) error {
-	args := []string{"-quiet", "-q", itoa(q)}
+	// -m 6: максимальное усилие сжатия (медленнее кодирование — не важно для загрузки, но меньше размер);
+	// -sharp_yuv: аккуратнее цветность на низком q (меньше артефактов при меньшем весе).
+	args := []string{"-quiet", "-m", "6", "-sharp_yuv", "-q", itoa(q)}
 	rw, rh := fitResize(w, h, max)
 	if rw > 0 || rh > 0 {
 		args = append(args, "-resize", itoa(rw), itoa(rh))

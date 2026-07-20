@@ -131,9 +131,11 @@ const warmed = new Set();
 const IMG_DIMS_KEY = 'chatImgDims';
 const IMG_COLOR_KEY = 'chatImgColors';
 const IMG_MICRO_KEY = 'chatImgMicros';
-let imgDims = {}; try { imgDims = JSON.parse(localStorage.getItem(IMG_DIMS_KEY) || '{}') || {}; } catch { imgDims = {}; }
-let imgColors = {}; try { imgColors = JSON.parse(localStorage.getItem(IMG_COLOR_KEY) || '{}') || {}; } catch { imgColors = {}; }
-let imgMicros = {}; try { imgMicros = JSON.parse(localStorage.getItem(IMG_MICRO_KEY) || '{}') || {}; } catch { imgMicros = {}; }
+// РЕАКТИВНЫЕ — чтобы бокс медиа обновлялся при приходе размеров/цвета/микро БЕЗ перерисовки всей ленты
+// (иначе refreshMessages пересоздавал <img> и картинка «мерцала»: исчезала и грузилась заново).
+const imgDims = reactive({}); try { Object.assign(imgDims, JSON.parse(localStorage.getItem(IMG_DIMS_KEY) || '{}') || {}); } catch { /* ignore */ }
+const imgColors = reactive({}); try { Object.assign(imgColors, JSON.parse(localStorage.getItem(IMG_COLOR_KEY) || '{}') || {}); } catch { /* ignore */ }
+const imgMicros = reactive({}); try { Object.assign(imgMicros, JSON.parse(localStorage.getItem(IMG_MICRO_KEY) || '{}') || {}); } catch { /* ignore */ }
 // средний цвет картинки (для мгновенной подложки «в цвет» до загрузки)
 export function imageColor(url) { const t = thumbUrl(url); return imgColors[t] || imgColors[url] || null; }
 // крошечное размытое превью (data-URI) — мгновенная подложка, из которой «проявляется» картинка
@@ -170,7 +172,7 @@ async function prefetchPhotos() {
         if (!dims) return;
         let changed = false;
         for (const [u, v] of Object.entries(dims)) { const a = typeof v === 'object' ? v.a : v; const c = typeof v === 'object' ? v.c : null; const mm = typeof v === 'object' ? v.m : null; if (a > 0 && !imgDims[u]) { imgDims[u] = a; imgDims[thumbUrl(u)] = a; changed = true; } if (c && !imgColors[u]) { imgColors[u] = c; imgColors[thumbUrl(u)] = c; changed = true; } if (mm && !imgMicros[u]) { imgMicros[u] = mm; imgMicros[thumbUrl(u)] = mm; changed = true; } }
-        if (changed) { saveDims(); if (chatState.activeChatId) refreshMessages(); } // перерисуем с точным резервом (якорь удержит)
+        if (changed) saveDims(); // боксы обновятся реактивно (imgDims/imgColors/imgMicros реактивны) — без перерисовки ленты и мерцания
       }).catch(() => { /* ignore */ });
     }
   } catch { /* ignore */ }

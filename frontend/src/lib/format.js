@@ -27,7 +27,7 @@ export const GENDER_LABELS = {
 // несуществующий thumb (иначе каждый ре-рендер: thumb→404→битая иконка→подмена на оригинал = мерцание).
 // ПЕРСИСТИМ в localStorage: после перезагрузки страницы сразу берём оригинал (из HTTP-кэша браузера),
 // без повторного 404 на thumb — аватары появляются мгновенно, а не «через секунду».
-const NO_THUMB_KEY = 'noThumbUrls'
+const NO_THUMB_KEY = 'noThumbUrls2' // bump: сгенерили thumb'ы для фото учеников — сбрасываем старый кэш
 let noThumb
 try { noThumb = new Set(JSON.parse(localStorage.getItem(NO_THUMB_KEY) || '[]')) } catch { noThumb = new Set() }
 let noThumbSaveT = 0

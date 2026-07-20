@@ -367,6 +367,12 @@ defineProps({
       <path d="M12 7.5v.5" />
     </template>
 
+    <!-- panel-right (переключить боковую панель — как в Telegram) -->
+    <template v-else-if="name === 'panel-right'">
+      <rect x="3" y="4.5" width="18" height="15" rx="2.4" />
+      <path d="M14.5 4.5v15" />
+    </template>
+
     <!-- maximize (на весь экран) -->
     <template v-else-if="name === 'maximize'">
       <path d="M8 4H4v4" />

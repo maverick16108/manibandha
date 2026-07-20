@@ -1388,26 +1388,23 @@ let resizeObs = null
 // ширина панели списка чатов — с возможностью раздвигать (перетаскиванием)
 const listWidth = ref(Number(localStorage.getItem('chatListWidth')) || 320)
 const isDesktop = ref(typeof window !== 'undefined' && window.innerWidth >= 640)
-// ВАЖНО: считаем `wide` синхронно уже в setup (до ПЕРВОЙ отрисовки), иначе медиа встают
-// по-узкому и прыгают, когда обсервер позже выставит настоящее значение. Ширина переписки ≈
-// ширина окна минус панель списка (на десктопе).
-function calcWide() {
-  if (typeof window === 'undefined') return true
-  const lw = window.innerWidth >= 640 ? listWidth.value : 0
-  return (window.innerWidth - lw) > 900
-}
-// wide считаем ЧИСТОЙ математикой по ширине окна (calcWide) — синхронно и стабильно. НИКАКИХ измерений
-// элемента/ResizeObserver: их первый вызов приходит с переходной (узкой) шириной → wide мигает false→true
-// и свои медиа прыгают справа налево. Оконная математика верна с первого кадра и не даёт переходного кадра.
-const wide = ref(calcWide())
-// реактивные размеры окна — для адаптивного сайзинга медиа (см. mediaCaps/fitBox ниже)
+// реактивные размеры окна — база и для адаптивного сайзинга медиа, и для раскладки (wide)
 const winW = ref(typeof window !== 'undefined' ? window.innerWidth : 1280)
 const winH = ref(typeof window !== 'undefined' ? window.innerHeight : 800)
-function onWinResize() { isDesktop.value = window.innerWidth >= 640; wide.value = calcWide(); winW.value = window.innerWidth; winH.value = window.innerHeight }
+// wide: широкая ли область переписки. Считаем ЧИСТОЙ математикой от РЕАКТИВНОЙ ширины окна за вычетом
+// панели списка и (если открыта) боковой инфо-панели — тогда при её открытии узкая лента возвращается
+// к раскладке «свои справа / чужие слева». Без ResizeObserver — верно с первого кадра, без мигания.
+const wide = computed(() => {
+  const w = winW.value
+  const lw = w >= 640 ? listWidth.value : 0
+  const dock = (w >= 640 && sideDockOpen.value) ? 384 : 0
+  return (w - lw - dock) > 900
+})
+function onWinResize() { isDesktop.value = window.innerWidth >= 640; winW.value = window.innerWidth; winH.value = window.innerHeight }
 function startResize(e) {
   const startX = e.clientX
   const startW = listWidth.value
-  const move = (ev) => { listWidth.value = Math.max(240, Math.min(600, startW + (ev.clientX - startX))); wide.value = calcWide() }
+  const move = (ev) => { listWidth.value = Math.max(240, Math.min(600, startW + (ev.clientX - startX))) }
   const up = () => {
     document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up)
     document.body.style.userSelect = ''
@@ -1582,9 +1579,9 @@ async function startCall(withVideo) {
   if (!peerId) { showToast('Не удалось определить собеседника'); return }
   callStart({ peerId, name: activeChat.value.title || '', avatar: activeChat.value.avatar_url || '', video: withVideo })
 }
-async function openInfo() {
+async function openInfo(mode = 'side') {
   const id = activeId.value
-  infoMode.value = 'side' // из шапки — панель сбоку, чат остаётся доступен
+  infoMode.value = mode === 'popup' ? 'popup' : 'side' // клик по названию — попап; иконка панели — сбоку
   showInfo.value = true
   infoData.value = infoCache[id] || null // мгновенно из кэша, если открывали раньше
   try {
@@ -2102,9 +2099,9 @@ onBeforeUnmount(() => {
             <AppIcon name="trash" :size="22" /> Удалить <span v-if="selected.size" class="tabular-nums">{{ selected.size }}</span>
           </button>
         </header>
-        <header v-else class="flex items-center gap-3 border-b border-parchment-200 px-4 py-2.5 transition-[padding]" :class="sideDockOpen && 'sm:!pr-96'">
+        <header v-else class="flex h-14 items-center gap-3 border-b border-parchment-200 px-4 transition-[padding]" :class="sideDockOpen && 'sm:!pr-96'">
           <button class="rounded-lg p-1.5 text-ink-700/60 hover:bg-parchment-100 sm:hidden" @click="backToList"><AppIcon name="chevron" :size="18" class="rotate-90" /></button>
-          <div class="flex min-w-0 flex-1 cursor-pointer items-center gap-3" @click="openInfo()">
+          <div class="flex min-w-0 flex-1 cursor-pointer items-center gap-3" @click="openInfo('popup')">
             <img v-if="activeChat.avatar_url" :src="thumbUrl(activeChat.avatar_url)" @error="imgFull($event, activeChat.avatar_url)" class="photo-bw h-9 w-9 shrink-0 rounded-full object-cover" />
             <span v-else class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-semibold text-white"
                   :class="activeChat.type === 'group' ? 'bg-gradient-to-br from-sage-400 to-sage-600' : 'bg-gradient-to-br from-saffron-400 to-saffron-600'">{{ initials(activeChat.title) }}</span>
@@ -2125,8 +2122,8 @@ onBeforeUnmount(() => {
             <button v-if="activeChat.type === 'direct'" class="rounded-full p-2 text-ink-700/55 transition hover:bg-parchment-100 hover:text-saffron-600" title="Позвонить" @click.stop="startCall(false)">
               <AppIcon name="phone" :size="26" />
             </button>
-            <button class="rounded-full p-2 text-ink-700/55 transition hover:bg-parchment-100 hover:text-saffron-600" title="Информация" @click.stop="openInfo()">
-              <AppIcon name="info" :size="26" />
+            <button class="rounded-full p-2 transition hover:bg-parchment-100 hover:text-saffron-600" :class="showInfo && infoMode === 'side' ? 'text-saffron-600' : 'text-ink-700/55'" title="Боковая панель" @click.stop="showInfo && infoMode === 'side' ? closeInfo() : openInfo('side')">
+              <AppIcon name="panel-right" :size="24" />
             </button>
           </div>
         </header>
@@ -2140,11 +2137,10 @@ onBeforeUnmount(() => {
             <div :class="infoMode === 'side'
                    ? 'relative flex h-full w-full flex-col border-l border-parchment-200 bg-white shadow-xl'
                    : 'relative m-auto flex max-h-[92%] w-full max-w-sm flex-col overflow-hidden rounded-2xl bg-white shadow-2xl'">
-              <header class="flex items-center gap-3 border-b border-parchment-200 px-4 py-3">
-                <button class="rounded-lg p-1.5 text-ink-700/60 hover:bg-parchment-100" title="Закрыть" @click="closeInfo"><AppIcon name="close" :size="18" /></button>
-                <div class="font-medium text-ink-900">{{ isInfoGroup ? 'Информация о группе' : 'Информация' }}</div>
-                <div v-if="isInfoOwner" class="relative ml-auto">
-                  <button class="rounded-lg p-1.5 text-ink-700/60 hover:bg-parchment-100" title="Ещё" @click.stop="infoMenu = !infoMenu">
+              <header class="flex h-14 shrink-0 items-center gap-2 border-b border-parchment-200 px-4">
+                <div class="flex-1 truncate font-medium text-ink-900">{{ isInfoGroup ? 'Информация о группе' : 'Информация' }}</div>
+                <div v-if="isInfoOwner" class="relative">
+                  <button class="rounded-lg p-1.5 text-ink-700/60 hover:bg-parchment-100" title="Изменить" @click.stop="infoMenu = !infoMenu">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="12" cy="19" r="2" /></svg>
                   </button>
                   <template v-if="infoMenu">
@@ -2155,6 +2151,7 @@ onBeforeUnmount(() => {
                     </div>
                   </template>
                 </div>
+                <button class="rounded-lg p-1.5 text-ink-700/60 hover:bg-parchment-100" title="Закрыть" @click="closeInfo"><AppIcon name="close" :size="18" /></button>
               </header>
               <div class="flex-1 overflow-y-auto">
                 <div class="flex flex-col items-center gap-3 p-6">
@@ -2381,9 +2378,9 @@ onBeforeUnmount(() => {
                            disablepictureinpicture controlslist="nodownload noremoteplayback nofullscreen"
                            style="opacity:0;transition:opacity .35s ease" class="pointer-events-none relative block h-full w-full object-cover" @loadeddata="markImgLoaded($event)" @timeupdate="onVideoTime($event, m)"></video>
                     <div class="absolute inset-0 cursor-pointer" @click.stop="openVideoLightbox(m)"></div>
-                    <span class="pointer-events-none absolute left-2 top-2 flex items-center gap-1 rounded-full bg-black/55 px-2.5 py-1 text-sm text-white">
+                    <span class="pointer-events-none absolute left-2 top-2 flex items-center gap-1.5 rounded-full bg-black/55 px-3 py-1 text-[15px] text-white">
                       <span class="tabular-nums">{{ videoState[m.id]?.remain || '' }}</span>
-                      <AppIcon name="volume-x" :size="15" />
+                      <AppIcon name="volume-x" :size="19" />
                     </span>
                   </template>
                   <template v-else>

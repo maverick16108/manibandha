@@ -430,8 +430,11 @@ async function confirmDelete() {
   // лёгкий CSS-эффект удаления: «взрывается и исчезает» (быстрое расширение + растворение)
   const el = document.getElementById(`msg-${m.id}`)
   if (el) { el.classList.add('msg-boom'); await new Promise((r) => setTimeout(r, 300)) }
-  // держим сообщение НИЖЕ удаляемого на месте: контент снизу не двигается, лента сверху съезжает вниз
-  if (!stickBottom.value) { pendingAnchor = anchorBelow(m.id) }
+  // держим сообщение НИЖЕ удаляемого на месте: контент снизу не двигается, лента сверху съезжает вниз.
+  // Если ниже есть сообщение — принудительно снимаем «прилипание к низу» (иначе ResizeObserver прижмёт
+  // ленту к низу и контент «поднимется вверх»). Если удаляем последнее — оставляем как есть (прижмётся к низу).
+  const a = anchorBelow(m.id)
+  if (a) { pendingAnchor = a; stickBottom.value = false }
   await deleteMessage(m.id, everyone)
   await nextTick(); if (pendingAnchor) restoreAnchor(pendingAnchor) // сразу вернуть позицию (ResizeObserver — подстраховка)
   setTimeout(() => { pendingAnchor = null }, 500)

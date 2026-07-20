@@ -797,6 +797,9 @@ async function runUpload(pu) {
     // альбом изображений — одним сообщением
     if (imgs.length) {
       const urls = await Promise.all(imgs.map((it) => uploadOne(it.file)))
+      // прайминг пропорций по загруженному url — чтобы бокс итогового сообщения СРАЗУ был нужного
+      // размера (иначе рисуется по дефолтному 1.4 и «схлопывается», когда картинка догрузится)
+      urls.forEach((u, i) => { const a = imgs[i]?.aspect; if (a && !imgAspects[u]) imgAspects[u] = a })
       let body = urls.map((u) => `![](${u})`).join('')
       if (cap && !vids.length && !files.length) { body += `\n${cap}`; capUsed = true }
       await sendMessageTo(chatId, body)
@@ -954,28 +957,45 @@ function onImgLoad(e, u) {
   markImgLoaded(e) // плавное появление поверх подложки + скрыть спиннер
   if (u && el.naturalWidth && el.naturalHeight && !imgAspects[u]) imgAspects[u] = el.naturalWidth / el.naturalHeight
 }
-// ЯВНЫЕ ширина+высота бокса из соотношения сторон — бокс НЕ зависит от загрузки медиа
-// (иначе пузырь схлопывается по intrinsic-размеру пустого <video>/<img> и потом «прыгает»).
-function boxWH(aspect, maxW, maxH) {
-  let w = maxW, h = Math.round(w / aspect)
-  if (h > maxH) { h = maxH; w = Math.round(h * aspect) }
+// ── СТРАТЕГИЯ САЙЗИНГА МЕДИА (подробно: docs/media-sizing.md) ─────────────────
+// Принципы: 1) точный резерв места ДО загрузки (пропорции из embed WxH / server dims / замера)
+// — лента не прыгает; 2) landscape тянется в ширину, portrait ограничен по высоте (как в Telegram);
+// 3) адаптивно к ширине колонки переписки и высоте окна; 4) один размер для лоадера и итога.
+// Ширина колонки переписки = окно минус левая нав-панель и панель списка чатов (на десктопе).
+function convWidth() {
+  const nav = winW.value >= 640 ? 72 : 0
+  const list = winW.value >= 640 ? listWidth.value : 0
+  return Math.max(240, winW.value - nav - list)
+}
+// Вписываем медиа в прямоугольник (maxW×maxH), сохраняя пропорции. Возвращаем ЯВНЫЕ px, чтобы бокс
+// не зависел от факта загрузки (иначе пузырь схлопывается по intrinsic-размеру пустого <img>/<video>).
+function fitBox(aspect, maxW, maxH) {
+  const a = aspect && aspect > 0 ? aspect : 1.4
+  let w = maxW, h = Math.round(w / a)
+  if (h > maxH) { h = maxH; w = Math.round(h * a) } // portrait: упёрлись в высоту
+  if (w < 140) { w = 140; h = Math.min(Math.round(w / a), maxH) } // очень узкое/высокое — минимум по ширине
   return { width: w + 'px', height: h + 'px' }
 }
+// Пределы: фото занимает до ~74% ширины колонки (но не абсурдно широко на ультра-широких мониторах)
+// и до ~62% высоты окна. Видео — чуть выше по высоте (это основной контент).
+function photoCaps() { const A = convWidth(); return { maxW: Math.round(Math.max(260, Math.min(760, A * 0.74))), maxH: Math.round(Math.min(600, winH.value * 0.62)) } }
+function videoCaps() { const A = convWidth(); return { maxW: Math.round(Math.max(260, Math.min(760, A * 0.74))), maxH: Math.round(Math.min(680, winH.value * 0.72)) } }
+// ЕДИНЫЙ размер одиночного фото — им пользуются и лоадер-превью, и итоговое фото (без «скачка»).
+function photoBox(aspect) { const c = photoCaps(); return fitBox(aspect, c.maxW, c.maxH) }
+function albumWidth() { return photoCaps().maxW } // ширина сетки-альбома = максимальная ширина одиночного фото
 // резерв места под одиночное фото + подложка «в цвет» (мгновенно, до загрузки).
 function photoBoxStyle(u) {
   const aspect = imgAspects[u] || imageAspect(u) || 1.4
   return { ...photoBox(aspect), background: imageColor(u) || 'rgba(190,170,145,.35)' }
 }
-// ЕДИНЫЙ размер бокса одиночного фото — им пользуются и лоадер-превью, и итоговое фото (одинаковый
-// размер, без «скачка» при загрузке). Чуть крупнее — как в Telegram.
-function photoBox(aspect) { return boxWH(aspect || 1.4, wide.value ? 576 : 360, 680) }
 // стиль размытой подложки-микропревью (blur-up, как в Telegram); null → нет микро
 function microBg(u) { const m = imageMicro(u); return m ? { backgroundImage: `url(${m})` } : null }
 // резерв места под видео. Приоритет — размеры из маркера (@[video](...|ШxВ)), иначе — по постеру.
 function videoBoxStyle(v) {
   const u = v?.poster || ''
   const aspect = (v && v.w && v.h) ? (v.w / v.h) : (imgAspects[u] || imageAspect(u) || 0.7)
-  return { ...boxWH(aspect, wide.value ? 546 : 340, 600), background: imageColor(u) || '#1a1614' } // ~на 30% крупнее; подложка в цвет
+  const c = videoCaps()
+  return { ...fitBox(aspect, c.maxW, c.maxH), background: imageColor(u) || '#1a1614' }
 }
 
 // ── превью ссылок (OG-карточки) ───────────────────────────────────────────
@@ -1347,7 +1367,10 @@ function calcWide() {
 // элемента/ResizeObserver: их первый вызов приходит с переходной (узкой) шириной → wide мигает false→true
 // и свои медиа прыгают справа налево. Оконная математика верна с первого кадра и не даёт переходного кадра.
 const wide = ref(calcWide())
-function onWinResize() { isDesktop.value = window.innerWidth >= 640; wide.value = calcWide() }
+// реактивные размеры окна — для адаптивного сайзинга медиа (см. mediaCaps/fitBox ниже)
+const winW = ref(typeof window !== 'undefined' ? window.innerWidth : 1280)
+const winH = ref(typeof window !== 'undefined' ? window.innerHeight : 800)
+function onWinResize() { isDesktop.value = window.innerWidth >= 640; wide.value = calcWide(); winW.value = window.innerWidth; winH.value = window.innerHeight }
 function startResize(e) {
   const startX = e.clientX
   const startW = listWidth.value
@@ -2450,7 +2473,7 @@ onBeforeUnmount(() => {
                 <img :src="photoUrls(m)[0]" @error="imgFull($event, photoUrls(m)[0]); markImgLoaded($event)" @load="onImgLoad($event, photoUrls(m)[0])"
                      class="relative block h-full w-full cursor-zoom-in object-cover" @click.stop="openPhoto(m, 0)" />
               </div>
-              <div v-else class="grid gap-0.5" :class="albumCols(photoUrls(m).length)" :style="{ width: (wide ? 512 : 340) + 'px' }">
+              <div v-else class="grid gap-0.5" :class="albumCols(photoUrls(m).length)" :style="{ width: albumWidth() + 'px' }">
                 <div v-for="(u, k) in photoUrls(m).slice(0, 10)" :key="k" class="ph-box relative aspect-square overflow-hidden" :class="albumItemClass(photoUrls(m).length, k)" :style="{ background: imageColor(u) || 'rgba(190,170,145,.35)' }">
                   <div v-if="microBg(u)" class="ph-blur" :style="microBg(u)"></div>
                   <span class="ph-spin pointer-events-none absolute inset-0 flex items-center justify-center"><span class="h-6 w-6 animate-spin rounded-full border-2 border-white/45 border-t-white/90"></span></span>
@@ -2572,7 +2595,7 @@ onBeforeUnmount(() => {
                   <button v-else class="flex items-center gap-1 rounded-full bg-black/55 px-3 py-1.5 text-xs font-medium text-white" @click="retryPending(pu)"><AppIcon name="reply" :size="14" class="-scale-x-100" /> Повторить</button>
                 </div>
               </div>
-              <div v-else class="grid gap-0.5" :class="albumCols(pu.previews.length)" :style="{ width: (wide ? 576 : 360) + 'px' }">
+              <div v-else class="grid gap-0.5" :class="albumCols(pu.previews.length)" :style="{ width: albumWidth() + 'px' }">
                 <div v-for="(p, k) in pu.previews" :key="k" class="relative aspect-square" :class="albumItemClass(pu.previews.length, k)">
                   <img v-if="p.url" :src="p.url" class="h-full w-full object-cover" />
                   <div v-else class="flex h-full w-full items-center justify-center bg-ink-900/80"><AppIcon name="play" :size="30" class="text-white/70" /></div>

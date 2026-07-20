@@ -52,13 +52,17 @@ function threadParams() {
   if (filterMentor.value) params.mentor_id = filterMentor.value
   return params
 }
-async function load(silent = false) {
+async function load(silent = false, force = false) {
   const p = threadParams()
-  const cached = peekCache('/threads', p)
-  if (cached) { threads.value = cached; loading.value = false } // мгновенно из кеша — без скелетона
-  else if (!silent) loading.value = true
+  // peek только при ЯВНОМ заходе (не при фоновой ревалидации): иначе тихий рефреш сначала откатывает
+  // список к устаревшему снимку кеша, а потом заменяет свежим — «мигают/исчезают» записи
+  if (!silent) {
+    const cached = peekCache('/threads', p)
+    if (cached) { threads.value = cached; loading.value = false } // мгновенно из кеша — без скелетона
+    else loading.value = true
+  }
   try {
-    threads.value = await cachedGet('/threads', { params: p, ttl: TTL.list })
+    threads.value = await cachedGet('/threads', { params: p, ttl: TTL.list, force })
   } finally {
     loading.value = false
   }
@@ -67,8 +71,8 @@ watch([kind, filterDisciple, filterMentor], () => load())
 
 // живое обновление списка (новые вопросы/отчёты появляются сразу)
 let poll = null
-function startPoll() { clearInterval(poll); poll = setInterval(() => load(true), 15000) }
-function onVisible() { if (document.visibilityState === 'visible') load(true) }
+function startPoll() { clearInterval(poll); poll = setInterval(() => load(true, true), 15000) } // force — держим кэш свежим (живые обновления)
+function onVisible() { if (document.visibilityState === 'visible') load(true, true) }
 onMounted(() => {
   startPoll()
   document.addEventListener('visibilitychange', onVisible)
@@ -156,13 +160,8 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-/* новый вопрос/отчёт появляется сразу, с мягкой вспышкой */
-.flash-enter-active { animation: flash-in 0.9s ease; }
-.flash-enter-from { opacity: 0; transform: translateY(-10px); }
+/* новый вопрос/отчёт появляется мягким проявлением (без рамки-обводки, чтобы не мигало при входе) */
+.flash-enter-active { transition: opacity 0.4s ease, transform 0.4s ease; }
+.flash-enter-from { opacity: 0; transform: translateY(-8px); }
 .flash-move { transition: transform 0.4s ease; }
-@keyframes flash-in {
-  0%   { box-shadow: 0 0 0 0 rgba(234, 140, 42, 0); }
-  25%  { box-shadow: 0 0 0 3px rgba(234, 140, 42, 0.45); }
-  100% { box-shadow: 0 0 0 0 rgba(234, 140, 42, 0); }
-}
 </style>

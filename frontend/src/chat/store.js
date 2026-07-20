@@ -326,9 +326,6 @@ export async function openChat(chatId) {
   await refreshMessages();
   const c = chatState.chats.find((x) => x.id === id);
   if (c) c.unread = 0;
-  // глубокая сверка ВСЕГО видимого окна с сервером (в фоне) — лечит локально пропавшие сообщения,
-  // из-за которых история расходилась у разных пользователей. Изменения → onDbChange → перерисовка.
-  engine.ensureChatMessages(id, null, 200);
   prefetchPhotos();          // прогрев миниатюр открытого чата
   markReadNow();
   // авторитетная сверка с сервером — в ФОНЕ, не блокируем показ (перерисует, только если изменилось)

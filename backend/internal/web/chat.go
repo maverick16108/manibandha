@@ -440,8 +440,8 @@ func (s *Server) listMessages(w http.ResponseWriter, r *http.Request) {
 	if v, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && v > 0 {
 		limit = v
 	}
-	if limit > 100 {
-		limit = 100
+	if limit > 300 { // разрешаем пересинхронизировать всё видимое окно (200), чтобы лечить локальные пропуски
+		limit = 300
 	}
 	q := s.DB.Preload("Author").Preload("ReplyTo").Preload("Reactions").Preload("Reactions.User").
 		Where("chat_id = ?", id)

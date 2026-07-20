@@ -174,10 +174,12 @@ export class ChatEngine {
   // Сверить хвост чата с сервером (авторитетно). Вызывается при открытии, реконнекте,
   // возврате фокуса/сети и периодически — гарантирует, что хвост совпадает с сервером.
   // Перерисовку сигналим только если данные реально изменились.
-  async ensureChatMessages(chatId, beforeSeq) {
+  async ensureChatMessages(chatId, beforeSeq, limit = 50) {
     try {
       const before = beforeSeq ? null : await this._chatSig(chatId);
-      const msgs = await this.api.listMessages(chatId, beforeSeq, 50);
+      // limit=200 при ЗАХОДЕ пересинхронизирует всё видимое окно (лечит локально пропавшие сообщения
+      // глубже 50-ти — иначе у разных юзеров расходится история); частая периодическая сверка — 50.
+      const msgs = await this.api.listMessages(chatId, beforeSeq, limit);
       for (const m of msgs) await this._writeMessage(m, false);
       await this._recomputeUnread(chatId);
       const changed = beforeSeq ? true : (before !== await this._chatSig(chatId));

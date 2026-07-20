@@ -145,6 +145,19 @@ export function imageMicro(url) { const t = thumbUrl(url); return imgMicros[t] |
 let dimsTimer = null;
 function saveDims() { if (dimsTimer) return; dimsTimer = setTimeout(() => { dimsTimer = null; try { localStorage.setItem(IMG_DIMS_KEY, JSON.stringify(imgDims)); localStorage.setItem(IMG_COLOR_KEY, JSON.stringify(imgColors)); localStorage.setItem(IMG_MICRO_KEY, JSON.stringify(imgMicros)); } catch { /* ignore */ } }, 800); }
 export function imageAspect(url) { const t = thumbUrl(url); return imgDims[t] || imgDims[url] || null; }
+// Запомнить пропорцию, узнанную из уже загруженного <img> (natural), — ПЕРСИСТЕНТНО (localStorage).
+// Иначе при холодном заходе (обзор→чат) сервер-размеры не успевают (гонка 700мс), бокс берётся по
+// запасному 1.4, а на onload картинки резко подгоняется под natural — «фото отдаляются на пару px».
+// Персист убирает повтор при каждом новом монтировании.
+export function rememberAspect(url, a) {
+  if (!url || !(a > 0)) return;
+  const v = Math.round(a * 1000) / 1000;
+  const t = thumbUrl(url);
+  let changed = false;
+  if (!imgDims[url]) { imgDims[url] = v; changed = true; }
+  if (!imgDims[t]) { imgDims[t] = v; changed = true; }
+  if (changed) saveDims();
+}
 function warmImage(url) {
   if (!url || warmed.has(url)) return; warmed.add(url);
   try {

@@ -15,7 +15,7 @@ import { usePageTitle } from '../composables/pageTitle'
 import {
   chatState, initChat, openChat, closeChat, sendMessage, sendMessageTo, sendTyping,
   editMessage, deleteMessage, retryFailed, loadOlder, loadContacts, startDirect, startGroup,
-  reactMessage, REACTION_EMOJIS, updateChat, pinChat, leaveChat, forwardMessages, loadAroundSeq, markActiveRead, imageAspect, imageColor, imageMicro, expandWindow, reorderPins,
+  reactMessage, REACTION_EMOJIS, updateChat, pinChat, leaveChat, forwardMessages, loadAroundSeq, markActiveRead, imageAspect, imageColor, imageMicro, rememberAspect, expandWindow, reorderPins,
   pinMessageInChat, unpinMessageInChat, localCacheStats, wipeLocalChatCache, chatScrollMem, chatNav,
 } from '../chat/store'
 import { startCall as callStart } from '../composables/callCenter'
@@ -983,7 +983,11 @@ function markImgLoaded(e) { const el = e.target; el.style.opacity = 1; el.closes
 function onImgLoad(e, u) {
   const el = e.target
   markImgLoaded(e) // плавное появление поверх подложки + скрыть спиннер
-  if (u && el.naturalWidth && el.naturalHeight && !imgAspects[u]) imgAspects[u] = el.naturalWidth / el.naturalHeight
+  if (u && el.naturalWidth && el.naturalHeight) {
+    const a = el.naturalWidth / el.naturalHeight
+    if (!imgAspects[u]) imgAspects[u] = a
+    rememberAspect(u, a) // ПЕРСИСТ: следующий холодный заход возьмёт бокс сразу из кэша, без подгонки
+  }
 }
 // ── СТРАТЕГИЯ САЙЗИНГА МЕДИА (подробно: docs/media-sizing.md) ─────────────────
 // Принципы: 1) точный резерв места ДО загрузки (пропорции из embed WxH / server dims / замера)

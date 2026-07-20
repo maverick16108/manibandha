@@ -2253,8 +2253,8 @@ onBeforeUnmount(() => {
               </div>
             </div>
             <!-- видео-сообщение -->
-            <div v-else-if="isVideoMsg(m)" class="relative overflow-hidden rounded-2xl shadow-sm"
-                 :class="[wide ? 'max-w-[560px]' : 'max-w-[85%]', isMine(m) ? 'bg-saffron-500 text-white' : 'bg-white text-ink-900 ring-1 ring-parchment-200']"
+            <div v-else-if="isVideoMsg(m)" class="relative w-fit overflow-hidden rounded-2xl shadow-sm"
+                 :class="[isMine(m) ? 'bg-saffron-500 text-white' : 'bg-white text-ink-900 ring-1 ring-parchment-200']"
                  @contextmenu="onContext($event, m)">
               <div v-if="showAuthor(m, i)" class="cursor-pointer px-3 pt-2 text-sm font-semibold text-sage-600" @click.stop="openUserInfo(m.author_id)">{{ nameOf(m) }}</div>
               <div v-if="fwdName(m)" class="flex items-center gap-1.5 px-3 pt-2 text-sm font-semibold" :class="isMine(m) ? 'text-white/90' : 'text-saffron-700'">
@@ -2299,8 +2299,8 @@ onBeforeUnmount(() => {
               </div>
             </div>
 
-            <div v-else-if="isPhoto(m)" class="relative overflow-hidden rounded-2xl shadow-sm"
-                 :class="[wide ? 'max-w-[420px]' : 'max-w-[80%]', (captionText(m) || fwdName(m) || showAuthor(m, i)) && (isMine(m) ? 'bg-saffron-500 text-white' : 'bg-white text-ink-900 ring-1 ring-parchment-200')]"
+            <div v-else-if="isPhoto(m)" class="relative w-fit overflow-hidden rounded-2xl shadow-sm"
+                 :class="[(captionText(m) || fwdName(m) || showAuthor(m, i)) && (isMine(m) ? 'bg-saffron-500 text-white' : 'bg-white text-ink-900 ring-1 ring-parchment-200')]"
                  @contextmenu="onContext($event, m)">
               <div v-if="showAuthor(m, i)" class="cursor-pointer px-3 pt-2 text-sm font-semibold text-sage-600" @click.stop="openUserInfo(m.author_id)">{{ nameOf(m) }}</div>
               <div v-if="fwdName(m)" class="flex items-center gap-1.5 px-3 pt-2 text-sm font-semibold" :class="isMine(m) ? 'text-white/90' : 'text-saffron-700'">

@@ -1846,6 +1846,21 @@ async function copyPhone(phone) {
   try { await navigator.clipboard.writeText(phone); showToast('Телефон скопирован') }
   catch { showToast('Не удалось скопировать') }
 }
+// звонок конкретному пользователю (из попапа профиля)
+function callPeer(peer, withVideo = false) {
+  if (!peer?.id || peer.id === chatState.meId) return
+  callStart({ peerId: peer.id, name: peer.name || '', avatar: peer.avatar || '', video: withVideo })
+}
+const ppMenu = ref(false) // ⋮-меню в попапе профиля
+// «удалить контакт» — убираем переписку с ним из своего списка (личный чат)
+async function deleteContact() {
+  ppMenu.value = false
+  const cid = profilePopup.value?.chat_id
+  if (!cid) { showToast('Нет переписки для удаления'); return }
+  if (!(await confirmDialog({ message: 'Удалить контакт и переписку с ним?', confirmText: 'Удалить', danger: true }))) return
+  closeProfilePopup()
+  try { await leaveChat(cid); if (activeId.value === cid) router.push({ name: 'chat' }) } catch { showToast('Не удалось удалить') }
+}
 
 const showGroupEdit = ref(false)
 const gTitle = ref('')
@@ -1987,6 +2002,7 @@ function onGlobalKey(e) {
   if (infoMenu.value) { infoMenu.value = false; return }
   if (showGroupEdit.value) { showGroupEdit.value = false; return }
   if (addMembersOpen.value) { addMembersOpen.value = false; return }
+  if (ppMenu.value) { ppMenu.value = false; return }
   if (profilePopup.value) { closeProfilePopup(); return }
   if (mediaBrowser.open && infoMode.value === 'popup') { closeMediaBrowser(); return }
   if (showInfo.value && infoMode.value === 'popup') { closeInfo(); return }
@@ -3065,8 +3081,21 @@ onBeforeUnmount(() => {
       <div v-if="profilePopup" class="fixed inset-0 z-40 flex items-center justify-center p-4">
         <div class="absolute inset-0 bg-ink-900/40" @click="closeProfilePopup"></div>
         <div class="relative m-auto flex max-h-[90vh] w-full max-w-md flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
-          <header class="flex h-14 shrink-0 items-center gap-2 border-b border-parchment-200 px-4">
+          <header class="flex h-14 shrink-0 items-center gap-1 border-b border-parchment-200 px-4">
             <div class="flex-1 truncate font-medium text-ink-900">Информация</div>
+            <button v-if="ppPeer && ppPeer.id !== chatState.meId" class="rounded-full p-2 text-ink-700/55 transition hover:bg-parchment-100 hover:text-saffron-600" title="Позвонить" @click="callPeer(ppPeer)"><AppIcon name="phone" :size="20" /></button>
+            <div v-if="ppPeer" class="relative">
+              <button class="rounded-lg p-1.5 text-ink-700/60 hover:bg-parchment-100" title="Ещё" @click.stop="ppMenu = !ppMenu">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="12" cy="19" r="2" /></svg>
+              </button>
+              <template v-if="ppMenu">
+                <div class="fixed inset-0 z-10" @click="ppMenu = false"></div>
+                <div class="absolute right-0 top-full z-20 mt-1 w-56 overflow-hidden rounded-xl bg-white py-1 shadow-lg ring-1 ring-parchment-200">
+                  <button class="flex w-full items-center gap-3 px-4 py-2.5 text-left text-[15px] text-ink-700 hover:bg-parchment-50" @click="ppMenu = false; shareContact(ppPeer)"><AppIcon name="reply" :size="18" class="-scale-x-100" /> Поделиться контактом</button>
+                  <button class="flex w-full items-center gap-3 px-4 py-2.5 text-left text-[15px] text-red-600 hover:bg-red-50" @click="deleteContact()"><AppIcon name="trash" :size="18" /> Удалить контакт</button>
+                </div>
+              </template>
+            </div>
             <button class="rounded-lg p-1.5 text-ink-700/60 hover:bg-parchment-100" title="Закрыть" @click="closeProfilePopup"><AppIcon name="close" :size="24" /></button>
           </header>
           <div class="flex-1 overflow-y-auto">
@@ -3089,12 +3118,9 @@ onBeforeUnmount(() => {
                 <span class="text-[15px] text-ink-900"><b class="tabular-nums">{{ row.n }}</b> {{ row.label }}</span>
               </button>
             </div>
-            <div v-if="ppPeer" class="border-t border-parchment-200 p-2">
-              <button v-if="ppPeer.id && ppPeer.id !== chatState.meId" class="flex w-full items-center gap-3 rounded-lg px-4 py-2.5 text-left text-[15px] text-saffron-700 hover:bg-parchment-100" @click="openContactChat(ppPeer); closeProfilePopup()">
+            <div v-if="ppPeer && ppPeer.id && ppPeer.id !== chatState.meId" class="border-t border-parchment-200 p-2">
+              <button class="flex w-full items-center gap-3 rounded-lg px-4 py-2.5 text-left text-[15px] text-saffron-700 hover:bg-parchment-100" @click="openContactChat(ppPeer); closeProfilePopup()">
                 <AppIcon name="send" :size="19" /> Отправить сообщение
-              </button>
-              <button class="flex w-full items-center gap-3 rounded-lg px-4 py-2.5 text-left text-[15px] text-saffron-700 hover:bg-parchment-100" @click="shareContact(ppPeer)">
-                <AppIcon name="reply" :size="19" class="-scale-x-100" /> Поделиться контактом
               </button>
             </div>
           </div>

@@ -1,12 +1,44 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 defineOptions({ name: 'SettingsView' })
 import client from '../api/client'
 import AppIcon from '../components/AppIcon.vue'
 import AppSkeleton from '../components/AppSkeleton.vue'
 import { usePageTitle } from '../composables/pageTitle'
+import { localCacheStats, wipeLocalChatCache } from '../chat/store'
+import { confirmDialog } from '../composables/confirm'
 
 usePageTitle('Настройки')
+
+// ── Память устройства / локальный кэш чатов (перенесено из шапки чата) ────────
+function fmtSize(bytes) { if (!bytes) return '0 Б'; if (bytes < 1024) return `${bytes} Б`; if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} КБ`; if (bytes < 1073741824) return `${(bytes / 1048576).toFixed(1)} МБ`; return `${(bytes / 1073741824).toFixed(2)} ГБ` }
+const storageBusy = ref(false)
+const storageWiping = ref(false)
+const storageInfo = reactive({ usage: 0, quota: 0, cacheBytes: 0, messages: 0, chats: 0 })
+const storagePct = computed(() => storageInfo.quota ? Math.min(100, Math.round(storageInfo.usage / storageInfo.quota * 100)) : 0)
+async function computeStorage() {
+  storageBusy.value = true
+  try {
+    let usage = 0, quota = 0
+    try { const e = await navigator.storage?.estimate?.(); usage = e?.usage || 0; quota = e?.quota || 0 } catch { /* ignore */ }
+    let cacheBytes = 0
+    try { for (const k of Object.keys(localStorage)) if (/^chat/i.test(k)) cacheBytes += ((localStorage.getItem(k) || '').length + k.length) * 2 } catch { /* ignore */ }
+    const st = await localCacheStats()
+    storageInfo.usage = usage; storageInfo.quota = quota; storageInfo.cacheBytes = cacheBytes
+    storageInfo.messages = st?.messages || 0; storageInfo.chats = st?.chats || 0
+  } catch { /* ignore */ } finally { storageBusy.value = false }
+}
+function clearPreviewCache() {
+  try { for (const k of ['chatLinkPreviews', 'chatImgDims', 'chatImgColors', 'chatImgMicros', 'chatVideoLoaded', 'chatInfoCache']) localStorage.removeItem(k) } catch { /* ignore */ }
+  computeStorage()
+}
+async function wipeAllCache() {
+  if (!(await confirmDialog({ message: 'Очистить весь локальный кэш чатов? Сообщения и медиа заново подгрузятся с сервера. Страница перезагрузится.', confirmText: 'Очистить', danger: true }))) return
+  storageWiping.value = true
+  await wipeLocalChatCache()
+  location.reload()
+}
+onMounted(computeStorage)
 
 const loading = ref(true)
 const saving = ref(false)
@@ -131,6 +163,50 @@ async function save() {
         </div>
         <label class="flex items-center gap-2 text-sm"><input type="checkbox" v-model="prefetchOn" @change="togglePrefetch" /> Фоновая подгрузка разделов</label>
         <p class="mt-1.5 text-xs text-ink-700/50">Заранее и в фоне подгружает данные разделов (ученики, форум, справочники) в кэш — при заходе они открываются мгновенно, без скелетонов. Отключите, чтобы экономить трафик.</p>
+      </div>
+
+      <!-- Память устройства / локальный кэш чатов -->
+      <div class="card mb-4 p-6">
+        <div class="mb-4 flex items-center gap-2">
+          <AppIcon name="settings" :size="18" class="text-saffron-600" />
+          <h2 class="font-display text-lg font-semibold text-ink-900">Память устройства</h2>
+        </div>
+        <div class="rounded-xl bg-parchment-50 p-4 ring-1 ring-parchment-200">
+          <div class="flex items-baseline justify-between">
+            <span class="text-sm text-ink-700/60">Занято приложением</span>
+            <span class="text-lg font-semibold text-ink-900">{{ storageBusy ? '…' : fmtSize(storageInfo.usage) }}</span>
+          </div>
+          <div class="mt-2 h-2 w-full overflow-hidden rounded-full bg-parchment-200">
+            <div class="h-full rounded-full bg-saffron-500 transition-all" :style="{ width: storagePct + '%' }"></div>
+          </div>
+          <div class="mt-1.5 text-xs text-ink-700/40">
+            <template v-if="storageInfo.quota">из ~{{ fmtSize(storageInfo.quota) }} доступно на устройстве</template>
+            <template v-else>оценка недоступна в этом браузере</template>
+          </div>
+        </div>
+        <div class="mt-4 divide-y divide-parchment-100 overflow-hidden rounded-xl ring-1 ring-parchment-200">
+          <div class="flex items-center justify-between gap-3 px-4 py-3">
+            <div class="min-w-0">
+              <div class="text-[15px] text-ink-900">База чатов</div>
+              <div class="text-xs text-ink-700/50">{{ storageInfo.messages }} сообщений · {{ storageInfo.chats }} чатов</div>
+            </div>
+            <span class="shrink-0 text-xs text-ink-700/40">локально</span>
+          </div>
+          <div class="flex items-center justify-between gap-3 px-4 py-3">
+            <div class="min-w-0">
+              <div class="text-[15px] text-ink-900">Превью и метаданные</div>
+              <div class="text-xs text-ink-700/50">ссылки, размеры фото, состояния · {{ fmtSize(storageInfo.cacheBytes) }}</div>
+            </div>
+            <button class="shrink-0 rounded-lg px-3 py-1.5 text-sm font-medium text-saffron-700 hover:bg-saffron-500/10" @click="clearPreviewCache">Очистить</button>
+          </div>
+        </div>
+        <p class="mt-3 text-xs leading-relaxed text-ink-700/50">
+          Медиа-файлы (фото и видео) хранятся в кэше браузера и очищаются вместе с ним. Полная очистка удалит
+          локальную копию переписки — она заново загрузится с сервера, ничего не потеряется.
+        </p>
+        <button class="btn-outline mt-3 w-full text-red-600 ring-red-200 hover:bg-red-50" :disabled="storageWiping" @click="wipeAllCache">
+          <AppIcon name="trash" :size="16" /> {{ storageWiping ? 'Очистка…' : 'Очистить весь кэш чатов' }}
+        </button>
       </div>
 
       <div class="flex items-center gap-3">

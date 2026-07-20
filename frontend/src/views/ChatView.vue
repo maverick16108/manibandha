@@ -1626,9 +1626,9 @@ async function leaveGroupConfirm() {
   const id = activeId.value; closeInfo()
   try { await leaveChat(id); router.push({ name: 'chat' }) } catch { showToast('Не удалось покинуть') }
 }
-// инфо о конкретном пользователе (клик по имени автора в группе)
+// инфо о конкретном пользователе (клик по имени/аватару автора; свой профиль — тоже открываем)
 async function openUserInfo(uid) {
-  if (!uid || uid === chatState.meId) return
+  if (!uid) return
   showInfo.value = true
   const key = 'u' + uid
   infoData.value = infoCache[key] || null
@@ -2280,8 +2280,8 @@ onBeforeUnmount(() => {
               <span v-else class="h-10 w-10 shrink-0"></span>
             </template>
             <template v-else>
-              <img v-if="myAvatar && isRunEnd(m, i)" :src="thumbUrl(myAvatar)" @error="imgFull($event, myAvatar)" class="photo-bw h-10 w-10 shrink-0 rounded-full object-cover" />
-              <span v-else-if="isRunEnd(m, i)" class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-saffron-400 to-saffron-600 text-sm font-semibold text-white">{{ initials(myName) }}</span>
+              <img v-if="myAvatar && isRunEnd(m, i)" :src="thumbUrl(myAvatar)" @error="imgFull($event, myAvatar)" @click.stop="openUserInfo(chatState.meId)" class="photo-bw h-10 w-10 shrink-0 cursor-pointer rounded-full object-cover" />
+              <span v-else-if="isRunEnd(m, i)" @click.stop="openUserInfo(chatState.meId)" class="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full bg-gradient-to-br from-saffron-400 to-saffron-600 text-sm font-semibold text-white">{{ initials(myName) }}</span>
               <span v-else class="h-10 w-10 shrink-0"></span>
             </template>
             <!-- ФОТО-сообщение: без «полей» пузыря (как в телеге) -->

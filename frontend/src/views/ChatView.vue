@@ -2155,7 +2155,7 @@ onBeforeUnmount(() => {
                     </div>
                   </template>
                 </div>
-                <button class="rounded-lg p-1.5 text-ink-700/60 hover:bg-parchment-100" title="Закрыть" @click="closeInfo"><AppIcon name="close" :size="18" /></button>
+                <button class="rounded-lg p-1.5 text-ink-700/60 hover:bg-parchment-100" title="Закрыть" @click="closeInfo"><AppIcon name="close" :size="24" /></button>
               </header>
               <div class="flex-1 overflow-y-auto">
                 <div class="flex flex-col items-center gap-3 p-6">
@@ -2224,7 +2224,7 @@ onBeforeUnmount(() => {
               <header class="flex items-center gap-2 border-b border-parchment-200 px-3 py-3">
                 <button class="rounded-lg p-1.5 text-ink-700/60 hover:bg-parchment-100" title="Назад" @click="closeMediaBrowser"><AppIcon name="chevron" :size="18" class="rotate-90" /></button>
                 <div class="flex-1 font-medium text-ink-900">{{ mediaBrowser.title }}</div>
-                <button class="rounded-lg p-1.5 text-ink-700/60 hover:bg-parchment-100" title="Закрыть" @click="closeMediaBrowser(); closeInfo()"><AppIcon name="close" :size="18" /></button>
+                <button class="rounded-lg p-1.5 text-ink-700/60 hover:bg-parchment-100" title="Закрыть" @click="closeMediaBrowser(); closeInfo()"><AppIcon name="close" :size="24" /></button>
               </header>
               <div v-if="['files', 'links', 'voice'].includes(mediaBrowser.type)" class="border-b border-parchment-200 p-3">
                 <div class="relative">
@@ -2478,7 +2478,7 @@ onBeforeUnmount(() => {
 
             <!-- обычное сообщение -->
             <div v-else class="relative rounded-2xl px-3.5 py-2 text-[15px] shadow-sm"
-                 :class="[isMine(m) ? 'bg-saffron-500 text-white' : 'bg-white text-ink-900 ring-1 ring-parchment-200', wide ? 'max-w-[600px]' : 'max-w-[78%]']"
+                 :class="[isMine(m) ? 'bg-saffron-500 text-white' : 'bg-white text-ink-900 ring-1 ring-parchment-200', wide ? 'max-w-[600px]' : 'max-w-[min(78%,600px)]']"
                  :data-audio-label="`${nameOf(m) || 'Голосовое'} · ${fmtTime(m.created_at)}`"
                  @contextmenu="onContext($event, m)">
               <div v-if="showAuthor(m, i)" class="mb-0.5 cursor-pointer text-sm font-semibold text-sage-600" @click.stop="openUserInfo(m.author_id)">{{ nameOf(m) }}</div>
@@ -2827,7 +2827,7 @@ onBeforeUnmount(() => {
         <div class="flex items-center gap-2 border-b border-parchment-200 p-3">
           <div class="font-medium text-ink-900">Переслать в…</div>
           <span class="text-sm text-ink-700/50">{{ forwardBodies.length }} сообщ.</span>
-          <button class="ml-auto rounded-lg p-1 text-ink-700/50 hover:bg-parchment-100" @click="forwardOpen = false"><AppIcon name="close" :size="18" /></button>
+          <button class="ml-auto rounded-lg p-1 text-ink-700/50 hover:bg-parchment-100" @click="forwardOpen = false"><AppIcon name="close" :size="24" /></button>
         </div>
         <div class="p-3">
           <input ref="forwardSearchInput" v-model="forwardSearch" class="input" placeholder="Поиск чата…" @keydown.esc.prevent.stop="forwardOpen = false" />
@@ -2924,7 +2924,7 @@ onBeforeUnmount(() => {
         <div class="flex border-b border-parchment-200">
           <button class="flex-1 px-4 py-3 text-sm font-medium" :class="newTab === 'direct' ? 'border-b-2 border-saffron-500 text-saffron-700' : 'text-ink-700/60'" @click="newTab = 'direct'">Личный чат</button>
           <button class="flex-1 px-4 py-3 text-sm font-medium" :class="newTab === 'group' ? 'border-b-2 border-saffron-500 text-saffron-700' : 'text-ink-700/60'" @click="newTab = 'group'">Группа</button>
-          <button class="px-3 text-ink-700/40 hover:text-ink-900" @click="closeNew"><AppIcon name="close" :size="18" /></button>
+          <button class="px-3 text-ink-700/40 hover:text-ink-900" @click="closeNew"><AppIcon name="close" :size="24" /></button>
         </div>
         <div v-if="newTab === 'group'" class="border-b border-parchment-200 p-3"><input v-model="groupTitle" class="input" placeholder="Название группы" /></div>
         <div class="border-b border-parchment-200 p-3">
@@ -2956,7 +2956,7 @@ onBeforeUnmount(() => {
       <div class="w-full max-w-md overflow-hidden rounded-xl bg-white shadow-xl">
         <div class="flex items-center justify-between border-b border-parchment-200 px-4 py-3">
           <h3 class="font-medium text-ink-900">Настройки группы</h3>
-          <button class="text-ink-700/40 hover:text-ink-900" @click="showGroupEdit = false"><AppIcon name="close" :size="18" /></button>
+          <button class="text-ink-700/40 hover:text-ink-900" @click="showGroupEdit = false"><AppIcon name="close" :size="24" /></button>
         </div>
         <div class="space-y-4 p-4">
           <div class="flex items-center gap-4">
@@ -3008,7 +3008,7 @@ onBeforeUnmount(() => {
       <div class="flex max-h-[80vh] w-full max-w-md flex-col overflow-hidden rounded-xl bg-white shadow-xl">
         <div class="flex items-center justify-between border-b border-parchment-200 px-4 py-3">
           <h3 class="font-medium text-ink-900">Добавить участников</h3>
-          <button class="text-ink-700/40 hover:text-ink-900" @click="addMembersOpen = false"><AppIcon name="close" :size="18" /></button>
+          <button class="text-ink-700/40 hover:text-ink-900" @click="addMembersOpen = false"><AppIcon name="close" :size="24" /></button>
         </div>
         <div class="border-b border-parchment-200 p-3">
           <div class="relative">

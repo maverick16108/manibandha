@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount, onActivated, onDeactivated, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, onActivated, onDeactivated, watch, nextTick } from 'vue'
 defineOptions({ name: 'ThreadsView' })
 import { RouterLink, useRoute } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
@@ -19,6 +19,7 @@ usePageTitle(() => (isReport.value ? 'Отчёты о служении' : 'Во�
 
 const threads = ref([])
 const loading = ref(true)
+const flashReady = ref(false) // анимация «вспышки» — только для НОВЫХ элементов (после первой загрузки), не на всю ленту при входе
 const disciples = ref([])
 const mentors = ref([])
 const filterDisciple = ref('')
@@ -98,6 +99,7 @@ onMounted(async () => {
     } catch { /* ignore */ }
   }
   await load()
+  await nextTick(); flashReady.value = true // с этого момента подсвечиваем только реально новые элементы
 })
 </script>
 
@@ -126,7 +128,7 @@ onMounted(async () => {
       <div v-for="i in 4" :key="i" class="card space-y-2 p-4"><AppSkeleton w="w-48" /><AppSkeleton w="w-full" h="h-3" /></div>
     </div>
 
-    <TransitionGroup v-else tag="div" name="flash" class="space-y-3">
+    <TransitionGroup v-else tag="div" :name="flashReady ? 'flash' : ''" class="space-y-3">
       <RouterLink v-for="t in filtered" :key="t.id" :to="{ name: 'thread', params: { id: t.id } }"
                   class="card block p-4 transition hover:border-saffron-400/50 hover:shadow">
         <div class="flex items-start justify-between gap-3">

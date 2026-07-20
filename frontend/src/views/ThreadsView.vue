@@ -78,7 +78,9 @@ onBeforeUnmount(() => { clearInterval(poll); document.removeEventListener('visib
 // keep-alive: первую активацию (сразу после mount) пропускаем — иначе двойная загрузка/двойной скелетон;
 // при последующих возвратах — тихий рефреш без скелетона, поллинг возобновляем
 let firstActivate = true
-onActivated(() => { startPoll(); if (firstActivate) { firstActivate = false; return } load(true) })
+// при возврате — ФОРСИРОВАННЫЙ тихий рефреш: keep-alive показывает актуальный список мгновенно, а
+// force не даёт подставить устаревший снимок кеша (иначе мелькали удалённые записи 7→4)
+onActivated(() => { startPoll(); if (firstActivate) { firstActivate = false; return } load(true, true) })
 onDeactivated(() => clearInterval(poll))
 
 function periodLabel(p) {

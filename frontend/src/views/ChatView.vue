@@ -1708,19 +1708,24 @@ async function leaveGroupConfirm() {
   const id = activeId.value; closeInfo()
   try { await leaveChat(id); router.push({ name: 'chat' }) } catch { showToast('Не удалось покинуть') }
 }
-// инфо о конкретном пользователе (клик по имени/аватару автора; свой профиль — тоже открываем)
+// инфо о конкретном пользователе (клик по имени/аватару автора; свой профиль — тоже открываем).
+// НЕЗАВИСИМЫЙ попап: открывается поверх и СОВМЕСТНО с боковой инфо-панелью.
 async function openUserInfo(uid) {
   if (!uid) return
-  infoMode.value = 'popup' // по клику на аватар/имя — модалка по центру
-  showInfo.value = true
   const key = 'u' + uid
-  infoData.value = infoCache[key] || null
+  profilePopup.value = infoCache[key] || null
   try {
     const { data } = await client.get(`/users/${uid}/card`)
-    // сервер возвращает ту же «богатую» карточку, что и /chats/{id}/info (peer + counts + chat_id)
-    infoData.value = data; infoCache[key] = data
+    profilePopup.value = data; infoCache[key] = data
     try { localStorage.setItem('chatInfoCache', JSON.stringify(infoCache)) } catch { /* ignore */ }
   } catch { /* оставляем кэш */ }
+}
+// клик по шапке чата: группа — боковая панель; личный — центральный попап собеседника (можно вместе с панелью)
+async function openHeaderProfile() {
+  const id = activeId.value; if (!id) return
+  if (isActiveGroup.value) { openInfo('side'); return }
+  profilePopup.value = infoCache[id] || null
+  try { const { data } = await client.get(`/chats/${id}/info`); profilePopup.value = data; infoCache[id] = data } catch { /* оставляем кэш */ }
 }
 function maritalLabel(v) {
   const m = { single: 'Не в браке', married: 'В браке', widowed: 'Вдова / вдовец', divorced: 'В разводе', unmarried: 'Не в браке' }
@@ -1729,8 +1734,8 @@ function maritalLabel(v) {
 const infoAvatar = computed(() => { const p = infoData.value?.peer; return p ? (p.avatar || null) : null })
 const cityLine = computed(() => { const p = infoData.value?.peer; return p ? [p.city, p.region].filter(Boolean).join(', ') : '' })
 function pluralWord(n, forms) { const a = n % 10, b = n % 100; if (a === 1 && b !== 11) return forms[0]; if (a >= 2 && a <= 4 && (b < 10 || b >= 20)) return forms[1]; return forms[2] }
-const infoCountRows = computed(() => {
-  const c = infoData.value?.counts; if (!c) return []
+function countRows(c) {
+  if (!c) return []
   const rows = []
   const add = (n, icon, forms, type) => { if (n > 0) rows.push({ n, icon, label: pluralWord(n, forms), type }) }
   add(c.photos, 'image', ['фотография', 'фотографии', 'фотографий'], 'photos')
@@ -1740,14 +1745,22 @@ const infoCountRows = computed(() => {
   add(c.voice, 'mic', ['голосовое', 'голосовых', 'голосовых'], 'voice')
   add(c.common_groups, 'users', ['общая группа', 'общие группы', 'общих групп'], 'groups')
   return rows
-})
+}
+const infoCountRows = computed(() => countRows(infoData.value?.counts))
+// ── независимый ЦЕНТРАЛЬНЫЙ попап профиля (сосуществует с боковой панелью) ──
+const profilePopup = ref(null) // карточка { peer, counts, chat_id } — для клика по аве/имени/шапке (личный)
+function closeProfilePopup() { profilePopup.value = null }
+const ppPeer = computed(() => profilePopup.value?.peer || null)
+const ppAvatar = computed(() => ppPeer.value?.avatar || null)
+const ppCity = computed(() => { const p = ppPeer.value; return p ? [p.city, p.region].filter(Boolean).join(', ') : '' })
+const ppCounts = computed(() => countRows(profilePopup.value?.counts))
 // ── просмотр всех медиа по типу (как в Telegram) ───────────────────────────
 const mediaBrowser = reactive({ open: false, type: null, title: '', items: [], loading: false, q: '' })
 const MEDIA_TITLES = { photos: 'Фотографии', videos: 'Видео', files: 'Файлы', voice: 'Голосовые сообщения', links: 'Общие ссылки' }
 const MONTHS_RU = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь']
-async function openMediaBrowser(type) {
-  // из карточки участника группы медиа берём из ЛИЧНОГО чата с ним (infoData.chat_id), иначе — из текущего
-  const cid = infoData.value?.chat_id || activeId.value
+async function openMediaBrowser(type, cidArg) {
+  // из карточки участника группы медиа берём из ЛИЧНОГО чата с ним (chat_id карточки), иначе — из текущего
+  const cid = cidArg || infoData.value?.chat_id || activeId.value
   if (!type || !cid) return
   const isGroups = type === 'groups'
   Object.assign(mediaBrowser, { open: true, type, title: isGroups ? 'Общие группы' : (MEDIA_TITLES[type] || 'Медиа'), items: [], q: '', loading: true })
@@ -1805,12 +1818,12 @@ function dayLabel(ds) {
   if (diff === 1) return 'Вчера'
   return `${d.getDate()} ${MONTHS_RU_GEN[d.getMonth()]}` + (d.getFullYear() !== now.getFullYear() ? ' ' + d.getFullYear() : '')
 }
-function shareContact() {
-  const p = infoData.value?.peer; if (!p) return
+function shareContact(peerArg) {
+  const p = (peerArg && peerArg.id ? peerArg : null) || infoData.value?.peer; if (!p) return
   const enc = (s) => encodeURIComponent(s || '')
   // структурированная карточка контакта: @[contact](id|имя|телефон|аватар)
   const marker = `@[contact](${p.id || ''}|${enc(p.name)}|${enc(p.phone)}|${enc(p.avatar)})`
-  closeInfo(); openForward([marker])
+  closeInfo(); closeProfilePopup(); openForward([marker])
 }
 const CONTACT_RE = /@\[contact\]\(([^|)]*)\|([^|)]*)\|([^|)]*)\|([^)]*)\)/
 function isContact(m) { return CONTACT_RE.test(m?.body || '') }
@@ -1964,6 +1977,7 @@ function onGlobalKey(e) {
   if (infoMenu.value) { infoMenu.value = false; return }
   if (showGroupEdit.value) { showGroupEdit.value = false; return }
   if (addMembersOpen.value) { addMembersOpen.value = false; return }
+  if (profilePopup.value) { closeProfilePopup(); return }
   if (mediaBrowser.open && infoMode.value === 'popup') { closeMediaBrowser(); return }
   if (showInfo.value && infoMode.value === 'popup') { closeInfo(); return }
   if (searchChat.open) { closeChatSearch(); return }
@@ -2198,7 +2212,7 @@ onBeforeUnmount(() => {
         </header>
         <header v-else class="flex h-14 items-center gap-3 border-b border-parchment-200 px-4 transition-[padding]" :class="sideDockOpen && 'sm:!pr-[25rem]'">
           <button class="rounded-lg p-1.5 text-ink-700/60 hover:bg-parchment-100 sm:hidden" @click="backToList"><AppIcon name="chevron" :size="18" class="rotate-90" /></button>
-          <div class="flex min-w-0 flex-1 cursor-pointer items-center gap-3" @click="(showInfo && infoMode === 'side') || openInfo('popup')">
+          <div class="flex min-w-0 flex-1 cursor-pointer items-center gap-3" @click="openHeaderProfile()">
             <img v-if="activeChat.avatar_url" :src="thumbUrl(activeChat.avatar_url)" @error="imgFull($event, activeChat.avatar_url)" class="photo-bw h-9 w-9 shrink-0 rounded-full object-cover" />
             <span v-else class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-semibold text-white"
                   :class="activeChat.type === 'group' ? 'bg-gradient-to-br from-sage-400 to-sage-600' : 'bg-gradient-to-br from-saffron-400 to-saffron-600'">{{ initials(activeChat.title) }}</span>
@@ -3035,6 +3049,45 @@ onBeforeUnmount(() => {
         </button>
       </div>
     </template>
+
+    <!-- Независимый попап профиля собеседника (клик по аве/имени/шапке); сосуществует с боковой панелью -->
+    <transition name="info-pop">
+      <div v-if="profilePopup" class="fixed inset-0 z-40 flex items-center justify-center p-4">
+        <div class="absolute inset-0 bg-ink-900/40" @click="closeProfilePopup"></div>
+        <div class="relative m-auto flex max-h-[90vh] w-full max-w-md flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+          <header class="flex h-14 shrink-0 items-center gap-2 border-b border-parchment-200 px-4">
+            <div class="flex-1 truncate font-medium text-ink-900">Информация</div>
+            <button class="rounded-lg p-1.5 text-ink-700/60 hover:bg-parchment-100" title="Закрыть" @click="closeProfilePopup"><AppIcon name="close" :size="24" /></button>
+          </header>
+          <div class="flex-1 overflow-y-auto">
+            <div class="flex flex-col items-center gap-3 p-6">
+              <img v-if="ppAvatar" :src="ppAvatar" @error="imgFull($event, ppAvatar)" class="h-28 w-28 cursor-zoom-in rounded-full object-cover ring-1 ring-parchment-200" @click="openLightbox(ppAvatar)" />
+              <span v-else class="flex h-28 w-28 items-center justify-center rounded-full bg-gradient-to-br from-saffron-400 to-saffron-600 text-3xl font-semibold text-white">{{ initials(ppPeer?.name) }}</span>
+              <div class="text-center">
+                <div class="text-lg font-semibold text-ink-900">{{ ppPeer?.name }}</div>
+                <div class="text-sm" :class="ppPeer?.online ? 'text-saffron-600' : 'text-ink-700/50'">{{ ppPeer?.online ? 'в сети' : 'не в сети' }}</div>
+              </div>
+            </div>
+            <div class="divide-y divide-parchment-100 border-t border-parchment-200">
+              <div v-if="ppPeer?.phone" class="px-6 py-3"><div class="text-[15px] text-ink-900">{{ ppPeer.phone }}</div><div class="text-xs text-ink-700/50">Телефон</div></div>
+              <div v-if="ppPeer?.spiritual_name" class="px-6 py-3"><div class="text-[15px] text-ink-900">{{ ppPeer.spiritual_name }}</div><div class="text-xs text-ink-700/50">Духовное имя</div></div>
+              <div v-if="ppCity" class="px-6 py-3"><div class="text-[15px] text-ink-900">{{ ppCity }}</div><div class="text-xs text-ink-700/50">Город</div></div>
+            </div>
+            <div v-if="ppCounts.length" class="divide-y divide-parchment-100 border-t border-parchment-200">
+              <button v-for="row in ppCounts" :key="row.icon" class="flex w-full items-center gap-3 px-6 py-3 text-left transition hover:bg-parchment-50" @click="openMediaBrowser(row.type, profilePopup.chat_id)">
+                <AppIcon :name="row.icon" :size="20" class="shrink-0 text-ink-700/50" />
+                <span class="text-[15px] text-ink-900"><b class="tabular-nums">{{ row.n }}</b> {{ row.label }}</span>
+              </button>
+            </div>
+            <div v-if="ppPeer" class="border-t border-parchment-200 p-2">
+              <button class="flex w-full items-center gap-3 rounded-lg px-4 py-2.5 text-left text-[15px] text-saffron-700 hover:bg-parchment-100" @click="shareContact(ppPeer)">
+                <AppIcon name="reply" :size="19" class="-scale-x-100" /> Поделиться контактом
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </transition>
 
     <!-- Модалка нового чата -->
     <div v-if="showNew" class="fixed inset-0 z-40 flex items-center justify-center bg-ink-900/40 p-4" @click.self="closeNew">

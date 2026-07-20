@@ -207,7 +207,9 @@ function saveDraftDebounced(id, text) { if (draftTimer) clearTimeout(draftTimer)
 
 const openSettled = ref(false) // после открытия чата — можно авто-читать живые входящие
 watch(() => chatState.messages.length, (n, old) => {
-  nextTick(scrollToBottom)
+  // вниз — ТОЛЬКО когда пришло новое сообщение и мы у нижнего края. На удалении (n < old) или при
+  // прокрутке вверх не дёргаем ленту вниз (иначе удаление где угодно «перекидывало» в самый низ).
+  if (stickBottom.value && n > (old ?? 0)) nextTick(scrollToBottom)
   maybeAutoReadLive(n, old)
 })
 // живое входящее при активном просмотре (вкладка ВИДНА и мы у нижнего края) → сразу читаем:

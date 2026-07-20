@@ -2063,7 +2063,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="-m-4 flex h-screen overflow-hidden bg-white sm:-m-6 lg:-m-8">
+  <div class="-m-4 flex h-screen overflow-hidden bg-white sm:-m-6 lg:-m-8" @contextmenu.prevent>
     <!-- Список чатов -->
     <aside class="flex w-full shrink-0 flex-col border-r border-parchment-200" :class="activeId ? 'hidden sm:flex' : 'flex'"
            :style="isDesktop ? { width: listWidth + 'px' } : null">

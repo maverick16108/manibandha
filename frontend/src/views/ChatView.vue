@@ -367,6 +367,23 @@ function closeWho() { whoMenu.open = false; whoMenu.list = [] }
 // ── контекстное меню (ПКМ) ─────────────────────────────────────────────
 const ctx = reactive({ open: false, x: 0, y: 0, m: null, selText: '' })
 function closeCtx() { ctx.open = false; ctx.m = null }
+// медиа сообщения (для «Сохранить как…»): url + имя файла
+function ctxDownloadable(m) {
+  if (!m || m.deleted) return null
+  const ph = photoUrls(m); if (ph.length) return { url: ph[0], name: (ph[0].split('/').pop() || 'photo').split('?')[0] }
+  const v = videoOf(m); if (v?.url) return { url: v.url, name: (v.url.split('/').pop() || 'video').split('?')[0] }
+  const vn = videoNoteOf(m); if (vn?.url) return { url: vn.url, name: (vn.url.split('/').pop() || 'video').split('?')[0] }
+  const f = fileOf(m); if (f?.url) return { url: f.url, name: f.name || 'файл' }
+  const a = audioOf(m); if (a) return { url: a, name: (a.split('/').pop() || 'audio').split('?')[0] }
+  return null
+}
+function ctxSaveAs() {
+  const d = ctxDownloadable(ctx.m); closeCtx()
+  if (!d) return
+  const a = document.createElement('a')
+  a.href = d.url; a.download = d.name; a.target = '_blank'; a.rel = 'noopener'
+  document.body.appendChild(a); a.click(); a.remove()
+}
 const ctxStyle = computed(() => {
   const vw = typeof window !== 'undefined' ? window.innerWidth : 9999
   const vh = typeof window !== 'undefined' ? window.innerHeight : 9999
@@ -808,7 +825,8 @@ async function uploadOne(file) {
   const fd = new FormData(); fd.append('files', file)
   const { data } = await client.post('/uploads', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
   const url = data.urls?.[0]; if (!url) throw new Error('no url')
-  return url
+  const d = data.dims?.[0]
+  return { url, w: d?.w || 0, h: d?.h || 0 } // w/h — размеры ОТДАННОЙ (сжатой) картинки
 }
 async function runUpload(pu) {
   pu.failed = false
@@ -817,21 +835,20 @@ async function runUpload(pu) {
     let capUsed = false
     // альбом изображений — одним сообщением
     if (imgs.length) {
-      const urls = await Promise.all(imgs.map((it) => uploadOne(it.file)))
-      // прайминг пропорций по загруженному url — чтобы бокс итогового сообщения СРАЗУ был нужного
-      // размера (иначе рисуется по дефолтному 1.4 и «схлопывается», когда картинка догрузится)
-      urls.forEach((u, i) => { const a = imgs[i]?.aspect; if (a && !imgAspects[u]) imgAspects[u] = a })
-      // ВСТРАИВАЕМ размеры в alt маркера: ![ШxВ](url). Так получатель и мы после перезагрузки знаем
-      // пропорции ДО загрузки картинки (бокс сразу верного размера, без «схлопывания»).
-      let body = urls.map((u, i) => { const it = imgs[i]; const d = (it?.dimsW && it?.dimsH) ? `${it.dimsW}x${it.dimsH}` : ''; return `![${d}](${u})` }).join('')
+      const res = await Promise.all(imgs.map((it) => uploadOne(it.file)))
+      // прайминг пропорций по ОТДАННЫМ размерам (совпадают с картинкой на экране) — бокс сразу точный,
+      // без «схлопывания» и без леттербокса object-contain на пару пикселей
+      res.forEach((r, i) => { const a = (r.w && r.h) ? r.w / r.h : imgs[i]?.aspect; if (a && !imgAspects[r.url]) imgAspects[r.url] = a })
+      // ВСТРАИВАЕМ размеры отданной картинки в alt маркера: ![ШxВ](url)
+      let body = res.map((r, i) => { const d = (r.w && r.h) ? `${r.w}x${r.h}` : ((imgs[i]?.dimsW && imgs[i]?.dimsH) ? `${imgs[i].dimsW}x${imgs[i].dimsH}` : ''); return `![${d}](${r.url})` }).join('')
       if (cap && !vids.length && !files.length) { body += `\n${cap}`; capUsed = true }
       await sendMessageTo(chatId, body)
     }
     // видео — каждое отдельным сообщением (видео + постер)
     for (const it of vids) {
-      const vurl = await uploadOne(it.file)
+      const vurl = (await uploadOne(it.file)).url
       let purl = ''
-      if (it.posterBlob) { try { purl = await uploadOne(new File([it.posterBlob], 'poster.jpg', { type: 'image/jpeg' })) } catch { purl = '' } }
+      if (it.posterBlob) { try { purl = (await uploadOne(new File([it.posterBlob], 'poster.jpg', { type: 'image/jpeg' }))).url } catch { purl = '' } }
       const wh = (it.dimsW && it.dimsH) ? `|${it.dimsW}x${it.dimsH}` : ''
       let s = `@[video](${vurl}|${purl}|${it.file.size || 0}${wh})`
       if (cap && !capUsed && !files.length) { s += `\n${cap}`; capUsed = true }
@@ -839,7 +856,7 @@ async function runUpload(pu) {
     }
     // прочие файлы
     for (const it of files) {
-      const url = await uploadOne(it.file)
+      const url = (await uploadOne(it.file)).url
       const name = (it.file.name || 'файл').replace(/[|)(]/g, '_')
       let s = `@[file](${url}|${encodeURIComponent(name)})`
       if (cap && !capUsed) { s += `\n${cap}`; capUsed = true }
@@ -1299,9 +1316,9 @@ async function runVideoNoteUpload(pn) {
   pn.failed = false
   try {
     const ext = pn.mime.includes('mp4') ? 'mp4' : 'webm'
-    const vurl = await uploadOne(new File([pn.blob], `videonote.${ext}`, { type: pn.mime }))
+    const vurl = (await uploadOne(new File([pn.blob], `videonote.${ext}`, { type: pn.mime }))).url
     let purl = ''
-    if (pn.posterBlob) { try { purl = await uploadOne(new File([pn.posterBlob], 'poster.jpg', { type: 'image/jpeg' })) } catch { purl = '' } }
+    if (pn.posterBlob) { try { purl = (await uploadOne(new File([pn.posterBlob], 'poster.jpg', { type: 'image/jpeg' }))).url } catch { purl = '' } }
     await sendMessageTo(pn.chatId, `@[videonote](${vurl}|${purl})`)
     removeNote(pn); scrollToBottom()
   } catch { pn.failed = true }
@@ -2716,6 +2733,7 @@ onBeforeUnmount(() => {
         <button class="flex w-full items-center gap-3 px-3.5 py-2.5 text-left text-[15px] text-ink-700 hover:bg-parchment-100" @click="ctxReply"><AppIcon name="reply" :size="19" /> Ответить</button>
         <button v-if="canCopy(ctx.m) || ctx.selText" class="flex w-full items-center gap-3 px-3.5 py-2.5 text-left text-[15px] text-ink-700 hover:bg-parchment-100" @click="ctxCopy"><AppIcon name="copy" :size="19" /> Копировать</button>
         <button v-if="canEdit(ctx.m)" class="flex w-full items-center gap-3 px-3.5 py-2.5 text-left text-[15px] text-ink-700 hover:bg-parchment-100" @click="ctxEdit"><AppIcon name="edit" :size="19" /> Изменить</button>
+        <button v-if="ctxDownloadable(ctx.m)" class="flex w-full items-center gap-3 px-3.5 py-2.5 text-left text-[15px] text-ink-700 hover:bg-parchment-100" @click="ctxSaveAs"><AppIcon name="download" :size="19" /> Сохранить как…</button>
         <button v-if="ctx.m && !ctx.m.deleted" class="flex w-full items-center gap-3 px-3.5 py-2.5 text-left text-[15px] text-ink-700 hover:bg-parchment-100" @click="ctxForward"><AppIcon name="reply" :size="19" class="-scale-x-100" /> Переслать</button>
         <button v-if="ctx.m && ctx.m.id && !ctx.m.deleted" class="flex w-full items-center gap-3 px-3.5 py-2.5 text-left text-[15px] text-ink-700 hover:bg-parchment-100" @click="ctxPin"><AppIcon name="pin-chat" :size="19" /> {{ activeChat?.pinned_message_id === ctx.m.id ? 'Открепить' : 'Закрепить' }}</button>
         <button v-if="canDelete(ctx.m)" class="flex w-full items-center gap-3 border-t border-parchment-100 px-3.5 py-2.5 text-left text-[15px] text-red-600 hover:bg-red-50" @click="ctxDelete"><AppIcon name="trash" :size="19" /> {{ delLabel(ctx.m) }}</button>

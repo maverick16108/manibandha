@@ -162,6 +162,7 @@ func (s *Server) upload(w http.ResponseWriter, r *http.Request) {
 
 	urls := []any{}
 	thumbs := []any{}
+	dims := []any{} // фактические размеры отданной (сжатой) картинки — фронт зашивает их в маркер, чтобы бокс совпадал
 	for _, fh := range files {
 		ctype := strings.TrimSpace(strings.Split(fh.Header.Get("Content-Type"), ";")[0])
 		ext, ok := uploadAllowed[ctype]
@@ -190,9 +191,10 @@ func (s *Server) upload(w http.ResponseWriter, r *http.Request) {
 		}
 		stem := randHex()
 		if uploadImageTypes[ctype] {
-			if url, thumb, err := s.saveImage(data, stem); err == nil {
+			if url, thumb, sw, sh, err := s.saveImage(data, stem); err == nil {
 				urls = append(urls, url)
 				thumbs = append(thumbs, thumb)
+				dims = append(dims, map[string]any{"w": sw, "h": sh})
 				continue
 			}
 		}
@@ -203,24 +205,26 @@ func (s *Server) upload(w http.ResponseWriter, r *http.Request) {
 		}
 		urls = append(urls, "/uploads/"+name)
 		thumbs = append(thumbs, nil)
+		dims = append(dims, nil)
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"urls": urls, "thumbs": thumbs})
+	writeJSON(w, http.StatusOK, map[string]any{"urls": urls, "thumbs": thumbs, "dims": dims})
 }
 
-// saveImage пережимает картинку в webp + делает превью (через cwebp). Возвращает (url, thumbUrl).
-func (s *Server) saveImage(data []byte, stem string) (string, string, error) {
+// saveImage пережимает картинку в webp + делает превью (через cwebp).
+// Возвращает (url, thumbUrl, servedW, servedH) — размеры ОТДАННОЙ картинки (после ресайза).
+func (s *Server) saveImage(data []byte, stem string) (string, string, int, int, error) {
 	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
 	if err != nil {
-		return "", "", err
+		return "", "", 0, 0, err
 	}
 	tmp, err := os.CreateTemp("", "upl-*")
 	if err != nil {
-		return "", "", err
+		return "", "", 0, 0, err
 	}
 	defer os.Remove(tmp.Name())
 	if _, err := tmp.Write(data); err != nil {
 		tmp.Close()
-		return "", "", err
+		return "", "", 0, 0, err
 	}
 	tmp.Close()
 
@@ -230,13 +234,21 @@ func (s *Server) saveImage(data []byte, stem string) (string, string, error) {
 	thumbPath := filepath.Join(s.Cfg.UploadDir, thumbName)
 
 	if err := cwebp(tmp.Name(), mainPath, cfg.Width, cfg.Height, uploadMainMax, uploadMainQ); err != nil {
-		return "", "", err
+		return "", "", 0, 0, err
 	}
 	if err := cwebp(tmp.Name(), thumbPath, cfg.Width, cfg.Height, uploadThumbMax, uploadThumbQ); err != nil {
 		os.Remove(mainPath)
-		return "", "", err
+		return "", "", 0, 0, err
 	}
-	return "/uploads/" + mainName, "/uploads/" + thumbName, nil
+	// точные размеры отданного webp (декодим заголовок) — cwebp мог округлить иначе, чем оригинал
+	sw, sh := cfg.Width, cfg.Height
+	if f, e := os.Open(mainPath); e == nil {
+		if c2, _, e2 := image.DecodeConfig(f); e2 == nil {
+			sw, sh = c2.Width, c2.Height
+		}
+		f.Close()
+	}
+	return "/uploads/" + mainName, "/uploads/" + thumbName, sw, sh, nil
 }
 
 // cwebp кодирует webp с ресайзом по длинной стороне (0 = без ресайза для этой оси).

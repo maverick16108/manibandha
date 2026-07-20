@@ -988,7 +988,7 @@ function clearPreviewCache() {
   computeStorage()
 }
 async function wipeAllCache() {
-  if (!confirm('Очистить весь локальный кэш чатов? Сообщения и медиа заново подгрузятся с сервера. Страница перезагрузится.')) return
+  if (!(await confirmDialog({ message: 'Очистить весь локальный кэш чатов? Сообщения и медиа заново подгрузятся с сервера. Страница перезагрузится.', confirmText: 'Очистить', danger: true }))) return
   storageWiping.value = true
   await wipeLocalChatCache()
   location.reload()
@@ -1636,11 +1636,11 @@ async function confirmAddMembers() {
   try { const { data } = await client.post(`/chats/${activeId.value}/members`, { user_ids: ids }); infoData.value = data; infoCache[activeId.value] = data } catch { showToast('Не удалось добавить') }
 }
 async function kickMember(uid) {
-  if (!activeId.value || !confirm('Удалить участника из группы?')) return
+  if (!activeId.value || !(await confirmDialog({ message: 'Удалить участника из группы?', confirmText: 'Удалить', danger: true }))) return
   try { const { data } = await client.delete(`/chats/${activeId.value}/members/${uid}`); infoData.value = data; infoCache[activeId.value] = data } catch { showToast('Не удалось удалить') }
 }
 async function leaveGroupConfirm() {
-  if (!activeId.value || !confirm('Покинуть группу?')) return
+  if (!activeId.value || !(await confirmDialog({ message: 'Покинуть группу?', confirmText: 'Покинуть', danger: true }))) return
   const id = activeId.value; closeInfo()
   try { await leaveChat(id); router.push({ name: 'chat' }) } catch { showToast('Не удалось покинуть') }
 }
@@ -2331,7 +2331,7 @@ onBeforeUnmount(() => {
               </div>
               <div v-if="parseReactions(m).length" class="flex flex-wrap gap-1 px-0.5" :class="isMine(m) ? 'justify-end' : ''">
                 <button v-for="r in parseReactions(m)" :key="r.emoji" @click.stop="onChip(m, r.emoji)" @contextmenu.prevent.stop="openWho($event, r)" title="ПКМ — кто поставил"
-                        class="flex items-center gap-1 rounded-full py-0.5 pl-0.5 pr-1 leading-none transition hover:bg-black/5" :class="m.my_reaction === r.emoji && 'ring-1 ring-saffron-400'"><span class="text-xl leading-none">{{ r.emoji }}</span><span v-if="r.count < 4 && r.who && r.who.length" class="flex items-center"><template v-for="(w, wi) in r.who" :key="wi"><img v-if="w.avatar" :src="thumbUrl(w.avatar)" class="block h-[22px] w-[22px] rounded-full object-cover" :class="wi > 0 && '-ml-2'" /><span v-else class="flex h-[22px] w-[22px] items-center justify-center rounded-full bg-sage-500 text-[9px] font-semibold text-white" :class="wi > 0 && '-ml-2'">{{ initials(w.name) }}</span></template></span><span v-else-if="r.count > 1" class="text-sm font-semibold tabular-nums text-ink-700">{{ r.count }}</span></button>
+                        class="flex items-center gap-1 rounded-full px-2 py-0.5 leading-none ring-1 transition" :class="m.my_reaction === r.emoji ? 'bg-saffron-500/25 text-saffron-800 ring-saffron-400' : 'bg-saffron-500/10 text-ink-700 ring-transparent hover:bg-saffron-500/20'"><span class="text-xl leading-none">{{ r.emoji }}</span><span v-if="r.count < 4 && r.who && r.who.length" class="flex items-center"><template v-for="(w, wi) in r.who" :key="wi"><img v-if="w.avatar" :src="thumbUrl(w.avatar)" class="block h-[22px] w-[22px] rounded-full object-cover" :class="wi > 0 && '-ml-2'" /><span v-else class="flex h-[22px] w-[22px] items-center justify-center rounded-full bg-sage-500 text-[9px] font-semibold text-white" :class="wi > 0 && '-ml-2'">{{ initials(w.name) }}</span></template></span><span v-else-if="r.count > 1" class="text-sm font-semibold tabular-nums text-ink-700">{{ r.count }}</span></button>
               </div>
             </div>
             <!-- видео-сообщение -->
@@ -2385,7 +2385,7 @@ onBeforeUnmount(() => {
               <!-- без подписи: реакции ЗА пределами видео, без фона -->
               <div v-if="!captionText(m) && parseReactions(m).length" class="flex flex-wrap gap-1 px-0.5">
                 <button v-for="r in parseReactions(m)" :key="r.emoji" @click.stop="onChip(m, r.emoji)" @contextmenu.prevent.stop="openWho($event, r)" title="ПКМ — кто поставил"
-                        class="flex items-center gap-1 rounded-full py-0.5 pl-0.5 pr-1 leading-none transition hover:bg-black/5" :class="m.my_reaction === r.emoji && 'ring-1 ring-saffron-400'"><span class="text-xl leading-none">{{ r.emoji }}</span><span v-if="r.count < 4 && r.who && r.who.length" class="flex items-center"><template v-for="(w, wi) in r.who" :key="wi"><img v-if="w.avatar" :src="thumbUrl(w.avatar)" class="block h-[22px] w-[22px] rounded-full object-cover" :class="wi > 0 && '-ml-2'" /><span v-else class="flex h-[22px] w-[22px] items-center justify-center rounded-full bg-sage-500 text-[9px] font-semibold text-white" :class="wi > 0 && '-ml-2'">{{ initials(w.name) }}</span></template></span><span v-else-if="r.count > 1" class="text-sm font-semibold tabular-nums text-ink-700">{{ r.count }}</span></button>
+                        class="flex items-center gap-1 rounded-full px-2 py-0.5 leading-none ring-1 transition" :class="m.my_reaction === r.emoji ? 'bg-saffron-500/25 text-saffron-800 ring-saffron-400' : 'bg-saffron-500/10 text-ink-700 ring-transparent hover:bg-saffron-500/20'"><span class="text-xl leading-none">{{ r.emoji }}</span><span v-if="r.count < 4 && r.who && r.who.length" class="flex items-center"><template v-for="(w, wi) in r.who" :key="wi"><img v-if="w.avatar" :src="thumbUrl(w.avatar)" class="block h-[22px] w-[22px] rounded-full object-cover" :class="wi > 0 && '-ml-2'" /><span v-else class="flex h-[22px] w-[22px] items-center justify-center rounded-full bg-sage-500 text-[9px] font-semibold text-white" :class="wi > 0 && '-ml-2'">{{ initials(w.name) }}</span></template></span><span v-else-if="r.count > 1" class="text-sm font-semibold tabular-nums text-ink-700">{{ r.count }}</span></button>
               </div>
             </div>
 
@@ -2440,7 +2440,7 @@ onBeforeUnmount(() => {
               <!-- без подписи: реакции ЗА пределами фото, без фона -->
               <div v-if="!captionText(m) && parseReactions(m).length" class="flex flex-wrap gap-1 px-0.5">
                 <button v-for="r in parseReactions(m)" :key="r.emoji" @click.stop="onChip(m, r.emoji)" @contextmenu.prevent.stop="openWho($event, r)" title="ПКМ — кто поставил"
-                        class="flex items-center gap-1 rounded-full py-0.5 pl-0.5 pr-1 leading-none transition hover:bg-black/5" :class="m.my_reaction === r.emoji && 'ring-1 ring-saffron-400'"><span class="text-xl leading-none">{{ r.emoji }}</span><span v-if="r.count < 4 && r.who && r.who.length" class="flex items-center"><template v-for="(w, wi) in r.who" :key="wi"><img v-if="w.avatar" :src="thumbUrl(w.avatar)" class="block h-[22px] w-[22px] rounded-full object-cover" :class="wi > 0 && '-ml-2'" /><span v-else class="flex h-[22px] w-[22px] items-center justify-center rounded-full bg-sage-500 text-[9px] font-semibold text-white" :class="wi > 0 && '-ml-2'">{{ initials(w.name) }}</span></template></span><span v-else-if="r.count > 1" class="text-sm font-semibold tabular-nums text-ink-700">{{ r.count }}</span></button>
+                        class="flex items-center gap-1 rounded-full px-2 py-0.5 leading-none ring-1 transition" :class="m.my_reaction === r.emoji ? 'bg-saffron-500/25 text-saffron-800 ring-saffron-400' : 'bg-saffron-500/10 text-ink-700 ring-transparent hover:bg-saffron-500/20'"><span class="text-xl leading-none">{{ r.emoji }}</span><span v-if="r.count < 4 && r.who && r.who.length" class="flex items-center"><template v-for="(w, wi) in r.who" :key="wi"><img v-if="w.avatar" :src="thumbUrl(w.avatar)" class="block h-[22px] w-[22px] rounded-full object-cover" :class="wi > 0 && '-ml-2'" /><span v-else class="flex h-[22px] w-[22px] items-center justify-center rounded-full bg-sage-500 text-[9px] font-semibold text-white" :class="wi > 0 && '-ml-2'">{{ initials(w.name) }}</span></template></span><span v-else-if="r.count > 1" class="text-sm font-semibold tabular-nums text-ink-700">{{ r.count }}</span></button>
               </div>
             </div>
 

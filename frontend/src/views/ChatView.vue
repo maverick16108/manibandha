@@ -58,30 +58,29 @@ const scroller = ref(null)
 const listWrap = ref(null)
 const stickBottom = ref(true)          // держимся ли у нижнего края (иначе не дёргаем при подгрузке)
 const chatOpening = ref(false)         // прячем ленту на время открытия/позиционирования (без мелькания)
-// Дата — sticky-разделитель (position:sticky): прилипает к верху, следующий день его выталкивает.
-// Единственное, что делает JS — ПЛАВНО ГАСИТ выталкиваемый разделитель (иначе «Вчера» резко наезжает
-// на «Сегодня»): чем выше линии прилипания уехала плашка, тем она прозрачнее.
+// Дата вверху — ОДНА плавающая плашка (не sticky-собратья, которые пилятся стопкой). Показывает дату
+// верхнего видимого сообщения; при смене дня — кроссфейд НА МЕСТЕ (старая гаснет, новая встаёт).
+// Встроенные разделители в ленте плавно ГАСНУТ, входя в зону плашки, чтобы не дублироваться.
+const floatDate = reactive({ label: '', show: false })
 let floatRaf = 0
 function updateFloatingDate() {
   if (floatRaf) return
   floatRaf = requestAnimationFrame(() => {
     floatRaf = 0
-    const el = scroller.value; if (!el) return
-    const stickyTop = el.getBoundingClientRect().top + 8 // top-2 = 0.5rem
+    const el = scroller.value; if (!el) { floatDate.show = false; return }
+    const line = el.getBoundingClientRect().top + 8 // позиция плавающей плашки (top-2)
     const seps = el.querySelectorAll('[data-daysep]')
-    for (let i = 0; i < seps.length; i++) {
-      const s = seps[i]
+    let label = ''
+    for (const s of seps) {
       const st = s.getBoundingClientRect().top
-      let o = 1
-      // разделитель, прилипший к верху (st около линии прилипания), ГАСНЕТ по мере приближения
-      // следующего дня к этой линии — sticky-собратья стоят на одном top, иначе «18 июля» просто
-      // лежит под «Вчера». Допуск 14px — на суб-пиксели/паддинг, иначе фейд не срабатывает.
-      if (st <= stickyTop + 14 && seps[i + 1]) {
-        const nt = seps[i + 1].getBoundingClientRect().top
-        o = Math.max(0, Math.min(1, (nt - stickyTop) / 42))
-      }
+      if (st <= line + 2) label = s.getAttribute('data-daysep') // текущая верхняя дата
+      // встроенная плашка гаснет к 0 к моменту, когда доедет до плавающей (нет двух одинаковых дат)
+      const o = Math.max(0, Math.min(1, (st - line) / 44))
       s.style.opacity = o >= 0.999 ? '' : String(o)
     }
+    if (!label && seps.length) label = seps[0].getAttribute('data-daysep')
+    floatDate.label = label
+    floatDate.show = !!label
   })
 }
 let listObs = null
@@ -741,9 +740,10 @@ function addComposeItems(files, compress) {
   for (const f of Array.from(files)) {
     const isImage = (f.type || '').startsWith('image/')
     const isVideo = (f.type || '').startsWith('video/')
-    const it = reactive({ file: f, url: (isImage || isVideo) ? URL.createObjectURL(f) : null, isImage, isVideo, size: f.size, poster: null, posterBlob: null })
+    const it = reactive({ file: f, url: (isImage || isVideo) ? URL.createObjectURL(f) : null, isImage, isVideo, size: f.size, poster: null, posterBlob: null, aspect: 0 })
     composeItems.value.push(it)
-    if (isVideo) capturePoster(f).then((r) => { if (r) { it.posterBlob = r.blob; it.poster = r.url; it.dimsW = r.w; it.dimsH = r.h } })
+    if (isVideo) capturePoster(f).then((r) => { if (r) { it.posterBlob = r.blob; it.poster = r.url; it.dimsW = r.w; it.dimsH = r.h; it.aspect = (r.w && r.h) ? r.w / r.h : 0 } })
+    else if (isImage) { const im = new Image(); im.onload = () => { if (im.naturalWidth && im.naturalHeight) it.aspect = im.naturalWidth / im.naturalHeight }; im.src = it.url } // пропорции для лоадер-превью = как у итогового фото
   }
 }
 // постер (кадр) видео на клиенте — ffmpeg на сервере не нужен
@@ -836,8 +836,8 @@ async function sendCompose() {
   // иначе в превью попадал бы blob самого видео и <img> ломался в «точку».
   await Promise.all(vids.map(async (it) => { if (!it.posterBlob) { const r = await capturePoster(it.file); if (r) { it.posterBlob = r.blob; it.poster = r.url; it.dimsW = r.w; it.dimsH = r.h } } }))
   const previews = [
-    ...imgs.map((it) => ({ url: it.url })),
-    ...vids.map((it) => ({ url: it.poster || null, isVideo: true })),
+    ...imgs.map((it) => ({ url: it.url, aspect: it.aspect })),
+    ...vids.map((it) => ({ url: it.poster || null, isVideo: true, aspect: it.aspect })),
   ]
   const pu = reactive({ id: `up-${uploadSeq++}`, chatId, cap, imgs, vids, files, failed: false, previews })
   if (previews.length) { pendingUploads.push(pu); nextTick(scrollToBottom) }
@@ -963,8 +963,11 @@ function boxWH(aspect, maxW, maxH) {
 // резерв места под одиночное фото + подложка «в цвет» (мгновенно, до загрузки).
 function photoBoxStyle(u) {
   const aspect = imgAspects[u] || imageAspect(u) || 1.4
-  return { ...boxWH(aspect, wide.value ? 512 : 340, 620), background: imageColor(u) || 'rgba(190,170,145,.35)' }
+  return { ...photoBox(aspect), background: imageColor(u) || 'rgba(190,170,145,.35)' }
 }
+// ЕДИНЫЙ размер бокса одиночного фото — им пользуются и лоадер-превью, и итоговое фото (одинаковый
+// размер, без «скачка» при загрузке). Чуть крупнее — как в Telegram.
+function photoBox(aspect) { return boxWH(aspect || 1.4, wide.value ? 576 : 360, 680) }
 // стиль размытой подложки-микропревью (blur-up, как в Telegram); null → нет микро
 function microBg(u) { const m = imageMicro(u); return m ? { backgroundImage: `url(${m})` } : null }
 // резерв места под видео. Приоритет — размеры из маркера (@[video](...|ШxВ)), иначе — по постеру.
@@ -2304,8 +2307,8 @@ onBeforeUnmount(() => {
           <template v-for="(m, i) in chatState.messages" :key="m.client_uuid">
           <!-- встроенная плашка даты между днями (остаётся в ленте); плавающая сверху её дублирует
                только когда встроенная ушла вверх за экран (см. updateFloatingDate) -->
-          <div v-if="showDaySep(m, i)" :data-daysep="dayLabel(m.created_at)" class="sticky top-2 z-[6] my-2 flex justify-center">
-            <span class="rounded-full bg-ink-900/55 px-3 py-1 text-xs font-semibold text-white shadow-sm backdrop-blur-sm">{{ dayLabel(m.created_at) }}</span>
+          <div v-if="showDaySep(m, i)" :data-daysep="dayLabel(m.created_at)" class="my-2 flex justify-center">
+            <span class="rounded-full bg-ink-900/55 px-3 py-1 text-xs font-semibold text-white shadow-sm">{{ dayLabel(m.created_at) }}</span>
           </div>
           <div v-if="m.client_uuid === firstUnreadKey" class="my-3 flex items-center gap-2 px-2">
             <span class="h-px flex-1 bg-saffron-400/60"></span>
@@ -2542,11 +2545,20 @@ onBeforeUnmount(() => {
 
           <!-- оптимистичные загрузки фото (мгновенно, с лоадером; уходят на сервер в фоне) -->
           <div v-for="pu in pendingUploads.filter((p) => p.chatId === activeId && p.previews.length)" :key="pu.id" class="flex px-1" :class="wide ? 'justify-start' : 'justify-end'">
-            <div class="relative max-w-[78%] overflow-hidden rounded-2xl bg-saffron-500 shadow-sm">
-              <div class="grid gap-0.5" :class="albumCols(pu.previews.length)">
-                <div v-for="(p, k) in pu.previews" :key="k" class="relative" :class="albumItemClass(pu.previews.length, k)">
-                  <img v-if="p.url" :src="p.url" class="w-full object-cover" :class="pu.previews.length === 1 ? 'max-h-[400px]' : 'aspect-square'" />
-                  <div v-else class="flex w-full items-center justify-center bg-ink-900/80" :class="pu.previews.length === 1 ? 'h-64' : 'aspect-square'"><AppIcon name="play" :size="30" class="text-white/70" /></div>
+            <div class="relative overflow-hidden rounded-2xl shadow-sm" :class="pu.cap && 'bg-saffron-500'">
+              <!-- одиночное фото: ТОТ ЖЕ бокс, что и у итогового сообщения (размер не меняется при загрузке) -->
+              <div v-if="pu.previews.length === 1" class="relative overflow-hidden" :style="photoBox(pu.previews[0].aspect)">
+                <img v-if="pu.previews[0].url" :src="pu.previews[0].url" class="h-full w-full object-cover" />
+                <div v-else class="flex h-full w-full items-center justify-center bg-ink-900/80"><AppIcon name="play" :size="30" class="text-white/70" /></div>
+                <div class="absolute inset-0 flex items-center justify-center bg-black/25">
+                  <span v-if="!pu.failed" class="h-7 w-7 animate-spin rounded-full border-2 border-white/40 border-t-white"></span>
+                  <button v-else class="flex items-center gap-1 rounded-full bg-black/55 px-3 py-1.5 text-xs font-medium text-white" @click="retryPending(pu)"><AppIcon name="reply" :size="14" class="-scale-x-100" /> Повторить</button>
+                </div>
+              </div>
+              <div v-else class="grid gap-0.5" :class="albumCols(pu.previews.length)" :style="{ width: (wide ? 576 : 360) + 'px' }">
+                <div v-for="(p, k) in pu.previews" :key="k" class="relative aspect-square" :class="albumItemClass(pu.previews.length, k)">
+                  <img v-if="p.url" :src="p.url" class="h-full w-full object-cover" />
+                  <div v-else class="flex h-full w-full items-center justify-center bg-ink-900/80"><AppIcon name="play" :size="30" class="text-white/70" /></div>
                   <div class="absolute inset-0 flex items-center justify-center bg-black/30">
                     <span v-if="!pu.failed" class="h-7 w-7 animate-spin rounded-full border-2 border-white/40 border-t-white"></span>
                     <button v-else class="flex items-center gap-1 rounded-full bg-black/55 px-3 py-1.5 text-xs font-medium text-white" @click="retryPending(pu)"><AppIcon name="reply" :size="14" class="-scale-x-100" /> Повторить</button>
@@ -2588,7 +2600,12 @@ onBeforeUnmount(() => {
           </div>
         </div>
 
-        <!-- дата — sticky-разделитель (см. блок сообщений): прилипает к верху и выталкивается следующим днём -->
+        <!-- ОДНА плавающая дата: показывает верхнюю дату, при смене дня кроссфейд на месте (без стопки) -->
+        <div class="pointer-events-none absolute inset-x-0 top-2 z-[6] flex justify-center transition-opacity duration-200" :class="floatDate.show ? 'opacity-100' : 'opacity-0'">
+          <transition name="datefade" mode="out-in">
+            <span :key="floatDate.label" class="rounded-full bg-ink-900/55 px-3 py-1 text-xs font-semibold text-white shadow-sm backdrop-blur-sm">{{ floatDate.label }}</span>
+          </transition>
+        </div>
         </div>
 
         <!-- кнопка «вниз» (видна, когда прокручено вверх) -->

@@ -893,23 +893,24 @@ async function onPaste(e) {
   if (imgs.length) { e.preventDefault(); addComposeItems(imgs) }
 }
 
-// пересылка: маркер «@[fwd](имя|аватар)» в начале тела — кто исходный автор
+// пересылка: маркер «@[fwd](имя|аватар|id)» в начале тела — кто исходный автор (id — для клика на профиль)
 const FWD_RE = /^@\[fwd\]\(([^)]*)\)\n?/
 function fwdParts(m) {
   const mm = (m?.body || '').match(FWD_RE); if (!mm) return null
-  const [n, a] = mm[1].split('|')
+  const [n, a, id] = mm[1].split('|')
   let name = n, avatar = a || ''
   try { name = decodeURIComponent(n) } catch { /* as is */ }
   try { avatar = a ? decodeURIComponent(a) : '' } catch { avatar = '' }
-  return { name, avatar }
+  return { name, avatar, id: id ? Number(id) : null }
 }
 function fwdName(m) { return fwdParts(m)?.name || '' }
 function fwdAvatar(m) { return fwdParts(m)?.avatar || '' }
+function fwdAuthorId(m) { return fwdParts(m)?.id || null }
 function contentBody(m) { return (m?.body || '').replace(FWD_RE, '') }
 function fwdWrap(m) {
   const b = m.body || ''
   if (FWD_RE.test(b)) return b            // уже переслано — сохраняем исходного автора
-  return `@[fwd](${encodeURIComponent(nameOf(m))}|${encodeURIComponent(avatarOf(m) || '')})\n${b}`
+  return `@[fwd](${encodeURIComponent(nameOf(m))}|${encodeURIComponent(avatarOf(m) || '')}|${m.author_id ?? ''})\n${b}`
 }
 
 // содержимое сообщения: картинки / подпись / вложения
@@ -2318,103 +2319,112 @@ onBeforeUnmount(() => {
               </div>
             </div>
             <!-- видео-сообщение -->
-            <div v-else-if="isVideoMsg(m)" class="relative w-fit overflow-hidden rounded-2xl shadow-sm"
-                 :class="[isMine(m) ? 'bg-saffron-500 text-white' : 'bg-white text-ink-900 ring-1 ring-parchment-200']"
-                 @contextmenu="onContext($event, m)">
-              <div v-if="showAuthor(m, i)" class="cursor-pointer px-3 pt-2 text-sm font-semibold text-sage-600" @click.stop="openUserInfo(m.author_id)">{{ nameOf(m) }}</div>
-              <div v-if="fwdName(m)" class="flex items-center gap-1.5 px-3 pt-2 text-sm font-semibold" :class="isMine(m) ? 'text-white/90' : 'text-saffron-700'">
-                <AppIcon name="reply" :size="12" class="-scale-x-100" /> <span>Переслано от</span>
-                <span class="truncate">{{ fwdName(m) }}</span>
-              </div>
-              <!-- ≤10МБ или уже запущено: авто muted+loop + таймер; крупнее: постер с кнопкой (тот же размер).
-                   Место резервируется по постеру (object-cover) — при открытии чата не «прыгает». -->
-              <div class="video-box ph-box relative flex justify-center overflow-hidden" :style="videoBoxStyle(videoOf(m))">
-                <span class="ph-spin pointer-events-none absolute inset-0 flex items-center justify-center"><span class="h-8 w-8 animate-spin rounded-full border-2 border-white/45 border-t-white/90"></span></span>
-                <template v-if="videoAuto(m)">
-                  <video :src="videoOf(m).url" :poster="thumbUrl(videoOf(m).poster || '')" autoplay muted loop playsinline
-                         disablepictureinpicture controlslist="nodownload noremoteplayback nofullscreen"
-                         style="opacity:0;transition:opacity .35s ease" class="pointer-events-none relative block h-full w-full object-cover" @loadeddata="markImgLoaded($event)" @timeupdate="onVideoTime($event, m)"></video>
-                  <div class="absolute inset-0 cursor-pointer" @click.stop="openVideoLightbox(m)"></div>
-                  <span class="pointer-events-none absolute left-2 top-2 flex items-center gap-1 rounded-full bg-black/55 px-2.5 py-1 text-sm text-white">
-                    <span class="tabular-nums">{{ videoState[m.id]?.remain || '' }}</span>
-                    <AppIcon name="volume-x" :size="15" />
-                  </span>
-                </template>
-                <template v-else>
-                  <img :src="thumbUrl(videoOf(m)?.poster || '')" @error="imgFull($event, videoOf(m)?.poster); markImgLoaded($event)" @load="onImgLoad($event, videoOf(m)?.poster)"
-                       style="opacity:0;transition:opacity .35s ease" class="relative block h-full w-full object-cover" />
-                  <button class="absolute inset-0 flex items-center justify-center" @click.stop="markVideoLoaded(m.id); openVideoLightbox(m)" title="Смотреть видео">
-                    <span class="flex h-14 w-14 items-center justify-center rounded-full bg-black/50 text-white ring-2 ring-white/40"><AppIcon name="play" :size="26" /></span>
-                  </button>
-                </template>
-              </div>
-              <div v-if="captionText(m)" class="markdown-body break-words px-3.5 pt-1.5 text-[15px]" :class="isMine(m) && 'markdown-on-accent'" v-html="renderChatBody(captionText(m))"></div>
-              <div class="flex items-end justify-between gap-2 px-2.5 pb-1.5 pt-1">
-                <div class="flex flex-wrap gap-1">
-                  <button v-for="r in parseReactions(m)" :key="r.emoji" @click.stop="onChip(m, r.emoji)" @contextmenu.prevent.stop="openWho($event, r)" title="ПКМ — кто поставил"
-                          class="flex items-center gap-1 rounded-full px-2 py-0.5 leading-none ring-1 transition"
-                          :class="m.my_reaction === r.emoji ? 'bg-saffron-500/25 text-saffron-800 ring-saffron-400' : 'bg-saffron-500/10 text-ink-700 ring-transparent hover:bg-saffron-500/20'"><span class="text-lg leading-none">{{ r.emoji }}</span><span v-if="r.count < 4 && r.who && r.who.length" class="-my-0.5 -mr-2 flex items-center"><template v-for="(w, wi) in r.who" :key="wi"><img v-if="w.avatar" :src="thumbUrl(w.avatar)" class="block h-[22px] w-[22px] rounded-full object-cover" :class="wi > 0 && '-ml-2'" /><span v-else class="flex h-[22px] w-[22px] items-center justify-center rounded-full bg-sage-500 text-[9px] font-semibold text-white" :class="wi > 0 && '-ml-2'">{{ initials(w.name) }}</span></template></span><span v-else-if="r.count > 1" class="text-sm font-semibold tabular-nums">{{ r.count }}</span></button>
+            <div v-else-if="isVideoMsg(m)" class="flex flex-col gap-1" :class="(isMine(m) && !wide) ? 'items-end' : 'items-start'" @contextmenu="onContext($event, m)">
+              <div class="relative w-fit overflow-hidden rounded-2xl shadow-sm"
+                   :class="[(captionText(m) || fwdName(m) || showAuthor(m, i)) && (isMine(m) ? 'bg-saffron-500 text-white' : 'bg-white text-ink-900 ring-1 ring-parchment-200')]">
+                <div v-if="showAuthor(m, i)" class="cursor-pointer px-3 pt-2 text-sm font-semibold text-sage-600" @click.stop="openUserInfo(m.author_id)">{{ nameOf(m) }}</div>
+                <div v-if="fwdName(m)" class="flex items-center gap-1.5 px-3 pt-2 text-sm font-semibold" :class="isMine(m) ? 'text-white/90' : 'text-saffron-700'">
+                  <AppIcon name="reply" :size="12" class="-scale-x-100" /> <span>Переслано от</span>
+                  <span class="truncate" :class="fwdAuthorId(m) && 'cursor-pointer hover:underline'" @click.stop="fwdAuthorId(m) && openUserInfo(fwdAuthorId(m))">{{ fwdName(m) }}</span>
                 </div>
-                <div class="flex shrink-0 items-center gap-1 pb-0.5 text-[11px]" :class="isMine(m) ? 'text-white/70' : 'text-ink-700/40'">
-                  <span>{{ fmtTime(m.created_at) }}</span>
-                  <template v-if="statusOf(m)"><AppIcon v-if="statusOf(m) === 'pending'" name="clock" :size="15" /><AppIcon v-else-if="statusOf(m) === 'read'" name="check-double" :size="16" /><AppIcon v-else-if="statusOf(m) === 'sent'" name="check" :size="15" /></template>
+                <div class="video-box ph-box relative flex justify-center overflow-hidden" :style="videoBoxStyle(videoOf(m))">
+                  <span class="ph-spin pointer-events-none absolute inset-0 flex items-center justify-center"><span class="h-8 w-8 animate-spin rounded-full border-2 border-white/45 border-t-white/90"></span></span>
+                  <template v-if="videoAuto(m)">
+                    <video :src="videoOf(m).url" :poster="thumbUrl(videoOf(m).poster || '')" autoplay muted loop playsinline
+                           disablepictureinpicture controlslist="nodownload noremoteplayback nofullscreen"
+                           style="opacity:0;transition:opacity .35s ease" class="pointer-events-none relative block h-full w-full object-cover" @loadeddata="markImgLoaded($event)" @timeupdate="onVideoTime($event, m)"></video>
+                    <div class="absolute inset-0 cursor-pointer" @click.stop="openVideoLightbox(m)"></div>
+                    <span class="pointer-events-none absolute left-2 top-2 flex items-center gap-1 rounded-full bg-black/55 px-2.5 py-1 text-sm text-white">
+                      <span class="tabular-nums">{{ videoState[m.id]?.remain || '' }}</span>
+                      <AppIcon name="volume-x" :size="15" />
+                    </span>
+                  </template>
+                  <template v-else>
+                    <img :src="thumbUrl(videoOf(m)?.poster || '')" @error="imgFull($event, videoOf(m)?.poster); markImgLoaded($event)" @load="onImgLoad($event, videoOf(m)?.poster)"
+                         style="opacity:0;transition:opacity .35s ease" class="relative block h-full w-full object-cover" />
+                    <button class="absolute inset-0 flex items-center justify-center" @click.stop="markVideoLoaded(m.id); openVideoLightbox(m)" title="Смотреть видео">
+                      <span class="flex h-14 w-14 items-center justify-center rounded-full bg-black/50 text-white ring-2 ring-white/40"><AppIcon name="play" :size="26" /></span>
+                    </button>
+                  </template>
+                  <!-- без подписи: время + галочки ОВЕРЛЕЕМ на самом видео (тёмная плашка, как в Telegram) -->
+                  <div v-if="!captionText(m)" class="pointer-events-none absolute bottom-1.5 right-1.5 flex items-center gap-1 rounded-full bg-black/50 px-2 py-0.5 text-[11px] text-white">
+                    <span>{{ fmtTime(m.created_at) }}</span>
+                    <template v-if="statusOf(m)"><AppIcon v-if="statusOf(m) === 'pending'" name="clock" :size="14" /><AppIcon v-else-if="statusOf(m) === 'read'" name="check-double" :size="15" /><AppIcon v-else-if="statusOf(m) === 'sent'" name="check" :size="14" /></template>
+                  </div>
                 </div>
+                <div v-if="captionText(m)" class="markdown-body break-words px-3.5 pt-1.5 text-[15px]" :class="isMine(m) && 'markdown-on-accent'" v-html="renderChatBody(captionText(m))"></div>
+                <!-- с подписью: реакции + время под текстом (в пузыре) -->
+                <div v-if="captionText(m)" class="flex items-end justify-between gap-2 px-2.5 pb-1.5 pt-1">
+                  <div class="flex flex-wrap gap-1">
+                    <button v-for="r in parseReactions(m)" :key="r.emoji" @click.stop="onChip(m, r.emoji)" @contextmenu.prevent.stop="openWho($event, r)" title="ПКМ — кто поставил"
+                            class="flex items-center gap-1 rounded-full px-2 py-0.5 leading-none ring-1 transition"
+                            :class="m.my_reaction === r.emoji ? 'bg-saffron-500/25 text-saffron-800 ring-saffron-400' : 'bg-saffron-500/10 text-ink-700 ring-transparent hover:bg-saffron-500/20'"><span class="text-lg leading-none">{{ r.emoji }}</span><span v-if="r.count < 4 && r.who && r.who.length" class="-my-0.5 -mr-2 flex items-center"><template v-for="(w, wi) in r.who" :key="wi"><img v-if="w.avatar" :src="thumbUrl(w.avatar)" class="block h-[22px] w-[22px] rounded-full object-cover" :class="wi > 0 && '-ml-2'" /><span v-else class="flex h-[22px] w-[22px] items-center justify-center rounded-full bg-sage-500 text-[9px] font-semibold text-white" :class="wi > 0 && '-ml-2'">{{ initials(w.name) }}</span></template></span><span v-else-if="r.count > 1" class="text-sm font-semibold tabular-nums">{{ r.count }}</span></button>
+                  </div>
+                  <div class="flex shrink-0 items-center gap-1 pb-0.5 text-[11px]" :class="isMine(m) ? 'text-white/70' : 'text-ink-700/40'">
+                    <span>{{ fmtTime(m.created_at) }}</span>
+                    <template v-if="statusOf(m)"><AppIcon v-if="statusOf(m) === 'pending'" name="clock" :size="15" /><AppIcon v-else-if="statusOf(m) === 'read'" name="check-double" :size="16" /><AppIcon v-else-if="statusOf(m) === 'sent'" name="check" :size="15" /></template>
+                  </div>
+                </div>
+              </div>
+              <!-- без подписи: реакции ЗА пределами видео, без фона -->
+              <div v-if="!captionText(m) && parseReactions(m).length" class="flex flex-wrap gap-1 px-0.5">
+                <button v-for="r in parseReactions(m)" :key="r.emoji" @click.stop="onChip(m, r.emoji)" @contextmenu.prevent.stop="openWho($event, r)" title="ПКМ — кто поставил"
+                        class="flex items-center gap-1 rounded-full py-0.5 pl-0.5 pr-1 leading-none transition hover:bg-black/5" :class="m.my_reaction === r.emoji && 'ring-1 ring-saffron-400'"><span class="text-xl leading-none">{{ r.emoji }}</span><span v-if="r.count < 4 && r.who && r.who.length" class="flex items-center"><template v-for="(w, wi) in r.who" :key="wi"><img v-if="w.avatar" :src="thumbUrl(w.avatar)" class="block h-[22px] w-[22px] rounded-full object-cover" :class="wi > 0 && '-ml-2'" /><span v-else class="flex h-[22px] w-[22px] items-center justify-center rounded-full bg-sage-500 text-[9px] font-semibold text-white" :class="wi > 0 && '-ml-2'">{{ initials(w.name) }}</span></template></span><span v-else-if="r.count > 1" class="text-sm font-semibold tabular-nums text-ink-700">{{ r.count }}</span></button>
               </div>
             </div>
 
-            <div v-else-if="isPhoto(m)" class="relative w-fit overflow-hidden rounded-2xl shadow-sm"
-                 :class="[(captionText(m) || fwdName(m) || showAuthor(m, i)) && (isMine(m) ? 'bg-saffron-500 text-white' : 'bg-white text-ink-900 ring-1 ring-parchment-200')]"
-                 @contextmenu="onContext($event, m)">
-              <div v-if="showAuthor(m, i)" class="cursor-pointer px-3 pt-2 text-sm font-semibold text-sage-600" @click.stop="openUserInfo(m.author_id)">{{ nameOf(m) }}</div>
-              <div v-if="fwdName(m)" class="flex items-center gap-1.5 px-3 pt-2 text-sm font-semibold" :class="isMine(m) ? 'text-white/90' : 'text-saffron-700'">
-                <AppIcon name="reply" :size="12" class="-scale-x-100" /> <span>Переслано от</span>
-                <span class="truncate">{{ fwdName(m) }}</span>
-              </div>
-              <div v-if="m.reply_preview" @click.stop="jumpToReply(m)" class="mx-3 mt-2 flex cursor-pointer items-center gap-2 rounded-r-md border-l-2 border-saffron-400 bg-black/5 py-1 pl-2 pr-2 text-xs transition hover:bg-black/10">
-                <img v-if="replyThumb(m)" :src="replyThumb(m)" class="h-8 w-8 shrink-0 rounded object-cover" />
-                <div class="min-w-0 flex-1">
-                  <div v-if="replyAuthorName(m)" class="font-semibold text-saffron-700">{{ replyAuthorName(m) }}</div>
-                  <div class="whitespace-pre-wrap break-words text-ink-700/70">{{ m.reply_preview }}</div>
+            <div v-else-if="isPhoto(m)" class="flex flex-col gap-1" :class="(isMine(m) && !wide) ? 'items-end' : 'items-start'" @contextmenu="onContext($event, m)">
+              <div class="relative w-fit overflow-hidden rounded-2xl shadow-sm"
+                   :class="[(captionText(m) || fwdName(m) || showAuthor(m, i)) && (isMine(m) ? 'bg-saffron-500 text-white' : 'bg-white text-ink-900 ring-1 ring-parchment-200')]">
+                <div v-if="showAuthor(m, i)" class="cursor-pointer px-3 pt-2 text-sm font-semibold text-sage-600" @click.stop="openUserInfo(m.author_id)">{{ nameOf(m) }}</div>
+                <div v-if="fwdName(m)" class="flex items-center gap-1.5 px-3 pt-2 text-sm font-semibold" :class="isMine(m) ? 'text-white/90' : 'text-saffron-700'">
+                  <AppIcon name="reply" :size="12" class="-scale-x-100" /> <span>Переслано от</span>
+                  <span class="truncate" :class="fwdAuthorId(m) && 'cursor-pointer hover:underline'" @click.stop="fwdAuthorId(m) && openUserInfo(fwdAuthorId(m))">{{ fwdName(m) }}</span>
                 </div>
-              </div>
-              <div v-if="photoUrls(m).length === 1" class="ph-box relative w-full overflow-hidden" :style="photoBoxStyle(photoUrls(m)[0])">
-                <div v-if="microBg(photoUrls(m)[0])" class="ph-blur" :style="microBg(photoUrls(m)[0])"></div>
-                <span class="ph-spin pointer-events-none absolute inset-0 flex items-center justify-center"><span class="h-7 w-7 animate-spin rounded-full border-2 border-white/45 border-t-white/90"></span></span>
-                <img :src="photoUrls(m)[0]" @error="imgFull($event, photoUrls(m)[0]); markImgLoaded($event)" @load="onImgLoad($event, photoUrls(m)[0])"
-                     class="relative block h-full w-full cursor-zoom-in object-contain" @click.stop="openPhoto(m, 0)" />
-              </div>
-              <div v-else class="grid gap-0.5" :class="albumCols(photoUrls(m).length)" :style="{ width: albumWidth() + 'px' }">
-                <div v-for="(u, k) in photoUrls(m).slice(0, 10)" :key="k" class="ph-box relative aspect-square overflow-hidden" :class="albumItemClass(photoUrls(m).length, k)" :style="{ background: imageColor(u) || 'rgba(190,170,145,.35)' }">
-                  <div v-if="microBg(u)" class="ph-blur" :style="microBg(u)"></div>
-                  <span class="ph-spin pointer-events-none absolute inset-0 flex items-center justify-center"><span class="h-6 w-6 animate-spin rounded-full border-2 border-white/45 border-t-white/90"></span></span>
-                  <img :src="thumbUrl(u)" @error="imgFull($event, u); markImgLoaded($event)" @load="markImgLoaded($event)"
-                       class="relative h-full w-full cursor-zoom-in object-cover" @click.stop="openPhoto(m, k)" />
+                <div v-if="m.reply_preview" @click.stop="jumpToReply(m)" class="mx-3 mt-2 flex cursor-pointer items-center gap-2 rounded-r-md border-l-2 border-saffron-400 bg-black/5 py-1 pl-2 pr-2 text-xs transition hover:bg-black/10">
+                  <img v-if="replyThumb(m)" :src="replyThumb(m)" class="h-8 w-8 shrink-0 rounded object-cover" />
+                  <div class="min-w-0 flex-1">
+                    <div v-if="replyAuthorName(m)" class="font-semibold text-saffron-700">{{ replyAuthorName(m) }}</div>
+                    <div class="whitespace-pre-wrap break-words text-ink-700/70">{{ m.reply_preview }}</div>
+                  </div>
                 </div>
-              </div>
-              <div v-if="captionText(m)" class="markdown-body break-words px-3.5 pt-1.5 text-[15px]" :class="isMine(m) && 'markdown-on-accent'" v-html="renderChatBody(captionText(m))"></div>
-              <!-- реакции + время в одной строке (с подписью) -->
-              <div v-if="captionText(m)" class="flex items-end justify-between gap-2 px-2.5 pb-1.5 pt-1">
-                <div class="flex flex-wrap gap-1">
-                  <button v-for="r in parseReactions(m)" :key="r.emoji" @click.stop="onChip(m, r.emoji)" @contextmenu.prevent.stop="openWho($event, r)" title="ПКМ — кто поставил"
-                          class="flex items-center gap-1 rounded-full px-2 py-0.5 leading-none ring-1 transition"
-                          :class="m.my_reaction === r.emoji ? 'bg-saffron-500/25 text-saffron-800 ring-saffron-400' : 'bg-saffron-500/10 text-ink-700 ring-transparent hover:bg-saffron-500/20'"><span class="text-lg leading-none">{{ r.emoji }}</span><span v-if="r.count < 4 && r.who && r.who.length" class="-my-0.5 -mr-2 flex items-center"><template v-for="(w, wi) in r.who" :key="wi"><img v-if="w.avatar" :src="thumbUrl(w.avatar)" class="block h-[22px] w-[22px] rounded-full object-cover" :class="wi > 0 && '-ml-2'" /><span v-else class="flex h-[22px] w-[22px] items-center justify-center rounded-full bg-sage-500 text-[9px] font-semibold text-white" :class="wi > 0 && '-ml-2'">{{ initials(w.name) }}</span></template></span><span v-else-if="r.count > 1" class="text-sm font-semibold tabular-nums">{{ r.count }}</span></button>
+                <div v-if="photoUrls(m).length === 1" class="ph-box relative w-full overflow-hidden" :style="photoBoxStyle(photoUrls(m)[0])">
+                  <div v-if="microBg(photoUrls(m)[0])" class="ph-blur" :style="microBg(photoUrls(m)[0])"></div>
+                  <span class="ph-spin pointer-events-none absolute inset-0 flex items-center justify-center"><span class="h-7 w-7 animate-spin rounded-full border-2 border-white/45 border-t-white/90"></span></span>
+                  <img :src="photoUrls(m)[0]" @error="imgFull($event, photoUrls(m)[0]); markImgLoaded($event)" @load="onImgLoad($event, photoUrls(m)[0])"
+                       class="relative block h-full w-full cursor-zoom-in object-contain" @click.stop="openPhoto(m, 0)" />
                 </div>
-                <div class="flex shrink-0 items-center gap-1 pb-0.5 text-[11px]" :class="isMine(m) ? 'text-white/70' : 'text-ink-700/40'">
+                <div v-else class="grid gap-0.5" :class="albumCols(photoUrls(m).length)" :style="{ width: albumWidth() + 'px' }">
+                  <div v-for="(u, k) in photoUrls(m).slice(0, 10)" :key="k" class="ph-box relative aspect-square overflow-hidden" :class="albumItemClass(photoUrls(m).length, k)" :style="{ background: imageColor(u) || 'rgba(190,170,145,.35)' }">
+                    <div v-if="microBg(u)" class="ph-blur" :style="microBg(u)"></div>
+                    <span class="ph-spin pointer-events-none absolute inset-0 flex items-center justify-center"><span class="h-6 w-6 animate-spin rounded-full border-2 border-white/45 border-t-white/90"></span></span>
+                    <img :src="thumbUrl(u)" @error="imgFull($event, u); markImgLoaded($event)" @load="markImgLoaded($event)"
+                         class="relative h-full w-full cursor-zoom-in object-cover" @click.stop="openPhoto(m, k)" />
+                  </div>
+                </div>
+                <div v-if="captionText(m)" class="markdown-body break-words px-3.5 pt-1.5 text-[15px]" :class="isMine(m) && 'markdown-on-accent'" v-html="renderChatBody(captionText(m))"></div>
+                <!-- с подписью: реакции + время под текстом -->
+                <div v-if="captionText(m)" class="flex items-end justify-between gap-2 px-2.5 pb-1.5 pt-1">
+                  <div class="flex flex-wrap gap-1">
+                    <button v-for="r in parseReactions(m)" :key="r.emoji" @click.stop="onChip(m, r.emoji)" @contextmenu.prevent.stop="openWho($event, r)" title="ПКМ — кто поставил"
+                            class="flex items-center gap-1 rounded-full px-2 py-0.5 leading-none ring-1 transition"
+                            :class="m.my_reaction === r.emoji ? 'bg-saffron-500/25 text-saffron-800 ring-saffron-400' : 'bg-saffron-500/10 text-ink-700 ring-transparent hover:bg-saffron-500/20'"><span class="text-lg leading-none">{{ r.emoji }}</span><span v-if="r.count < 4 && r.who && r.who.length" class="-my-0.5 -mr-2 flex items-center"><template v-for="(w, wi) in r.who" :key="wi"><img v-if="w.avatar" :src="thumbUrl(w.avatar)" class="block h-[22px] w-[22px] rounded-full object-cover" :class="wi > 0 && '-ml-2'" /><span v-else class="flex h-[22px] w-[22px] items-center justify-center rounded-full bg-sage-500 text-[9px] font-semibold text-white" :class="wi > 0 && '-ml-2'">{{ initials(w.name) }}</span></template></span><span v-else-if="r.count > 1" class="text-sm font-semibold tabular-nums">{{ r.count }}</span></button>
+                  </div>
+                  <div class="flex shrink-0 items-center gap-1 pb-0.5 text-[11px]" :class="isMine(m) ? 'text-white/70' : 'text-ink-700/40'">
+                    <span>{{ fmtTime(m.created_at) }}</span>
+                    <template v-if="statusOf(m)"><AppIcon v-if="statusOf(m) === 'pending'" name="clock" :size="15" /><AppIcon v-else-if="statusOf(m) === 'read'" name="check-double" :size="16" /><AppIcon v-else-if="statusOf(m) === 'sent'" name="check" :size="15" /></template>
+                  </div>
+                </div>
+                <!-- без подписи: время + галочки ОВЕРЛЕЕМ на фото (тёмная плашка) -->
+                <div v-if="!captionText(m)" class="pointer-events-none absolute bottom-1.5 right-1.5 flex items-center gap-1 rounded-full bg-black/50 px-2 py-0.5 text-[11px] text-white">
                   <span>{{ fmtTime(m.created_at) }}</span>
-                  <template v-if="statusOf(m)"><AppIcon v-if="statusOf(m) === 'pending'" name="clock" :size="15" /><AppIcon v-else-if="statusOf(m) === 'read'" name="check-double" :size="16" /><AppIcon v-else-if="statusOf(m) === 'sent'" name="check" :size="15" /></template>
+                  <template v-if="statusOf(m)"><AppIcon v-if="statusOf(m) === 'pending'" name="clock" :size="14" /><AppIcon v-else-if="statusOf(m) === 'read'" name="check-double" :size="15" /><AppIcon v-else-if="statusOf(m) === 'sent'" name="check" :size="14" /></template>
                 </div>
               </div>
-              <!-- без подписи: реакции слева + время справа, одной линией оверлеем на фото -->
-              <div v-else class="pointer-events-none absolute inset-x-1.5 bottom-1.5 flex items-center justify-between gap-2">
-                <div class="pointer-events-auto flex flex-wrap gap-1">
-                  <button v-for="r in parseReactions(m)" :key="r.emoji" @click.stop="onChip(m, r.emoji)" @contextmenu.prevent.stop="openWho($event, r)" title="ПКМ — кто поставил"
-                          class="inline-flex items-center gap-1 rounded-full bg-black/45 px-1.5 py-0.5 text-white ring-1 ring-white/20"
-                          :class="m.my_reaction === r.emoji && 'ring-2 ring-white/70'"><span class="text-base leading-none">{{ r.emoji }}</span><span v-if="r.count < 4 && r.who && r.who.length" class="-my-0.5 -mr-2 flex items-center"><template v-for="(w, wi) in r.who" :key="wi"><img v-if="w.avatar" :src="thumbUrl(w.avatar)" class="block h-[22px] w-[22px] rounded-full object-cover ring-1 ring-black/20" :class="wi > 0 && '-ml-2'" /><span v-else class="flex h-[22px] w-[22px] items-center justify-center rounded-full bg-sage-500 text-[9px] font-semibold text-white ring-1 ring-black/20" :class="wi > 0 && '-ml-2'">{{ initials(w.name) }}</span></template></span><span v-else-if="r.count > 1" class="text-xs font-semibold tabular-nums">{{ r.count }}</span></button>
-                </div>
-                <div class="pointer-events-auto ml-auto flex shrink-0 items-center gap-1 rounded-full bg-black/45 px-1.5 py-0.5 text-[11px] text-white">
-                  <span>{{ fmtTime(m.created_at) }}</span>
-                  <template v-if="statusOf(m)"><AppIcon v-if="statusOf(m) === 'pending'" name="clock" :size="15" /><AppIcon v-else-if="statusOf(m) === 'read'" name="check-double" :size="16" /><AppIcon v-else-if="statusOf(m) === 'sent'" name="check" :size="15" /></template>
-                </div>
+              <!-- без подписи: реакции ЗА пределами фото, без фона -->
+              <div v-if="!captionText(m) && parseReactions(m).length" class="flex flex-wrap gap-1 px-0.5">
+                <button v-for="r in parseReactions(m)" :key="r.emoji" @click.stop="onChip(m, r.emoji)" @contextmenu.prevent.stop="openWho($event, r)" title="ПКМ — кто поставил"
+                        class="flex items-center gap-1 rounded-full py-0.5 pl-0.5 pr-1 leading-none transition hover:bg-black/5" :class="m.my_reaction === r.emoji && 'ring-1 ring-saffron-400'"><span class="text-xl leading-none">{{ r.emoji }}</span><span v-if="r.count < 4 && r.who && r.who.length" class="flex items-center"><template v-for="(w, wi) in r.who" :key="wi"><img v-if="w.avatar" :src="thumbUrl(w.avatar)" class="block h-[22px] w-[22px] rounded-full object-cover" :class="wi > 0 && '-ml-2'" /><span v-else class="flex h-[22px] w-[22px] items-center justify-center rounded-full bg-sage-500 text-[9px] font-semibold text-white" :class="wi > 0 && '-ml-2'">{{ initials(w.name) }}</span></template></span><span v-else-if="r.count > 1" class="text-sm font-semibold tabular-nums text-ink-700">{{ r.count }}</span></button>
               </div>
             </div>
 
@@ -2426,7 +2436,7 @@ onBeforeUnmount(() => {
               <div v-if="showAuthor(m, i)" class="mb-0.5 cursor-pointer text-sm font-semibold text-sage-600" @click.stop="openUserInfo(m.author_id)">{{ nameOf(m) }}</div>
               <div v-if="fwdName(m)" class="mb-1 flex items-center gap-1.5 text-sm font-semibold" :class="isMine(m) ? 'text-white/90' : 'text-saffron-700'">
                 <AppIcon name="reply" :size="12" class="-scale-x-100" /> <span>Переслано от</span>
-                <span class="truncate">{{ fwdName(m) }}</span>
+                <span class="truncate" :class="fwdAuthorId(m) && 'cursor-pointer hover:underline'" @click.stop="fwdAuthorId(m) && openUserInfo(fwdAuthorId(m))">{{ fwdName(m) }}</span>
               </div>
               <div v-if="m.reply_preview" @click.stop="jumpToReply(m)" class="mb-1 flex cursor-pointer items-center gap-2 rounded-r-md border-l-2 py-1 pl-2 pr-2 text-xs transition" :class="isMine(m) ? 'border-white/70 bg-white/10 hover:bg-white/20' : 'border-saffron-400 bg-saffron-500/5 hover:bg-saffron-500/10'">
                 <img v-if="replyThumb(m)" :src="replyThumb(m)" class="h-8 w-8 shrink-0 rounded object-cover" />

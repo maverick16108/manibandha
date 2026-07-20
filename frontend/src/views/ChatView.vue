@@ -2166,7 +2166,7 @@ onBeforeUnmount(() => {
             <AppIcon name="trash" :size="22" /> Удалить <span v-if="selected.size" class="tabular-nums">{{ selected.size }}</span>
           </button>
         </header>
-        <header v-else class="flex h-14 items-center gap-3 border-b border-parchment-200 px-4 transition-[padding]" :class="sideDockOpen && 'sm:!pr-96'">
+        <header v-else class="flex h-14 items-center gap-3 border-b border-parchment-200 px-4 transition-[padding]" :class="sideDockOpen && 'sm:!pr-[25rem]'">
           <button class="rounded-lg p-1.5 text-ink-700/60 hover:bg-parchment-100 sm:hidden" @click="backToList"><AppIcon name="chevron" :size="18" class="rotate-90" /></button>
           <div class="flex min-w-0 flex-1 cursor-pointer items-center gap-3" @click="openInfo('popup')">
             <img v-if="activeChat.avatar_url" :src="thumbUrl(activeChat.avatar_url)" @error="imgFull($event, activeChat.avatar_url)" class="photo-bw h-9 w-9 shrink-0 rounded-full object-cover" />
@@ -2187,7 +2187,7 @@ onBeforeUnmount(() => {
               <AppIcon name="search" :size="26" />
             </button>
             <button v-if="activeChat.type === 'direct'" class="rounded-full p-2 text-ink-700/55 transition hover:bg-parchment-100 hover:text-saffron-600" title="Позвонить" @click.stop="startCall(false)">
-              <AppIcon name="phone" :size="26" class="-translate-y-px" />
+              <AppIcon name="phone" :size="22" />
             </button>
             <button class="rounded-full p-2 transition hover:bg-parchment-100 hover:text-saffron-600" :class="showInfo && infoMode === 'side' ? 'text-saffron-600' : 'text-ink-700/55'" title="Боковая панель" @click.stop="showInfo && infoMode === 'side' ? closeInfo() : openInfo('side')">
               <AppIcon name="panel-right" :size="24" />

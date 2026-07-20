@@ -8,7 +8,7 @@ import AppSkeleton from '../components/AppSkeleton.vue'
 import AppIcon from '../components/AppIcon.vue'
 import { formatDate } from '../lib/format'
 import { usePageTitle } from '../composables/pageTitle'
-import { cachedGet, peekCache, TTL } from '../composables/apiCache'
+import { cachedGet, TTL } from '../composables/apiCache'
 
 const route = useRoute()
 const auth = useAuthStore()
@@ -54,15 +54,12 @@ function threadParams() {
 }
 async function load(silent = false, force = false) {
   const p = threadParams()
-  // peek только при ЯВНОМ заходе (не при фоновой ревалидации): иначе тихий рефреш сначала откатывает
-  // список к устаревшему снимку кеша, а потом заменяет свежим — «мигают/исчезают» записи
-  if (!silent) {
-    const cached = peekCache('/threads', p)
-    if (cached) { threads.value = cached; loading.value = false } // мгновенно из кеша — без скелетона
-    else loading.value = true
-  }
+  // НЕ показываем устаревший снимок кеша (peek) — иначе при заходе видно «лишние» удалённые записи,
+  // которые потом исчезают. Скелетон только если данных ещё нет (первый заход); при возврате раздел
+  // держится живым (keep-alive) — мгновенно, без скелетона. Явный заход всегда тянет СВЕЖЕЕ.
+  if (!silent && !threads.value.length) loading.value = true
   try {
-    threads.value = await cachedGet('/threads', { params: p, ttl: TTL.list, force })
+    threads.value = await cachedGet('/threads', { params: p, ttl: TTL.list, force: force || !silent })
   } finally {
     loading.value = false
   }

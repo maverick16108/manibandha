@@ -744,7 +744,7 @@ function addComposeItems(files, compress) {
     const it = reactive({ file: f, url: (isImage || isVideo) ? URL.createObjectURL(f) : null, isImage, isVideo, size: f.size, poster: null, posterBlob: null, aspect: 0 })
     composeItems.value.push(it)
     if (isVideo) capturePoster(f).then((r) => { if (r) { it.posterBlob = r.blob; it.poster = r.url; it.dimsW = r.w; it.dimsH = r.h; it.aspect = (r.w && r.h) ? r.w / r.h : 0 } })
-    else if (isImage) { const im = new Image(); im.onload = () => { if (im.naturalWidth && im.naturalHeight) it.aspect = im.naturalWidth / im.naturalHeight }; im.src = it.url } // пропорции для лоадер-превью = как у итогового фото
+    else if (isImage) { const im = new Image(); im.onload = () => { if (im.naturalWidth && im.naturalHeight) { it.aspect = im.naturalWidth / im.naturalHeight; it.dimsW = im.naturalWidth; it.dimsH = im.naturalHeight } }; im.src = it.url } // пропорции для лоадер-превью + встраивания в маркер
   }
 }
 // постер (кадр) видео на клиенте — ffmpeg на сервере не нужен
@@ -800,7 +800,9 @@ async function runUpload(pu) {
       // прайминг пропорций по загруженному url — чтобы бокс итогового сообщения СРАЗУ был нужного
       // размера (иначе рисуется по дефолтному 1.4 и «схлопывается», когда картинка догрузится)
       urls.forEach((u, i) => { const a = imgs[i]?.aspect; if (a && !imgAspects[u]) imgAspects[u] = a })
-      let body = urls.map((u) => `![](${u})`).join('')
+      // ВСТРАИВАЕМ размеры в alt маркера: ![ШxВ](url). Так получатель и мы после перезагрузки знаем
+      // пропорции ДО загрузки картинки (бокс сразу верного размера, без «схлопывания»).
+      let body = urls.map((u, i) => { const it = imgs[i]; const d = (it?.dimsW && it?.dimsH) ? `${it.dimsW}x${it.dimsH}` : ''; return `![${d}](${u})` }).join('')
       if (cap && !vids.length && !files.length) { body += `\n${cap}`; capUsed = true }
       await sendMessageTo(chatId, body)
     }
@@ -950,6 +952,14 @@ function albumItemClass(n, k) { return (n === 3 && k === 0) ? 'col-span-2' : '' 
 // пропорции по факту загрузки (реактивно) — бокс корректируется СРАЗУ при загрузке миниатюры,
 // а не через несколько секунд на следующей перерисовке
 const imgAspects = reactive({})
+// достаём встроенные в маркер размеры ![ШxВ](url) и заполняем imgAspects ДО рендера/загрузки картинки,
+// чтобы бокс сразу был нужного размера (и у получателя, и после перезагрузки) — без «схлопывания».
+function primeAspectsFromMessages() {
+  for (const m of chatState.messages) {
+    (m?.body || '').replace(/!\[(\d+)x(\d+)\]\(([^)]+)\)/g, (_x, w, h, u) => { const a = +w / +h; if (a > 0 && !imgAspects[u]) imgAspects[u] = a; return '' })
+  }
+}
+watch(() => chatState.messages, primeAspectsFromMessages, { immediate: true })
 // картинка загрузилась/ошибка → проявляем и убираем спиннер подложки
 function markImgLoaded(e) { const el = e.target; el.style.opacity = 1; el.closest('.ph-box')?.classList.add('ph-done') }
 function onImgLoad(e, u) {

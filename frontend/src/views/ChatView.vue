@@ -1456,8 +1456,10 @@ const showRowAvatars = computed(() => wide.value || isGroup.value)
 const memberById = computed(() => { const map = {}; for (const x of chatState.members || []) map[x.user_id] = x; return map })
 function avatarOf(m) { return memberById.value[m.author_id]?.avatar_url || null }
 function nameOf(m) { return m.author_name || memberById.value[m.author_id]?.full_name || '' }
-const myAvatar = computed(() => memberById.value[chatState.meId]?.avatar_url || null)
-const myName = computed(() => memberById.value[chatState.meId]?.full_name || '')
+// свой аватар/имя знаем СРАЗУ из auth (мгновенно), не дожидаясь загрузки участников чата —
+// иначе при переходе в чат своя аватарка появляется с задержкой (пока подтянутся members)
+const myAvatar = computed(() => memberById.value[chatState.meId]?.avatar_url || auth.user?.avatar_url || null)
+const myName = computed(() => memberById.value[chatState.meId]?.full_name || auth.user?.full_name || '')
 // имя автора цитируемого сообщения (если оно ещё в загруженной ленте)
 function replyAuthorName(m) {
   if (!m.reply_to_id) return ''
@@ -2567,17 +2569,17 @@ onBeforeUnmount(() => {
             <div v-else-if="isContact(m)" class="relative w-[280px] max-w-full overflow-hidden rounded-2xl shadow-sm"
                  :class="isMine(m) ? 'bg-saffron-500 text-white' : 'bg-white text-ink-900 ring-1 ring-parchment-200'"
                  @contextmenu="onContext($event, m)">
-              <div class="flex items-center gap-3 p-3 pb-2">
+              <div class="flex items-center gap-3 p-3 pb-2" :class="contactOf(m).id && 'cursor-pointer'" @click.stop="contactOf(m).id && openUserInfo(contactOf(m).id)">
                 <img v-if="contactOf(m).avatar" :src="thumbUrl(contactOf(m).avatar)" @error="imgFull($event, contactOf(m).avatar)" class="photo-bw h-12 w-12 shrink-0 rounded-full object-cover" />
                 <span v-else class="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-sage-400 to-sage-600 text-base font-semibold text-white">{{ initials(contactOf(m).name) }}</span>
                 <div class="min-w-0 flex-1">
-                  <div class="truncate font-semibold leading-tight">{{ contactOf(m).name }}</div>
+                  <div class="truncate font-semibold leading-tight" :class="contactOf(m).id && 'hover:underline'">{{ contactOf(m).name }}</div>
                   <div v-if="contactOf(m).phone" class="truncate text-sm" :class="isMine(m) ? 'text-white/80' : 'text-ink-700/60'">{{ contactOf(m).phone }}</div>
                 </div>
               </div>
               <button v-if="contactOf(m).id && contactOf(m).id !== chatState.meId"
-                      class="block w-full border-t py-2.5 text-center text-sm font-semibold uppercase tracking-wide transition"
-                      :class="isMine(m) ? 'border-white/25 text-white hover:bg-white/10' : 'border-parchment-200 text-saffron-700 hover:bg-parchment-50'"
+                      class="mx-3 mb-2.5 block rounded-lg border py-2 text-center text-sm font-semibold uppercase tracking-wide transition"
+                      :class="isMine(m) ? 'border-white/55 text-white hover:bg-white/10' : 'border-saffron-400 text-saffron-700 hover:bg-saffron-500/10'"
                       @click.stop="openContactChat(contactOf(m))">Написать</button>
               <div class="flex items-center justify-end gap-1 px-3 pb-1.5 pt-1 text-[11px]" :class="isMine(m) ? 'text-white/70' : 'text-ink-700/40'">
                 <span>{{ fmtTime(m.created_at) }}</span>

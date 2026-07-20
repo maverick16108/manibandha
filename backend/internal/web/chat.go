@@ -145,7 +145,7 @@ func chatMsgOut(m *models.ChatMessage, userID int) map[string]any {
 	}
 }
 
-func membersOut(chat *models.Chat) []map[string]any {
+func (s *Server) membersOut(chat *models.Chat) []map[string]any {
 	out := make([]map[string]any, 0, len(chat.Members))
 	for i := range chat.Members {
 		mem := &chat.Members[i]
@@ -153,6 +153,13 @@ func membersOut(chat *models.Chat) []map[string]any {
 		if mem.User != nil {
 			fn = mem.User.FullName
 			av = mem.User.AvatarURL
+			// запасной аватар из карточки ученика (как в userCard) — иначе фото не видно в ленте/шапке
+			if mem.User.AvatarURL == nil && mem.User.DiscipleID != nil {
+				var d models.Disciple
+				if s.DB.Select("photo_url").First(&d, *mem.User.DiscipleID).Error == nil && d.PhotoURL != nil {
+					av = d.PhotoURL
+				}
+			}
 		}
 		out = append(out, map[string]any{
 			"user_id": mem.UserID, "full_name": fn, "avatar_url": av,
@@ -191,7 +198,7 @@ func (s *Server) chatOut(chat *models.Chat, userID int) map[string]any {
 	return map[string]any{
 		"id": chat.ID, "type": chat.Type, "title": chat.Title, "photo_url": chat.PhotoURL,
 		"created_by": chat.CreatedBy, "created_at": tsUTC(chat.CreatedAt), "updated_at": tsUTC(chat.UpdatedAt),
-		"members": membersOut(chat), "last_message": lastOut, "unread": unread, "pinned": pinned, "pin_order": pinOrder,
+		"members": s.membersOut(chat), "last_message": lastOut, "unread": unread, "pinned": pinned, "pin_order": pinOrder,
 		"pinned_message_id": chat.PinnedMessageID,
 	}
 }
@@ -697,6 +704,12 @@ func (s *Server) chatInfo(w http.ResponseWriter, r *http.Request) {
 		if mem.User != nil {
 			name = mem.User.FullName
 			av = mem.User.AvatarURL
+			if mem.User.AvatarURL == nil && mem.User.DiscipleID != nil {
+				var d models.Disciple
+				if s.DB.Select("photo_url").First(&d, *mem.User.DiscipleID).Error == nil && d.PhotoURL != nil {
+					av = d.PhotoURL
+				}
+			}
 		}
 		mems = append(mems, map[string]any{
 			"id": mem.UserID, "name": name, "avatar": av, "role": mem.Role,

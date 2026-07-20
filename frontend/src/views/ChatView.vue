@@ -2273,13 +2273,13 @@ onBeforeUnmount(() => {
             <div v-if="selectMode" class="absolute right-1.5 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full border-2 transition" :class="selected.has(m.id) ? 'border-saffron-500 bg-saffron-500 text-white' : 'border-ink-700/25 bg-white/50'">
               <AppIcon v-if="selected.has(m.id)" name="check" :size="14" />
             </div>
-            <!-- аватар (в группах, слева от сообщения — и у чужих, и у своих) -->
-            <template v-if="isGroup && !isMine(m)">
-              <img v-if="avatarOf(m) && isRunEnd(m, i)" :src="thumbUrl(avatarOf(m))" @error="imgFull($event, avatarOf(m))" class="photo-bw sticky bottom-1.5 h-10 w-10 shrink-0 rounded-full object-cover" />
-              <span v-else-if="isRunEnd(m, i)" class="sticky bottom-1.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-sage-400 to-sage-600 text-sm font-semibold text-white">{{ initials(nameOf(m)) }}</span>
+            <!-- аватар слева от сообщения (и в группах, и в личных) — клик открывает профиль -->
+            <template v-if="!isMine(m)">
+              <img v-if="avatarOf(m) && isRunEnd(m, i)" :src="thumbUrl(avatarOf(m))" @error="imgFull($event, avatarOf(m))" @click.stop="openUserInfo(m.author_id)" class="photo-bw sticky bottom-1.5 h-10 w-10 shrink-0 cursor-pointer rounded-full object-cover" />
+              <span v-else-if="isRunEnd(m, i)" @click.stop="openUserInfo(m.author_id)" class="sticky bottom-1.5 flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full bg-gradient-to-br from-sage-400 to-sage-600 text-sm font-semibold text-white">{{ initials(nameOf(m)) }}</span>
               <span v-else class="h-10 w-10 shrink-0"></span>
             </template>
-            <template v-else-if="isGroup && isMine(m)">
+            <template v-else>
               <img v-if="myAvatar && isRunEnd(m, i)" :src="thumbUrl(myAvatar)" @error="imgFull($event, myAvatar)" class="photo-bw h-10 w-10 shrink-0 rounded-full object-cover" />
               <span v-else-if="isRunEnd(m, i)" class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-saffron-400 to-saffron-600 text-sm font-semibold text-white">{{ initials(myName) }}</span>
               <span v-else class="h-10 w-10 shrink-0"></span>
@@ -2324,8 +2324,6 @@ onBeforeUnmount(() => {
               <div v-if="showAuthor(m, i)" class="cursor-pointer px-3 pt-2 text-sm font-semibold text-sage-600" @click.stop="openUserInfo(m.author_id)">{{ nameOf(m) }}</div>
               <div v-if="fwdName(m)" class="flex items-center gap-1.5 px-3 pt-2 text-sm font-semibold" :class="isMine(m) ? 'text-white/90' : 'text-saffron-700'">
                 <AppIcon name="reply" :size="12" class="-scale-x-100" /> <span>Переслано от</span>
-                <img v-if="fwdAvatar(m)" :src="thumbUrl(fwdAvatar(m))" class="h-4 w-4 shrink-0 rounded-full object-cover" />
-                <span v-else class="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-saffron-500 text-[8px] font-semibold text-white">{{ initials(fwdName(m)) }}</span>
                 <span class="truncate">{{ fwdName(m) }}</span>
               </div>
               <!-- ≤10МБ или уже запущено: авто muted+loop + таймер; крупнее: постер с кнопкой (тот же размер).
@@ -2370,8 +2368,6 @@ onBeforeUnmount(() => {
               <div v-if="showAuthor(m, i)" class="cursor-pointer px-3 pt-2 text-sm font-semibold text-sage-600" @click.stop="openUserInfo(m.author_id)">{{ nameOf(m) }}</div>
               <div v-if="fwdName(m)" class="flex items-center gap-1.5 px-3 pt-2 text-sm font-semibold" :class="isMine(m) ? 'text-white/90' : 'text-saffron-700'">
                 <AppIcon name="reply" :size="12" class="-scale-x-100" /> <span>Переслано от</span>
-                <img v-if="fwdAvatar(m)" :src="thumbUrl(fwdAvatar(m))" class="h-4 w-4 shrink-0 rounded-full object-cover" />
-                <span v-else class="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-saffron-500 text-[8px] font-semibold text-white">{{ initials(fwdName(m)) }}</span>
                 <span class="truncate">{{ fwdName(m) }}</span>
               </div>
               <div v-if="m.reply_preview" @click.stop="jumpToReply(m)" class="mx-3 mt-2 flex cursor-pointer items-center gap-2 rounded-r-md border-l-2 border-saffron-400 bg-black/5 py-1 pl-2 pr-2 text-xs transition hover:bg-black/10">
@@ -2430,8 +2426,6 @@ onBeforeUnmount(() => {
               <div v-if="showAuthor(m, i)" class="mb-0.5 cursor-pointer text-sm font-semibold text-sage-600" @click.stop="openUserInfo(m.author_id)">{{ nameOf(m) }}</div>
               <div v-if="fwdName(m)" class="mb-1 flex items-center gap-1.5 text-sm font-semibold" :class="isMine(m) ? 'text-white/90' : 'text-saffron-700'">
                 <AppIcon name="reply" :size="12" class="-scale-x-100" /> <span>Переслано от</span>
-                <img v-if="fwdAvatar(m)" :src="thumbUrl(fwdAvatar(m))" class="h-4 w-4 shrink-0 rounded-full object-cover" />
-                <span v-else class="flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[8px] font-semibold text-white" :class="isMine(m) ? 'bg-white/30' : 'bg-saffron-500'">{{ initials(fwdName(m)) }}</span>
                 <span class="truncate">{{ fwdName(m) }}</span>
               </div>
               <div v-if="m.reply_preview" @click.stop="jumpToReply(m)" class="mb-1 flex cursor-pointer items-center gap-2 rounded-r-md border-l-2 py-1 pl-2 pr-2 text-xs transition" :class="isMine(m) ? 'border-white/70 bg-white/10 hover:bg-white/20' : 'border-saffron-400 bg-saffron-500/5 hover:bg-saffron-500/10'">

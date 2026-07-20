@@ -2,13 +2,13 @@
 import { ref, computed, onMounted, onBeforeUnmount, onActivated, onDeactivated, watch } from 'vue'
 defineOptions({ name: 'ThreadsView' })
 import { RouterLink, useRoute } from 'vue-router'
-import client from '../api/client'
 import { useAuthStore } from '../stores/auth'
 import AppSelect from '../components/AppSelect.vue'
 import AppSkeleton from '../components/AppSkeleton.vue'
 import AppIcon from '../components/AppIcon.vue'
 import { formatDate } from '../lib/format'
 import { usePageTitle } from '../composables/pageTitle'
+import { cachedGet, peekCache, TTL } from '../composables/apiCache'
 
 const route = useRoute()
 const auth = useAuthStore()
@@ -45,14 +45,19 @@ const filtered = computed(() => {
   return list
 })
 
+function threadParams() {
+  const params = { kind: kind.value }
+  if (filterDisciple.value) params.disciple_id = filterDisciple.value
+  if (filterMentor.value) params.mentor_id = filterMentor.value
+  return params
+}
 async function load(silent = false) {
-  if (!silent) loading.value = true
+  const p = threadParams()
+  const cached = peekCache('/threads', p)
+  if (cached) { threads.value = cached; loading.value = false } // мгновенно из кеша — без скелетона
+  else if (!silent) loading.value = true
   try {
-    const params = { kind: kind.value }
-    if (filterDisciple.value) params.disciple_id = filterDisciple.value
-    if (filterMentor.value) params.mentor_id = filterMentor.value
-    const { data } = await client.get('/threads', { params })
-    threads.value = data
+    threads.value = await cachedGet('/threads', { params: p, ttl: TTL.list })
   } finally {
     loading.value = false
   }
@@ -68,8 +73,10 @@ onMounted(() => {
   document.addEventListener('visibilitychange', onVisible)
 })
 onBeforeUnmount(() => { clearInterval(poll); document.removeEventListener('visibilitychange', onVisible) })
-// keep-alive: тихий рефреш без скелетона при возврате, пауза поллинга при уходе
-onActivated(() => { load(true); startPoll() })
+// keep-alive: первую активацию (сразу после mount) пропускаем — иначе двойная загрузка/двойной скелетон;
+// при последующих возвратах — тихий рефреш без скелетона, поллинг возобновляем
+let firstActivate = true
+onActivated(() => { startPoll(); if (firstActivate) { firstActivate = false; return } load(true) })
 onDeactivated(() => clearInterval(poll))
 
 function periodLabel(p) {
@@ -79,14 +86,15 @@ function periodLabel(p) {
 }
 
 onMounted(async () => {
+  // справочники учеников/наставников — из общего кеша (переживают перезаход), в фоне
   if (showFilter.value) {
     try {
       const [ds, ms] = await Promise.all([
-        client.get('/disciples', { params: { named: true, limit: 500 } }),
-        client.get('/disciples', { params: { is_mentor: true, named: true, limit: 500 } }),
+        cachedGet('/disciples', { params: { named: true, limit: 500 }, ttl: TTL.ref }),
+        cachedGet('/disciples', { params: { is_mentor: true, named: true, limit: 500 }, ttl: TTL.ref }),
       ])
-      disciples.value = ds.data.items
-      mentors.value = ms.data.items
+      disciples.value = ds.items
+      mentors.value = ms.items
     } catch { /* ignore */ }
   }
   await load()

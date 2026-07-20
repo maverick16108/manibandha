@@ -1104,7 +1104,17 @@ func (s *Server) leaveChat(w http.ResponseWriter, r *http.Request) {
 		httpErr(w, http.StatusNotFound, "Чат не найден")
 		return
 	}
-	s.DB.Delete(&models.ChatMember{}, me.ID)
+	var chat models.Chat
+	_ = s.DB.First(&chat, id).Error
+	// Владелец группы «покидает и удаляет» — сносим группу целиком (сообщения, реакции, участников).
+	if chat.Type == "group" && chat.CreatedBy != nil && *chat.CreatedBy == u.ID {
+		s.DB.Exec("DELETE FROM chat_message_reactions WHERE message_id IN (SELECT id FROM chat_messages WHERE chat_id = ?)", id)
+		s.DB.Where("chat_id = ?", id).Delete(&models.ChatMessage{})
+		s.DB.Where("chat_id = ?", id).Delete(&models.ChatMember{})
+		s.DB.Delete(&models.Chat{}, id)
+	} else {
+		s.DB.Delete(&models.ChatMember{}, me.ID)
+	}
 	s.broadcastChat(id, map[string]any{"type": "chat", "chat_id": id})
 	w.WriteHeader(http.StatusNoContent)
 }

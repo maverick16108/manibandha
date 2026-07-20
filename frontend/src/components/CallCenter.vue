@@ -9,13 +9,16 @@ import { call, incoming, callRemoteVideo, callLocalVideo, callStatusText,
 
 function initials(name) { return (name || '?').trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase() }
 
-// Escape: сначала выходим из полноэкранного режима звонка
+// Escape: из полноэкранного — выходим; иначе завершаем/отклоняем звонок (закрываем окно).
+// Ловим в фазе CAPTURE и глушим сразу — чтобы срабатывало НАДЁЖНО (раньше других обработчиков Escape).
 function onKey(e) {
   if (e.key !== 'Escape') return
-  if (call.fullscreen) { call.fullscreen = false; e.stopPropagation() }
+  if (call.fullscreen) { call.fullscreen = false; e.stopImmediatePropagation(); return }
+  if (call.open) { endCall(); e.stopImmediatePropagation(); return }
+  if (incoming.open) { rejectIncoming(); e.stopImmediatePropagation(); return }
 }
-onMounted(() => document.addEventListener('keydown', onKey))
-onBeforeUnmount(() => document.removeEventListener('keydown', onKey))
+onMounted(() => document.addEventListener('keydown', onKey, true))
+onBeforeUnmount(() => document.removeEventListener('keydown', onKey, true))
 </script>
 
 <template>

@@ -91,8 +91,8 @@ function openMenu(e) { menu.value = { x: e.clientX, y: e.clientY } }
 function run(name) { menu.value = null; lightboxAction(name) }
 function pickFromGrid(i) { lbGoto(i); grid.value = false }
 
-onMounted(() => { document.addEventListener('click', onDocClick, true); document.addEventListener('keydown', onKey) })
-onBeforeUnmount(() => { document.removeEventListener('click', onDocClick, true); document.removeEventListener('keydown', onKey) })
+onMounted(() => { document.addEventListener('click', onDocClick, true); document.addEventListener('keydown', onKey, true) })
+onBeforeUnmount(() => { document.removeEventListener('click', onDocClick, true); document.removeEventListener('keydown', onKey, true) })
 </script>
 
 <template>

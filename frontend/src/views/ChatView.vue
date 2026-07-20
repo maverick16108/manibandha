@@ -1832,9 +1832,10 @@ function shareContact(peerArg) {
 }
 // событие о звонке: @[call](status|длит_сек|видео). status: ok — ответили; cancel — отменён; out — не отвечен.
 // Направление берём из isMine (кто позвонил).
-const CALL_RE = /@\[call\]\((ok|out|cancel)\|(\d+)\|(\d)\)/
+// поддерживаем и старый формат @[call](ok|no|dur) (2 части), и новый @[call](status|dur|видео)
+const CALL_RE = /@\[call\]\((ok|no|out|cancel)\|(\d+)(?:\|(\d))?\)/
 function isCallMsg(m) { return CALL_RE.test(m?.body || '') }
-function callOf(m) { const mm = (m.body || '').match(CALL_RE); return mm ? { status: mm[1], dur: Number(mm[2]) || 0, video: mm[3] === '1' } : null }
+function callOf(m) { const mm = (m.body || '').match(CALL_RE); if (!mm) return null; return { status: mm[1] === 'no' ? 'out' : mm[1], dur: Number(mm[2]) || 0, video: mm[3] === '1' } }
 function callTitle(m) {
   const c = callOf(m); if (!c) return ''
   const noun = c.video ? 'видеозвонок' : 'звонок'
@@ -1866,14 +1867,16 @@ function callPeer(peer, withVideo = false) {
   callStart({ peerId: peer.id, name: peer.name || '', avatar: peer.avatar || '', video: withVideo })
 }
 const ppMenu = ref(false) // ⋮-меню в попапе профиля
-// «удалить контакт» — убираем переписку с ним из своего списка (личный чат)
+// «удалить контакт» — удаляем личный чат с ним (через кастомное подтверждение)
 async function deleteContact() {
   ppMenu.value = false
-  const cid = profilePopup.value?.chat_id
-  if (!cid) { showToast('Нет переписки для удаления'); return }
-  if (!(await confirmDialog({ message: 'Удалить контакт и переписку с ним?', confirmText: 'Удалить', danger: true }))) return
-  closeProfilePopup()
-  try { await leaveChat(cid); if (activeId.value === cid) router.push({ name: 'chat' }) } catch { showToast('Не удалось удалить') }
+  const peer = ppPeer.value; if (!peer?.id) return
+  if (!(await confirmDialog({ message: `Удалить чат с «${peer.name || 'контактом'}»? Переписка удалится у вас.`, confirmText: 'Удалить', danger: true }))) return
+  try {
+    const cid = profilePopup.value?.chat_id || await startDirect(peer.id) // находим личный чат с ним
+    closeProfilePopup()
+    if (cid) { await leaveChat(cid); if (activeId.value === Number(cid)) router.push({ name: 'chat' }) }
+  } catch { showToast('Не удалось удалить чат') }
 }
 
 const showGroupEdit = ref(false)
@@ -2447,7 +2450,7 @@ onBeforeUnmount(() => {
 
         <!-- плеер оверлеем поверх верха ленты — не сдвигает чат вниз при появлении -->
         <div class="relative flex min-h-0 flex-1 flex-col">
-        <div class="pointer-events-none absolute inset-x-0 top-0 z-20 [&>*]:pointer-events-auto"><AudioBar /></div>
+        <div class="pointer-events-none absolute inset-x-0 top-0 z-20 [&>*]:pointer-events-auto" :class="sideDockOpen && 'sm:!right-96'"><AudioBar /></div>
 
         <div ref="scroller" class="chat-bg flex flex-1 flex-col overflow-y-auto px-2.5 py-4" :class="sideDockOpen && 'sm:!mr-96 sm:!pr-4'"
              @scroll="onScroll" @click="onScrollerClick" @mousedown="onScrollerDown" @touchstart="onScrollerDown" @contextmenu.prevent>

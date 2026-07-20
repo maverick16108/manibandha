@@ -1841,6 +1841,11 @@ async function openContactChat(c) {
   if (!c?.id) return
   try { const id = await startDirect(c.id); router.push({ name: 'chat', params: { id: String(id) } }) } catch { showToast('Не удалось открыть чат') }
 }
+async function copyPhone(phone) {
+  if (!phone) return
+  try { await navigator.clipboard.writeText(phone); showToast('Телефон скопирован') }
+  catch { showToast('Не удалось скопировать') }
+}
 
 const showGroupEdit = ref(false)
 const gTitle = ref('')
@@ -2285,7 +2290,7 @@ onBeforeUnmount(() => {
                   </div>
                 </div>
                 <div v-if="!isInfoGroup" class="divide-y divide-parchment-100 border-t border-parchment-200">
-                  <div v-if="infoData?.peer?.phone" class="px-6 py-3"><div class="text-[15px] text-ink-900">{{ infoData.peer.phone }}</div><div class="text-xs text-ink-700/50">Телефон</div></div>
+                  <button v-if="infoData?.peer?.phone" class="group flex w-full items-center justify-between gap-2 px-6 py-3 text-left transition hover:bg-parchment-50" title="Копировать телефон" @click="copyPhone(infoData.peer.phone)"><span><span class="block text-[15px] text-ink-900">{{ infoData.peer.phone }}</span><span class="block text-xs text-ink-700/50">Телефон</span></span><AppIcon name="copy" :size="17" class="shrink-0 text-ink-700/30 transition group-hover:text-saffron-600" /></button>
                   <div v-if="infoData?.peer?.spiritual_name" class="px-6 py-3"><div class="text-[15px] text-ink-900">{{ infoData.peer.spiritual_name }}</div><div class="text-xs text-ink-700/50">Духовное имя</div></div>
                   <div v-if="cityLine" class="px-6 py-3"><div class="text-[15px] text-ink-900">{{ cityLine }}</div><div class="text-xs text-ink-700/50">Город</div></div>
                 </div>
@@ -3074,7 +3079,7 @@ onBeforeUnmount(() => {
               </div>
             </div>
             <div class="divide-y divide-parchment-100 border-t border-parchment-200">
-              <div v-if="ppPeer?.phone" class="px-6 py-3"><div class="text-[15px] text-ink-900">{{ ppPeer.phone }}</div><div class="text-xs text-ink-700/50">Телефон</div></div>
+              <button v-if="ppPeer?.phone" class="group flex w-full items-center justify-between gap-2 px-6 py-3 text-left transition hover:bg-parchment-50" title="Копировать телефон" @click="copyPhone(ppPeer.phone)"><span><span class="block text-[15px] text-ink-900">{{ ppPeer.phone }}</span><span class="block text-xs text-ink-700/50">Телефон</span></span><AppIcon name="copy" :size="17" class="shrink-0 text-ink-700/30 transition group-hover:text-saffron-600" /></button>
               <div v-if="ppPeer?.spiritual_name" class="px-6 py-3"><div class="text-[15px] text-ink-900">{{ ppPeer.spiritual_name }}</div><div class="text-xs text-ink-700/50">Духовное имя</div></div>
               <div v-if="ppCity" class="px-6 py-3"><div class="text-[15px] text-ink-900">{{ ppCity }}</div><div class="text-xs text-ink-700/50">Город</div></div>
             </div>

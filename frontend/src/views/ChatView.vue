@@ -2187,7 +2187,7 @@ onBeforeUnmount(() => {
                   <!-- фото/видео — сетка -->
                   <div v-if="['photos', 'videos'].includes(mediaBrowser.type)" class="grid grid-cols-3 gap-0.5 px-0.5 sm:grid-cols-4">
                     <button v-for="(it, k) in g.items" :key="k" class="relative aspect-square overflow-hidden bg-ink-900/5" @click="openBrowserMedia(it)">
-                      <img :src="thumbUrl(it.kind === 'video' ? (it.poster || it.url) : it.url)" loading="lazy" class="h-full w-full object-cover" />
+                      <img :src="thumbUrl(it.kind === 'video' ? (it.poster || it.url) : it.url)" @error="imgFull($event, it.kind === 'video' ? (it.poster || it.url) : it.url)" loading="lazy" class="h-full w-full object-cover" />
                       <span v-if="it.kind === 'video'" class="absolute inset-0 flex items-center justify-center"><AppIcon name="play" :size="24" class="text-white drop-shadow" /></span>
                     </button>
                   </div>

@@ -22,6 +22,8 @@ export const chatState = reactive({
   chats: [],               // список для сайдбара (с вычисленным заголовком/аватаром/превью)
   totalUnread: 0,
   activeChatId: null,
+  renderedChatId: null,    // чат, чьи сообщения СЕЙЧАС в messages (обновляется атомарно со свапом,
+                           // не по маршруту) — чтобы имена/аватары не появлялись на старом содержимом
   unreadBeforeSeq: 0,      // граница непрочитанного на момент открытия чата
   messages: [],            // сообщения активного чата
   members: [],             // участники активного чата
@@ -273,6 +275,7 @@ async function refreshMessages() {
   ]);
   if (chatState.activeChatId !== cid) return;
   chatState.members = members;
+  chatState.renderedChatId = cid; // тип отрисованного чата = тип этих сообщений (для имён/аватаров)
   chatState.messages = rows; // ПОСЛЕДНИМ, без await после
   saveChatSnapshot();
 }
@@ -366,6 +369,7 @@ export async function leaveChat(chatId) {
 
 export function closeChat() {
   chatState.activeChatId = null;
+  chatState.renderedChatId = null;
   chatState.messages = [];
   chatState.members = [];
 }

@@ -1412,7 +1412,14 @@ function startResize(e) {
   document.body.style.userSelect = 'none'
   e.preventDefault()
 }
-const isGroup = computed(() => activeChat.value?.type === 'group')
+// тип берём у ОТРИСОВАННОГО чата (renderedChatId), а не у маршрута: при переключении route
+// меняется мгновенно, а messages свапаются на кадр-два позже (ensureImageDims) — иначе имена автора
+// успевают появиться на сообщениях старого чата и текст «прыгает вверх» перед переходом.
+const isGroup = computed(() => {
+  const rid = chatState.renderedChatId
+  const c = rid ? chatState.chats.find((x) => x.id === rid) : null
+  return c?.type === 'group'
+})
 const memberById = computed(() => { const map = {}; for (const x of chatState.members || []) map[x.user_id] = x; return map })
 function avatarOf(m) { return memberById.value[m.author_id]?.avatar_url || null }
 function nameOf(m) { return m.author_name || memberById.value[m.author_id]?.full_name || '' }

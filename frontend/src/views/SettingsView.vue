@@ -13,6 +13,11 @@ const saving = ref(false)
 const saved = ref(false)
 const form = ref({ forum_edit_window_minutes: 60, auth_expire_days: 30, recording_enabled: true, recording_height: 720 })
 
+// Локальная (для этого устройства) настройка — фоновая подгрузка разделов в кэш. Применяется сразу,
+// не через кнопку «Сохранить» (это не серверная настройка).
+const prefetchOn = ref(localStorage.getItem('apiPrefetch') !== '0')
+function togglePrefetch() { try { localStorage.setItem('apiPrefetch', prefetchOn.value ? '1' : '0') } catch { /* ignore */ } }
+
 async function load() {
   loading.value = true
   try {
@@ -116,6 +121,16 @@ async function save() {
           </div>
           <p class="mt-1.5 text-xs text-ink-700/50">Чем выше качество — тем больше нагрузка и размер файла. На этом сервере рекомендуется 480p или 720p.</p>
         </div>
+      </div>
+
+      <!-- Устройство (локально, применяется сразу) -->
+      <div class="card mb-4 p-6">
+        <div class="mb-4 flex items-center gap-2">
+          <AppIcon name="settings" :size="18" class="text-saffron-600" />
+          <h2 class="font-display text-lg font-semibold text-ink-900">Это устройство</h2>
+        </div>
+        <label class="flex items-center gap-2 text-sm"><input type="checkbox" v-model="prefetchOn" @change="togglePrefetch" /> Фоновая подгрузка разделов</label>
+        <p class="mt-1.5 text-xs text-ink-700/50">Заранее и в фоне подгружает данные разделов (ученики, форум, справочники) в кэш — при заходе они открываются мгновенно, без скелетонов. Отключите, чтобы экономить трафик.</p>
       </div>
 
       <div class="flex items-center gap-3">

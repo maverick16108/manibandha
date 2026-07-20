@@ -17,6 +17,7 @@ import (
 	_ "image/gif"
 	_ "image/png"
 
+	"github.com/disintegration/imaging"
 	_ "golang.org/x/image/webp"
 )
 
@@ -222,9 +223,18 @@ func (s *Server) saveImage(data []byte, stem string) (string, string, int, int, 
 		return "", "", 0, 0, err
 	}
 	defer os.Remove(tmp.Name())
-	if _, err := tmp.Write(data); err != nil {
+	// Применяем EXIF-ориентацию (телефоны часто пишут поворот в EXIF; cwebp его игнорирует) —
+	// «запекаем» поворот в пиксели, чтобы фото/аватары не ложились на бок.
+	if img, e := imaging.Decode(bytes.NewReader(data), imaging.AutoOrientation(true)); e == nil {
+		b := img.Bounds()
+		cfg.Width, cfg.Height = b.Dx(), b.Dy()
+		if e2 := imaging.Encode(tmp, img, imaging.PNG); e2 != nil {
+			tmp.Close()
+			return "", "", 0, 0, e2
+		}
+	} else if _, e := tmp.Write(data); e != nil {
 		tmp.Close()
-		return "", "", 0, 0, err
+		return "", "", 0, 0, e
 	}
 	tmp.Close()
 

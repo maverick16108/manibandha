@@ -1466,6 +1466,25 @@ function replyAuthorName(m) {
 }
 function isRunEnd(m, i) { return !sameGroup(m, chatState.messages[i + 1]) } // последний в группе — к нему аватар
 function rowJustify(m) { return (isMine(m) && !wide.value) ? 'justify-end' : 'justify-start' }
+// Группируем подряд идущие сообщения одного автора в «раны» — чтобы ОДНА липкая аватарка поднималась
+// вдоль всей группы (её контейнер = ран). Ран рвётся сменой автора/паузой (sameGroup), новым днём и
+// границей непрочитанного (чтобы разделители встали между ранами).
+const messageRuns = computed(() => {
+  const msgs = chatState.messages
+  const runs = []
+  let cur = null
+  for (let i = 0; i < msgs.length; i++) {
+    const m = msgs[i]
+    const day = showDaySep(m, i)
+    const unread = m.client_uuid === firstUnreadKey.value
+    if (!cur || !sameGroup(msgs[i - 1], m) || day || unread) {
+      cur = { key: m.client_uuid, mine: isMine(m), day, dayLabel: day ? dayLabel(m.created_at) : '', unread, items: [] }
+      runs.push(cur)
+    }
+    cur.items.push({ m, i })
+  }
+  return runs
+})
 function fmtTime(ts) { if (!ts) return ''; const d = new Date(ts); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}` }
 function initials(name) { return (name || '?').trim()[0]?.toUpperCase() || '?' }
 
@@ -2368,37 +2387,40 @@ onBeforeUnmount(() => {
         <div ref="scroller" class="chat-bg flex flex-1 flex-col overflow-y-auto px-2.5 py-4" :class="sideDockOpen && 'sm:!mr-96 sm:!pr-4'"
              @scroll="onScroll" @click="onScrollerClick" @mousedown="onScrollerDown" @touchstart="onScrollerDown" @contextmenu.prevent>
           <div ref="listWrap" class="mt-auto space-y-1">
-          <template v-for="(m, i) in chatState.messages" :key="m.client_uuid">
+          <template v-for="run in messageRuns" :key="run.key">
           <!-- встроенная плашка даты между днями (остаётся в ленте); плавающая сверху её дублирует
                только когда встроенная ушла вверх за экран (см. updateFloatingDate) -->
-          <div v-if="showDaySep(m, i)" :data-daysep="dayLabel(m.created_at)" class="my-2 flex justify-center">
-            <span class="rounded-full bg-ink-900/55 px-3 py-1 text-xs font-semibold text-white shadow-sm">{{ dayLabel(m.created_at) }}</span>
+          <div v-if="run.day" :data-daysep="run.dayLabel" class="my-2 flex justify-center">
+            <span class="rounded-full bg-ink-900/55 px-3 py-1 text-xs font-semibold text-white shadow-sm">{{ run.dayLabel }}</span>
           </div>
-          <div v-if="m.client_uuid === firstUnreadKey" class="my-3 flex items-center gap-2 px-2">
+          <div v-if="run.unread" class="my-3 flex items-center gap-2 px-2">
             <span class="h-px flex-1 bg-saffron-400/60"></span>
             <span class="rounded-full bg-saffron-500 px-3 py-0.5 text-xs font-semibold text-white shadow-sm">Непрочитанные</span>
             <span class="h-px flex-1 bg-saffron-400/60"></span>
           </div>
-          <div :id="`msg-${m.id}`"
+          <!-- РАН: одна липкая аватарка на всю группу сообщений (её контейнер = ран) + колонка сообщений -->
+          <div class="flex items-end gap-2" :class="(run.mine && !wide) && 'flex-row-reverse'">
+            <template v-if="showRowAvatars">
+              <template v-if="!run.mine">
+                <img v-if="avatarOf(run.items[0].m)" :src="thumbUrl(avatarOf(run.items[0].m))" @error="imgFull($event, avatarOf(run.items[0].m))" @click.stop="openUserInfo(run.items[0].m.author_id)" class="photo-bw sticky bottom-1.5 h-10 w-10 shrink-0 cursor-pointer rounded-full object-cover" />
+                <span v-else @click.stop="openUserInfo(run.items[0].m.author_id)" class="sticky bottom-1.5 flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full bg-gradient-to-br from-sage-400 to-sage-600 text-sm font-semibold text-white">{{ initials(nameOf(run.items[0].m)) }}</span>
+              </template>
+              <template v-else>
+                <img v-if="myAvatar" :src="thumbUrl(myAvatar)" @error="imgFull($event, myAvatar)" @click.stop="openUserInfo(chatState.meId)" class="photo-bw sticky bottom-1.5 h-10 w-10 shrink-0 cursor-pointer rounded-full object-cover" />
+                <span v-else @click.stop="openUserInfo(chatState.meId)" class="sticky bottom-1.5 flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full bg-gradient-to-br from-saffron-400 to-saffron-600 text-sm font-semibold text-white">{{ initials(myName) }}</span>
+              </template>
+            </template>
+            <div class="flex min-w-0 flex-1 flex-col gap-0.5">
+            <template v-for="{ m, i } in run.items" :key="m.client_uuid">
+            <div :id="`msg-${m.id}`"
                class="group relative flex items-end gap-2 rounded-xl px-1 transition-colors"
-               :class="[rowJustify(m), sameGroup(chatState.messages[i - 1], m) && '!mt-0.5', selectMode && 'cursor-pointer select-none pr-10', selectMode && selected.has(m.id) && 'bg-saffron-500/10']"
+               :class="[rowJustify(m), selectMode && 'cursor-pointer select-none pr-10', selectMode && selected.has(m.id) && 'bg-saffron-500/10']"
                @click.capture="onRowClick($event, m)"
                @mousedown="selDragStart($event, m, i)" @mouseenter="selDragEnter(i)">
             <!-- чекбокс выбора: у ПРАВОГО края (сообщения остаются на своих сторонах) -->
             <div v-if="selectMode" class="absolute right-1.5 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full border-2 transition" :class="selected.has(m.id) ? 'border-saffron-500 bg-saffron-500 text-white' : 'border-ink-700/25 bg-white/50'">
               <AppIcon v-if="selected.has(m.id)" name="check" :size="14" />
             </div>
-            <!-- аватар слева от сообщения; в личных чатах при раскладке «по сторонам» аватары убраны -->
-            <template v-if="showRowAvatars && !isMine(m)">
-              <img v-if="avatarOf(m) && isRunEnd(m, i)" :src="thumbUrl(avatarOf(m))" @error="imgFull($event, avatarOf(m))" @click.stop="openUserInfo(m.author_id)" class="photo-bw sticky bottom-1.5 h-10 w-10 shrink-0 cursor-pointer rounded-full object-cover" />
-              <span v-else-if="isRunEnd(m, i)" @click.stop="openUserInfo(m.author_id)" class="sticky bottom-1.5 flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full bg-gradient-to-br from-sage-400 to-sage-600 text-sm font-semibold text-white">{{ initials(nameOf(m)) }}</span>
-              <span v-else class="h-10 w-10 shrink-0"></span>
-            </template>
-            <template v-else-if="showRowAvatars">
-              <img v-if="myAvatar && isRunEnd(m, i)" :src="thumbUrl(myAvatar)" @error="imgFull($event, myAvatar)" @click.stop="openUserInfo(chatState.meId)" class="photo-bw sticky bottom-1.5 h-10 w-10 shrink-0 cursor-pointer rounded-full object-cover" />
-              <span v-else-if="isRunEnd(m, i)" @click.stop="openUserInfo(chatState.meId)" class="sticky bottom-1.5 flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full bg-gradient-to-br from-saffron-400 to-saffron-600 text-sm font-semibold text-white">{{ initials(myName) }}</span>
-              <span v-else class="h-10 w-10 shrink-0"></span>
-            </template>
             <!-- ФОТО-сообщение: без «полей» пузыря (как в телеге) -->
             <!-- кружок (видео-запись) — круглый плеер: авто muted+loop, клик → звук + кольцо прогресса -->
             <div v-if="isVideoNote(m)" class="flex flex-col gap-1" @contextmenu="onContext($event, m)">
@@ -2628,6 +2650,9 @@ onBeforeUnmount(() => {
                 <AppIcon v-if="selected.has(m.id)" name="check" :size="14" />
               </span>
             </div>
+          </div>
+          </template>
+          </div>
           </div>
           </template>
 

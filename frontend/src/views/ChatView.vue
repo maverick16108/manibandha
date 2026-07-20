@@ -1017,8 +1017,8 @@ function fitBox(aspect, maxW, maxH) {
 }
 // Пределы: фото занимает до ~74% ширины колонки (но не абсурдно широко на ультра-широких мониторах)
 // и до ~62% высоты окна. Видео — чуть выше по высоте (это основной контент).
-function photoCaps() { const A = convWidth(); return { maxW: Math.round(Math.max(260, Math.min(760, A * 0.74))), maxH: Math.round(Math.min(600, winH.value * 0.62)) } }
-function videoCaps() { const A = convWidth(); return { maxW: Math.round(Math.max(260, Math.min(760, A * 0.74))), maxH: Math.round(Math.min(680, winH.value * 0.72)) } }
+function photoCaps() { const A = convWidth(); return { maxW: Math.round(Math.max(220, Math.min(608, A * 0.6))), maxH: Math.round(Math.min(480, winH.value * 0.5)) } }
+function videoCaps() { const A = convWidth(); return { maxW: Math.round(Math.max(220, Math.min(608, A * 0.6))), maxH: Math.round(Math.min(544, winH.value * 0.58)) } }
 // ЕДИНЫЙ размер одиночного фото — им пользуются и лоадер-превью, и итоговое фото (без «скачка»).
 function photoBox(aspect) { const c = photoCaps(); return fitBox(aspect, c.maxW, c.maxH) }
 function albumWidth() { return photoCaps().maxW } // ширина сетки-альбома = максимальная ширина одиночного фото

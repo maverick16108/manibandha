@@ -2329,7 +2329,7 @@ onBeforeUnmount(() => {
         <div class="relative flex min-h-0 flex-1 flex-col">
         <div class="pointer-events-none absolute inset-x-0 top-0 z-20 [&>*]:pointer-events-auto"><AudioBar /></div>
 
-        <div ref="scroller" class="chat-bg flex flex-1 flex-col overflow-y-auto p-4" :class="sideDockOpen && 'sm:!pr-96'"
+        <div ref="scroller" class="chat-bg flex flex-1 flex-col overflow-y-auto px-2.5 py-4" :class="sideDockOpen && 'sm:!pr-96'"
              @scroll="onScroll" @click="onScrollerClick" @mousedown="onScrollerDown" @touchstart="onScrollerDown" @contextmenu.prevent>
           <div ref="listWrap" class="mt-auto space-y-1">
           <template v-for="(m, i) in chatState.messages" :key="m.client_uuid">
@@ -2359,8 +2359,8 @@ onBeforeUnmount(() => {
               <span v-else class="h-10 w-10 shrink-0"></span>
             </template>
             <template v-else>
-              <img v-if="myAvatar && isRunEnd(m, i)" :src="thumbUrl(myAvatar)" @error="imgFull($event, myAvatar)" @click.stop="openUserInfo(chatState.meId)" class="photo-bw h-10 w-10 shrink-0 cursor-pointer rounded-full object-cover" />
-              <span v-else-if="isRunEnd(m, i)" @click.stop="openUserInfo(chatState.meId)" class="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full bg-gradient-to-br from-saffron-400 to-saffron-600 text-sm font-semibold text-white">{{ initials(myName) }}</span>
+              <img v-if="myAvatar && isRunEnd(m, i)" :src="thumbUrl(myAvatar)" @error="imgFull($event, myAvatar)" @click.stop="openUserInfo(chatState.meId)" class="photo-bw sticky bottom-1.5 h-10 w-10 shrink-0 cursor-pointer rounded-full object-cover" />
+              <span v-else-if="isRunEnd(m, i)" @click.stop="openUserInfo(chatState.meId)" class="sticky bottom-1.5 flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full bg-gradient-to-br from-saffron-400 to-saffron-600 text-sm font-semibold text-white">{{ initials(myName) }}</span>
               <span v-else class="h-10 w-10 shrink-0"></span>
             </template>
             <!-- ФОТО-сообщение: без «полей» пузыря (как в телеге) -->

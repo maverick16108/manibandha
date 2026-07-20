@@ -91,7 +91,7 @@ const service = [
       <div class="relative z-10 mx-auto flex min-h-[100svh] max-w-6xl flex-col justify-end px-5 pb-[12vh] pt-24 text-white sm:px-6 lg:justify-end lg:pb-[15vh]">
         <div class="max-w-xl text-center md:ml-auto md:text-right">
           <p class="mb-3 text-xs uppercase tracking-[0.3em] text-parchment-200/90 sm:mb-4 sm:text-sm">Его Милость</p>
-          <h1 class="font-display text-4xl font-semibold leading-tight sm:text-6xl lg:text-7xl">Манибандха Прабху</h1>
+          <h1 class="font-home text-4xl font-semibold leading-tight sm:text-6xl lg:text-7xl">Манибандха Прабху</h1>
           <p class="mt-4 font-serif text-base italic text-parchment-100/90 sm:mt-6 sm:text-lg lg:text-xl">
             Инициирующий духовный учитель Международного общества сознания Кришны (ИСККОН),
             наставник и проводник по пути преданного служения.
@@ -109,7 +109,7 @@ const service = [
       <div class="grid items-center gap-12 md:grid-cols-2">
         <div class="order-2 md:order-1">
           <p class="mb-3 text-sm uppercase tracking-[0.25em] text-saffron-600">О наставнике</p>
-          <h2 class="font-display text-4xl font-semibold text-ink-900">Более 30 лет на пути бхакти</h2>
+          <h2 class="font-home text-4xl font-semibold text-ink-900">Более 30 лет на пути бхакти</h2>
           <div class="mt-6 space-y-4 font-serif text-lg leading-relaxed text-ink-700">
             <p>
               Манибандха Прабху — специалист в области ведической философии и культуры, посвятивший
@@ -135,14 +135,14 @@ const service = [
     <section class="bg-ink-900 text-parchment-100">
       <div class="mx-auto max-w-5xl px-6 py-20">
         <p class="mb-3 text-center text-sm uppercase tracking-[0.25em] text-saffron-400">Служение</p>
-        <h2 class="text-center font-display text-4xl font-semibold text-white">Проповедь и паломничества</h2>
+        <h2 class="text-center font-home text-4xl font-semibold text-white">Проповедь и паломничества</h2>
         <div class="mt-12 grid gap-8 sm:grid-cols-3">
           <div v-for="s in service" :key="s.title" class="text-center">
             <div class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full border border-saffron-400/40 bg-saffron-400/10 text-saffron-400">
               <img v-if="s.icon === 'lotus'" src="/lotus-mark.png" alt="" class="h-7 w-auto" />
               <AppIcon v-else :name="s.icon" :size="28" :stroke="1.4" />
             </div>
-            <h3 class="font-display text-2xl text-white">{{ s.title }}</h3>
+            <h3 class="font-home text-2xl text-white">{{ s.title }}</h3>
             <p class="mt-2 font-serif text-parchment-200/80">{{ s.text }}</p>
           </div>
         </div>
@@ -156,7 +156,7 @@ const service = [
     <section v-if="events.length" id="schedule" class="scroll-mt-20 bg-parchment-200/50">
       <div class="mx-auto max-w-4xl px-6 py-20">
         <p class="mb-3 text-center text-sm uppercase tracking-[0.25em] text-saffron-600">Расписание</p>
-        <h2 class="text-center font-display text-4xl font-semibold text-ink-900">Где сейчас Гуру</h2>
+        <h2 class="text-center font-home text-4xl font-semibold text-ink-900">Где сейчас Гуру</h2>
         <div class="mt-8 flex flex-wrap justify-center gap-3">
           <RouterLink to="/calendar?view=list" class="btn-outline">
             <AppIcon name="reports" :size="16" /> События
@@ -176,7 +176,7 @@ const service = [
               <span class="font-medium">{{ eventDates(e) }}</span>
             </div>
             <div class="min-w-0 flex-1">
-              <h3 class="truncate font-display text-xl text-ink-900">{{ e.title }}</h3>
+              <h3 class="truncate font-home text-xl text-ink-900">{{ e.title }}</h3>
               <p v-if="e.location" class="mt-0.5 flex items-center gap-1 text-sm text-ink-700/70">
                 <AppIcon name="pin" :size="14" /> {{ e.location }}
               </p>
@@ -190,7 +190,7 @@ const service = [
     <!-- Gallery — swipeable filmstrip + lightbox -->
     <section class="py-20">
       <div class="mx-auto mb-8 flex max-w-6xl items-center justify-between px-6">
-        <h2 class="font-display text-4xl font-semibold text-ink-900">Галерея</h2>
+        <h2 class="font-home text-4xl font-semibold text-ink-900">Галерея</h2>
         <div class="hidden gap-2 sm:flex">
           <button class="flex h-10 w-10 items-center justify-center rounded-full border border-parchment-300 text-ink-700 transition hover:bg-parchment-200" @click="scrollStrip(-1)">
             <AppIcon name="chevron" :size="20" class="rotate-90" />

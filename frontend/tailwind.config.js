@@ -30,7 +30,10 @@ export default {
         },
       },
       fontFamily: {
-        display: ['"Cormorant Garamond"', 'Georgia', 'serif'],
+        // display теперь = sans (Inter): по всему приложению заголовки без засечек.
+        // Серифный Cormorant остаётся только на публичной главной — класс font-home.
+        display: ['Inter', 'system-ui', 'sans-serif'],
+        home: ['"Cormorant Garamond"', 'Georgia', 'serif'],
         serif: ['"PT Serif"', 'Georgia', 'serif'],
         sans: ['Inter', 'system-ui', 'sans-serif'],
         script: ['Caveat', 'cursive'],

@@ -16,8 +16,9 @@ import {
   chatState, initChat, openChat, closeChat, sendMessage, sendMessageTo, sendTyping,
   editMessage, deleteMessage, retryFailed, loadOlder, loadContacts, startDirect, startGroup,
   reactMessage, REACTION_EMOJIS, updateChat, pinChat, leaveChat, forwardMessages, loadAroundSeq, markActiveRead, imageAspect, imageColor, imageMicro, expandWindow, reorderPins,
-  pinMessageInChat, unpinMessageInChat, localCacheStats, wipeLocalChatCache, onCallSignal, sendCallSignal, chatScrollMem, chatNav,
+  pinMessageInChat, unpinMessageInChat, localCacheStats, wipeLocalChatCache, chatScrollMem, chatNav,
 } from '../chat/store'
+import { startCall as callStart } from '../composables/callCenter'
 
 usePageTitle('Чат')
 
@@ -1536,206 +1537,17 @@ const peerStatusText = computed(() => {
 })
 watch(activeId, () => { clearInterval(peerStatusTimer); peerStatus.value = null; refreshPeerStatus(); peerStatusTimer = setInterval(refreshPeerStatus, 30000) }, { immediate: true })
 
-// ── звонок (WebRTC 1:1 поверх чат-сокета) ──────────────────────────────────
-const RTC_FALLBACK = { iceServers: [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }] }
-async function getRtcConfig() {
-  try { const { data } = await client.get('/turn-credentials'); if (data?.iceServers?.length) return { iceServers: data.iceServers } } catch { /* fallback */ }
-  return RTC_FALLBACK
-}
-const call = reactive({ open: false, name: '', avatar: '', peerId: null, status: 'idle', localVideo: false, remoteVideo: false, video: false, fullscreen: false })
-function toggleCallFullscreen() { call.fullscreen = !call.fullscreen }
-const incoming = reactive({ open: false, name: '', avatar: '', video: false, from: null, offer: null })
-const callRemoteVideo = ref(null); const callLocalVideo = ref(null)
-let pc = null; let localStream = null; let remoteStream = null; let remoteAudioEl = null; let pendingIce = []
-let makingOffer = false; let politePeer = false
-// какие звонки (по id звонящего) уже приняты/отклонены на ЛЮБОЙ вкладке — чтобы поздний offer
-// (гонка сигналов) не открывал входящий заново, а также чтобы «догоняющий» handled сработал.
-const handledFrom = new Map() // fromUserId -> timestamp
-function markHandled(from) { if (from != null) handledFrom.set(String(from), Date.now()) }
-function isHandled(from) { const t = handledFrom.get(String(from)); return t != null && (Date.now() - t) < 15000 }
-// вкладки одного браузера общаются напрямую — надёжно гасим входящий на других вкладках
-let callBC = null
-function onBCHandled(from) { markHandled(from); dropIncoming(from) }
-try { callBC = new BroadcastChannel('mani-call'); callBC.onmessage = (e) => { const d = e.data; if (d === 'handled') dropIncoming(); else if (d && d.t === 'handled') onBCHandled(d.from) } } catch { /* нет поддержки */ }
-function dropIncoming(from) { if (incoming.open && (from == null || String(incoming.from) === String(from))) { incoming.open = false; incoming.offer = null; stopRingtone() } }
-const callStatusText = computed(() => call.status === 'connected' ? 'Соединено' : (call.status === 'calling' ? 'Вызов…' : 'Готов к звонку'))
-function attachRemoteVideo() { if (callRemoteVideo.value && remoteStream) { callRemoteVideo.value.srcObject = remoteStream; callRemoteVideo.value.muted = true; callRemoteVideo.value.play?.().catch(() => {}) } }
-// удалённое видео привязываем НАДЁЖНО: элемент появляется только при connected+remoteVideo,
-// а ontrack мог сработать раньше — перепривязываем при появлении элемента
-watch([() => call.status, () => call.remoteVideo], () => nextTick(attachRemoteVideo))
-async function ensureLocalStream(wantVideo) {
-  if (!localStream) localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: wantVideo })
-  else if (wantVideo && !localStream.getVideoTracks().length) { const vs = await navigator.mediaDevices.getUserMedia({ video: true }); localStream.addTrack(vs.getVideoTracks()[0]) }
-  attachLocalVideo()
-  return localStream
-}
-
+// ── звонок ─────────────────────────────────────────────────────────────────
+// Вся логика/UI звонков вынесены в глобальный composables/callCenter.js (+ components/CallCenter.vue,
+// монтируется в AppLayout), поэтому входящие приходят В ЛЮБОМ разделе, а не только при открытом чате.
+// Здесь остаётся лишь запуск исходящего из активного личного чата (нужны activeChat/peerStatus).
 async function startCall(withVideo) {
   if (!activeChat.value || activeChat.value.type !== 'direct') return
   if (!peerStatus.value?.id) await refreshPeerStatus()
-  call.peerId = peerStatus.value?.id || null
-  if (!call.peerId) { showToast('Не удалось определить собеседника'); return }
-  call.name = activeChat.value.title || ''; call.avatar = activeChat.value.avatar_url || ''
-  call.localVideo = !!withVideo; call.video = !!withVideo; call.remoteVideo = false
-  call.status = 'idle-outgoing'; call.open = true
+  const peerId = peerStatus.value?.id
+  if (!peerId) { showToast('Не удалось определить собеседника'); return }
+  callStart({ peerId, name: activeChat.value.title || '', avatar: activeChat.value.avatar_url || '', video: withVideo })
 }
-function setupPc(peerId, cfg, polite) {
-  politePeer = !!polite; makingOffer = false
-  pc = new RTCPeerConnection(cfg || RTC_FALLBACK)
-  pc.onicecandidate = (e) => { if (e.candidate) sendCallSignal({ to: peerId, subtype: 'ice', candidate: e.candidate }) }
-  pc.ontrack = (e) => {
-    remoteStream = e.streams[0]
-    if (!remoteAudioEl) { remoteAudioEl = document.createElement('audio'); remoteAudioEl.autoplay = true; document.body.appendChild(remoteAudioEl) }
-    remoteAudioEl.srcObject = remoteStream
-    call.remoteVideo = remoteStream.getVideoTracks().length > 0
-    nextTick(attachRemoteVideo)
-    // собеседник мог вкл/выкл видео — следим за составом треков
-    remoteStream.onaddtrack = remoteStream.onremovetrack = () => { call.remoteVideo = remoteStream.getVideoTracks().length > 0; nextTick(attachRemoteVideo) }
-  }
-  pc.onconnectionstatechange = () => {
-    if (!pc) return
-    if (pc.connectionState === 'connected') call.status = 'connected'
-    if (['failed', 'closed'].includes(pc.connectionState)) endCall()
-  }
-}
-function attachLocalVideo() { nextTick(() => { if (callLocalVideo.value && localStream) callLocalVideo.value.srcObject = localStream }) }
-async function placeCall() {
-  call.status = 'calling'
-  try { await ensureLocalStream(call.localVideo) }
-  catch { showToast('Нет доступа к микрофону/камере'); endCall(); return }
-  const rtcCfg = await getRtcConfig()
-  setupPc(call.peerId, rtcCfg, false) // звонящий — «невежливый» (при коллизии не уступает)
-  localStream.getTracks().forEach((t) => pc.addTrack(t, localStream))
-  const offer = await pc.createOffer()
-  await pc.setLocalDescription(offer)
-  sendCallSignal({ to: call.peerId, subtype: 'offer', sdp: offer, video: call.localVideo, name: myName.value })
-}
-async function acceptIncoming() {
-  call.peerId = incoming.from; call.name = incoming.name; call.avatar = incoming.avatar
-  call.video = incoming.video; call.localVideo = incoming.video; call.remoteVideo = false
-  const offer = incoming.offer; const callFrom = incoming.from; incoming.open = false
-  markHandled(callFrom)
-  sendCallSignal({ to: chatState.meId, subtype: 'handled', callFrom }) // погасить звонок на своих других вкладках
-  callBC?.postMessage({ t: 'handled', from: callFrom })
-  stopRingtone()
-  call.open = true; call.status = 'calling'
-  try { await ensureLocalStream(call.localVideo) }
-  catch { showToast('Нет доступа к микрофону/камере'); endCall(); return }
-  const rtcCfg = await getRtcConfig()
-  setupPc(call.peerId, rtcCfg, true) // принимающий — «вежливый» (уступает при коллизии renego)
-  localStream.getTracks().forEach((t) => pc.addTrack(t, localStream))
-  await pc.setRemoteDescription(new RTCSessionDescription(offer))
-  for (const c of pendingIce) { try { await pc.addIceCandidate(c) } catch { /* ignore */ } }
-  pendingIce = []
-  const answer = await pc.createAnswer()
-  await pc.setLocalDescription(answer)
-  sendCallSignal({ to: call.peerId, subtype: 'answer', sdp: answer })
-  call.status = 'connected'
-}
-function rejectIncoming() {
-  const callFrom = incoming.from
-  if (callFrom) sendCallSignal({ to: callFrom, subtype: 'reject' })
-  markHandled(callFrom)
-  sendCallSignal({ to: chatState.meId, subtype: 'handled', callFrom }) // погасить звонок на своих других вкладках
-  callBC?.postMessage({ t: 'handled', from: callFrom })
-  incoming.open = false; incoming.offer = null; stopRingtone()
-}
-function endCall() {
-  const to = call.peerId || incoming.from
-  if (to && (call.open || incoming.open)) sendCallSignal({ to, subtype: 'end' })
-  cleanupCall()
-}
-function cleanupCall() {
-  try { pc && pc.close() } catch { /* ignore */ }
-  pc = null; pendingIce = []; remoteStream = null; makingOffer = false; politePeer = false
-  if (localStream) { localStream.getTracks().forEach((t) => t.stop()); localStream = null }
-  if (remoteAudioEl) { try { remoteAudioEl.srcObject = null; remoteAudioEl.remove() } catch { /* ignore */ } remoteAudioEl = null }
-  call.open = false; call.status = 'idle'; call.remoteVideo = false; call.localVideo = false; call.peerId = null; call.fullscreen = false
-  incoming.open = false; incoming.offer = null
-  stopRingtone() // на всякий случай — гарантированно глушим гудки при любом завершении
-}
-async function renegotiate() {
-  if (!pc) return
-  try { makingOffer = true; const offer = await pc.createOffer(); await pc.setLocalDescription(offer); sendCallSignal({ to: call.peerId, subtype: 'offer', sdp: offer, renego: true }) }
-  catch { /* ignore */ } finally { makingOffer = false }
-}
-async function toggleCallVideo() {
-  const want = !call.localVideo
-  try { await ensureLocalStream(want) } catch { showToast('Нет доступа к камере'); return }
-  call.localVideo = want
-  const vt = localStream.getVideoTracks()[0]
-  if (vt) vt.enabled = want
-  if (pc && call.status === 'connected') {
-    const sender = pc.getSenders().find((s) => s.track && s.track.kind === 'video')
-    if (want && !sender && vt) { pc.addTrack(vt, localStream); await renegotiate() } // добавили видео-дорожку → пере-согласование
-    else if (sender && sender.track) sender.track.enabled = want
-  }
-}
-async function handleCallSignal(evt) {
-  const sub = evt.subtype
-  if (sub === 'offer') {
-    if (evt.renego && pc) { // повторное согласование (вкл/выкл видео в процессе звонка)
-      const collision = makingOffer || pc.signalingState !== 'stable'
-      if (!politePeer && collision) return // «невежливый» игнорирует встречный offer
-      try {
-        if (collision) await Promise.all([pc.setLocalDescription({ type: 'rollback' }).catch(() => {}), pc.setRemoteDescription(new RTCSessionDescription(evt.sdp))])
-        else await pc.setRemoteDescription(new RTCSessionDescription(evt.sdp))
-        const answer = await pc.createAnswer(); await pc.setLocalDescription(answer)
-        sendCallSignal({ to: evt.from, subtype: 'answer', sdp: answer })
-      } catch { /* ignore */ }
-      return
-    }
-    if (isHandled(evt.from)) return // звонок уже принят/отклонён на другой вкладке — не открываем повторно (гонка сигналов)
-    if (call.status === 'connected' || call.status === 'calling' || incoming.open) { sendCallSignal({ to: evt.from, subtype: 'busy' }); return }
-    incoming.open = true; incoming.from = evt.from; incoming.name = evt.name || evt.from_name || 'Вызов'
-    incoming.avatar = evt.from_avatar || ''; incoming.video = !!evt.video; incoming.offer = evt.sdp
-  } else if (sub === 'answer') {
-    if (pc && pc.signalingState === 'have-local-offer') { await pc.setRemoteDescription(new RTCSessionDescription(evt.sdp)); if (call.status !== 'connected') call.status = 'connected' }
-    for (const c of pendingIce) { try { await pc.addIceCandidate(c) } catch { /* ignore */ } }
-    pendingIce = []
-  } else if (sub === 'ice') {
-    const cand = new RTCIceCandidate(evt.candidate)
-    if (pc && pc.remoteDescription) { try { await pc.addIceCandidate(cand) } catch { /* ignore */ } } else pendingIce.push(cand)
-  } else if (sub === 'handled') {
-    // звонок принят/отклонён на другой вкладке этого же пользователя — гасим входящий здесь
-    markHandled(evt.callFrom)
-    dropIncoming(evt.callFrom)
-  } else if (sub === 'end' || sub === 'reject' || sub === 'busy') {
-    if (sub === 'busy') showToast('Абонент занят')
-    else if (sub === 'reject') showToast('Звонок отклонён')
-    cleanupCall()
-  }
-}
-onCallSignal(handleCallSignal)
-// ── рингтон (генерируем через Web Audio, без файлов) ───────────────────────
-let ringCtx = null; let ringTimer = null
-function startRingtone(isIncoming) {
-  stopRingtone()
-  try {
-    ringCtx = new (window.AudioContext || window.webkitAudioContext)()
-    if (ringCtx.state === 'suspended') ringCtx.resume().catch(() => {})
-    const tone = (offset, freq, dur, vol) => {
-      if (!ringCtx) return
-      const o = ringCtx.createOscillator(), g = ringCtx.createGain()
-      o.type = 'sine'; o.frequency.value = freq
-      const t = ringCtx.currentTime + offset
-      g.gain.setValueAtTime(0.0001, t)
-      g.gain.exponentialRampToValueAtTime(vol, t + 0.03)
-      g.gain.setValueAtTime(vol, t + dur - 0.05)
-      g.gain.exponentialRampToValueAtTime(0.0001, t + dur)
-      o.connect(g); g.connect(ringCtx.destination); o.start(t); o.stop(t + dur + 0.05)
-    }
-    // «ring-ring» — два коротких гудка, затем пауза; повторяем
-    const beep = () => {
-      if (isIncoming) { tone(0, 540, 0.4, 0.22); tone(0.55, 680, 0.4, 0.22) }
-      else { tone(0, 440, 0.45, 0.2); tone(0.6, 480, 0.45, 0.2) } // исходящий гудок вызова
-    }
-    beep(); ringTimer = setInterval(beep, isIncoming ? 2400 : 3000)
-  } catch { /* аудио недоступно */ }
-}
-function stopRingtone() { if (ringTimer) { clearInterval(ringTimer); ringTimer = null } if (ringCtx) { try { ringCtx.close() } catch { /* ignore */ } ringCtx = null } }
-watch(() => call.status, (s) => { if (s === 'calling') startRingtone(false); else stopRingtone() })
-watch(() => incoming.open, (v) => { v ? startRingtone(true) : stopRingtone() })
 async function openInfo() {
   const id = activeId.value
   showInfo.value = true
@@ -1958,7 +1770,6 @@ function onGlobalKey(e) {
     return
   }
   if (e.key !== 'Escape') return
-  if (call.fullscreen) { call.fullscreen = false; return } // выход из полноэкранного звонка
   if (showInfo.value) { closeInfo(); return }
   if (searchChat.open) { closeChatSearch(); return }
   if (recording.value) cancelRec()
@@ -2897,71 +2708,7 @@ onBeforeUnmount(() => {
       </div>
     </template>
 
-    <!-- Окно звонка (попап / на весь экран) -->
-    <div v-if="call.open" class="fixed inset-0 z-[80] flex items-center justify-center bg-ink-900/60" :class="call.fullscreen ? 'p-0' : 'p-4'">
-      <div class="relative flex flex-col items-center overflow-hidden bg-ink-900 text-white shadow-2xl"
-           :class="call.fullscreen ? 'h-full w-full rounded-none' : 'w-full max-w-2xl rounded-2xl'">
-        <!-- видео собеседника на весь экран (когда соединено и есть видео) -->
-        <template v-if="call.status === 'connected' && call.remoteVideo">
-          <video ref="callRemoteVideo" autoplay playsinline class="w-full bg-black object-cover" :class="call.fullscreen ? 'h-full' : 'aspect-video max-h-[70vh]'"></video>
-          <!-- имя + статус поверх видео -->
-          <div class="pointer-events-none absolute left-0 right-0 top-0 bg-gradient-to-b from-black/50 to-transparent p-4 text-center">
-            <div class="text-lg font-semibold">{{ call.name }}</div>
-            <div class="text-xs text-white/70">{{ callStatusText }}</div>
-          </div>
-        </template>
-        <!-- аватар (аудио-звонок или ещё нет видео) -->
-        <div v-else class="flex flex-col items-center px-8 py-10" :class="call.fullscreen && 'flex-1 justify-center'">
-          <div class="text-sm text-white/45">{{ callStatusText }}</div>
-          <img v-if="call.avatar" :src="thumbUrl(call.avatar)" class="mt-6 rounded-full object-cover shadow-xl" :class="call.fullscreen ? 'h-56 w-56' : 'h-40 w-40'" />
-          <span v-else class="mt-6 flex items-center justify-center rounded-full bg-gradient-to-br from-saffron-400 to-saffron-600 font-semibold shadow-xl" :class="call.fullscreen ? 'h-56 w-56 text-7xl' : 'h-40 w-40 text-5xl'">{{ initials(call.name) }}</span>
-          <div class="mt-5 text-2xl font-semibold">{{ call.name }}</div>
-          <div v-if="call.status !== 'connected'" class="mt-2 text-center text-sm text-white/50">Если Вы хотите начать видеозвонок,<br>нажмите на значок камеры.</div>
-        </div>
-        <!-- своё видео превью -->
-        <video v-show="call.localVideo" ref="callLocalVideo" autoplay playsinline muted class="absolute -scale-x-100 rounded-lg object-cover shadow-lg ring-2 ring-white/20"
-               :class="call.fullscreen ? 'bottom-28 right-6 h-40 w-32' : 'right-4 top-4 h-28 w-24'"></video>
-        <!-- развернуть/свернуть -->
-        <button v-if="call.status === 'connected'" class="absolute right-3 top-3 z-10 rounded-full bg-black/40 p-2 text-white transition hover:bg-black/60" :title="call.fullscreen ? 'Свернуть' : 'На весь экран'" @click="toggleCallFullscreen">
-          <AppIcon :name="call.fullscreen ? 'minimize' : 'maximize'" :size="20" />
-        </button>
-        <!-- панель кнопок -->
-        <div class="flex items-end justify-center gap-7" :class="[call.status === 'connected' && call.remoteVideo ? 'absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent pb-8 pt-10' : 'pb-10']">
-          <button class="flex flex-col items-center gap-2" @click="toggleCallVideo">
-            <span class="flex h-12 w-12 items-center justify-center rounded-full text-white shadow-lg transition active:scale-95" :class="call.localVideo ? 'bg-sky-600' : 'bg-white/15 hover:bg-white/25'"><AppIcon name="video" :size="22" /></span>
-            <span class="text-xs text-white/70">{{ call.localVideo ? 'Выкл. видео' : 'Вкл. видео' }}</span>
-          </button>
-          <button class="flex flex-col items-center gap-2" @click="endCall">
-            <span class="flex h-12 w-12 items-center justify-center rounded-full bg-red-500 text-white shadow-lg transition hover:bg-red-600 active:scale-95"><AppIcon name="phone" :size="22" class="rotate-[135deg]" /></span>
-            <span class="text-xs text-white/70">{{ call.status === 'connected' ? 'Завершить' : 'Отменить' }}</span>
-          </button>
-          <button v-if="call.status === 'idle-outgoing'" class="flex flex-col items-center gap-2" @click="placeCall">
-            <span class="flex h-12 w-12 items-center justify-center rounded-full bg-sky-500 text-white shadow-lg transition hover:bg-sky-600 active:scale-95"><AppIcon name="phone" :size="22" /></span>
-            <span class="text-xs text-white/70">Позвонить</span>
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Входящий звонок (попап) -->
-    <div v-if="incoming.open" class="fixed inset-0 z-[81] flex items-center justify-center bg-ink-900/60 p-4">
-      <div class="flex w-full max-w-sm flex-col items-center rounded-2xl bg-ink-900 p-8 text-white shadow-2xl">
-        <div class="text-sm text-white/45">Входящий {{ incoming.video ? 'видеозвонок' : 'звонок' }}</div>
-        <img v-if="incoming.avatar" :src="thumbUrl(incoming.avatar)" class="mt-6 h-32 w-32 rounded-full object-cover shadow-xl" />
-        <span v-else class="mt-6 flex h-32 w-32 items-center justify-center rounded-full bg-gradient-to-br from-saffron-400 to-saffron-600 text-4xl font-semibold shadow-xl">{{ initials(incoming.name) }}</span>
-        <div class="mt-4 text-xl font-semibold">{{ incoming.name }}</div>
-        <div class="mt-8 flex items-end gap-12">
-          <button class="flex flex-col items-center gap-2" @click="rejectIncoming">
-            <span class="flex h-14 w-14 items-center justify-center rounded-full bg-red-500 text-white transition hover:bg-red-600 animate-pulse"><AppIcon name="phone" :size="24" class="rotate-[135deg]" /></span>
-            <span class="text-xs text-white/60">Отклонить</span>
-          </button>
-          <button class="flex flex-col items-center gap-2" @click="acceptIncoming">
-            <span class="flex h-14 w-14 items-center justify-center rounded-full bg-green-500 text-white transition hover:bg-green-600"><AppIcon name="phone" :size="24" /></span>
-            <span class="text-xs text-white/60">Принять</span>
-          </button>
-        </div>
-      </div>
-    </div>
+    <!-- Окно звонка и входящий попап вынесены в глобальный CallCenter.vue (монтируется в AppLayout) -->
 
     <!-- Диалог отправки вложений (картинки + файлы) -->
     <!-- Память устройства / кэш -->

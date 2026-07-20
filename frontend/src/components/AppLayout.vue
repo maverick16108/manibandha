@@ -9,6 +9,7 @@ import { navCounts, refreshNavCounts } from '../composables/navCounts'
 import { chatState, initChat, teardownChat } from '../chat/store'
 import { toastState } from '../composables/toast'
 import { backTarget } from '../composables/backTarget'
+import CallCenter from './CallCenter.vue'
 import AppIcon from './AppIcon.vue'
 import { prefetchSections } from '../composables/prefetch'
 
@@ -245,6 +246,9 @@ function logout() {
         </RouterView>
       </main>
     </div>
+
+    <!-- глобальный центр звонков (входящие приходят в любом разделе, не только в чате) -->
+    <CallCenter />
 
     <!-- всплывающее уведомление (тост) -->
     <transition enter-active-class="transition duration-200" enter-from-class="translate-y-3 opacity-0" leave-active-class="transition duration-200" leave-to-class="translate-y-3 opacity-0">

@@ -2645,11 +2645,6 @@ onBeforeUnmount(() => {
                 </div>
               </div>
             </div>
-            <div v-if="selectMode" class="flex shrink-0 items-center self-center pl-1">
-              <span class="flex h-6 w-6 items-center justify-center rounded-full border-2 transition" :class="selected.has(m.id) ? 'border-saffron-500 bg-saffron-500 text-white' : 'border-parchment-400 bg-white/80'">
-                <AppIcon v-if="selected.has(m.id)" name="check" :size="14" />
-              </span>
-            </div>
           </div>
           </template>
           </div>

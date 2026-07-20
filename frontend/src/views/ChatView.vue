@@ -1314,7 +1314,29 @@ function videoNoteOf(m) { const mm = contentBody(m).match(VIDEONOTE_RE); return 
 // вокруг — прогресс; по завершении/повторном клике возвращаемся к беззвучному циклу.
 const vnEls = {}
 const vnSound = reactive({})
-function setVnEl(id, el) { if (el) { vnEls[id] = el } else { delete vnEls[id]; vnSound[id] = false } } // размонтировался (смена чата) — сбрасываем звук/кольцо
+// Браузеры троттлят автозапуск НЕСКОЛЬКИХ <video autoplay> (средний кружок «не запускался»). Наблюдаем
+// видимость: видимый — играем (muted), ушедший за экран — ставим на паузу (кроме играющих со звуком).
+let vnObs = null
+function ensureVnObs() {
+  if (vnObs || typeof IntersectionObserver === 'undefined') return
+  vnObs = new IntersectionObserver((entries) => {
+    for (const e of entries) {
+      const v = e.target
+      if (e.isIntersecting) { if (v.paused && v.muted) v.play().catch(() => {}) }
+      else if (v.muted && !v.paused) v.pause() // играющие со звуком (muted=false) не трогаем
+    }
+  }, { threshold: 0.2 })
+}
+function setVnEl(id, el) {
+  if (el) {
+    vnEls[id] = el
+    ensureVnObs(); vnObs?.observe(el)
+    if (el.muted && el.paused) el.play().catch(() => {}) // явный «пинок» — надёжнее одного autoplay
+  } else {
+    const prev = vnEls[id]; if (prev) vnObs?.unobserve(prev)
+    delete vnEls[id]; vnSound[id] = false // размонтировался (смена чата) — сбрасываем звук/кольцо
+  }
+}
 // webm из MediaRecorder часто отдаёт duration=Infinity — «пинаем» перемоткой, чтобы узнать длину
 function fixVnDuration(e) {
   const v = e.target
@@ -1428,6 +1450,9 @@ const isGroup = computed(() => {
   const c = rid ? chatState.chats.find((x) => x.id === rid) : null
   return c?.type === 'group'
 })
+// Аватары у сообщений: в раскладке «по разным сторонам» (не wide) для ЛИЧНЫХ чатов их убираем
+// (как в Telegram — в 1-1 аватар не нужен), в группах и в широкой раскладке оставляем.
+const showRowAvatars = computed(() => wide.value || isGroup.value)
 const memberById = computed(() => { const map = {}; for (const x of chatState.members || []) map[x.user_id] = x; return map })
 function avatarOf(m) { return memberById.value[m.author_id]?.avatar_url || null }
 function nameOf(m) { return m.author_name || memberById.value[m.author_id]?.full_name || '' }
@@ -1896,12 +1921,12 @@ function onGlobalKey(e) {
     return
   }
   if (e.key !== 'Escape') return
-  // сначала закрываем САМЫЙ ВЕРХНИЙ слой (вложенные попапы поверх инфо-панели), затем саму инфо-панель
+  // Escape закрывает только ПОПАПЫ. Боковой (докнутый) режим инфо-панели/медиа-обзора Escape НЕ трогает.
   if (infoMenu.value) { infoMenu.value = false; return }
   if (showGroupEdit.value) { showGroupEdit.value = false; return }
   if (addMembersOpen.value) { addMembersOpen.value = false; return }
-  if (mediaBrowser.open) { closeMediaBrowser(); return }
-  if (showInfo.value) { closeInfo(); return }
+  if (mediaBrowser.open && infoMode.value === 'popup') { closeMediaBrowser(); return }
+  if (showInfo.value && infoMode.value === 'popup') { closeInfo(); return }
   if (searchChat.open) { closeChatSearch(); return }
   if (recording.value) cancelRec()
   else if (forwardOpen.value) forwardOpen.value = false
@@ -1964,6 +1989,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('focus', onChatVisible)
   resizeObs?.disconnect()
   listObs?.disconnect()
+  vnObs?.disconnect(); vnObs = null
   cancelCompose()
   if (draftTimer) clearTimeout(draftTimer)
   if (activeId.value && !editingMsg.value) saveDraft(activeId.value, body.value) // сохранить черновик при уходе
@@ -2329,7 +2355,7 @@ onBeforeUnmount(() => {
         <div class="relative flex min-h-0 flex-1 flex-col">
         <div class="pointer-events-none absolute inset-x-0 top-0 z-20 [&>*]:pointer-events-auto"><AudioBar /></div>
 
-        <div ref="scroller" class="chat-bg flex flex-1 flex-col overflow-y-auto px-2.5 py-4" :class="sideDockOpen && 'sm:!pr-96'"
+        <div ref="scroller" class="chat-bg flex flex-1 flex-col overflow-y-auto px-2.5 py-4" :class="sideDockOpen && 'sm:!mr-96 sm:!pr-4'"
              @scroll="onScroll" @click="onScrollerClick" @mousedown="onScrollerDown" @touchstart="onScrollerDown" @contextmenu.prevent>
           <div ref="listWrap" class="mt-auto space-y-1">
           <template v-for="(m, i) in chatState.messages" :key="m.client_uuid">
@@ -2352,13 +2378,13 @@ onBeforeUnmount(() => {
             <div v-if="selectMode" class="absolute right-1.5 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full border-2 transition" :class="selected.has(m.id) ? 'border-saffron-500 bg-saffron-500 text-white' : 'border-ink-700/25 bg-white/50'">
               <AppIcon v-if="selected.has(m.id)" name="check" :size="14" />
             </div>
-            <!-- аватар слева от сообщения (и в группах, и в личных) — клик открывает профиль -->
-            <template v-if="!isMine(m)">
+            <!-- аватар слева от сообщения; в личных чатах при раскладке «по сторонам» аватары убраны -->
+            <template v-if="showRowAvatars && !isMine(m)">
               <img v-if="avatarOf(m) && isRunEnd(m, i)" :src="thumbUrl(avatarOf(m))" @error="imgFull($event, avatarOf(m))" @click.stop="openUserInfo(m.author_id)" class="photo-bw sticky bottom-1.5 h-10 w-10 shrink-0 cursor-pointer rounded-full object-cover" />
               <span v-else-if="isRunEnd(m, i)" @click.stop="openUserInfo(m.author_id)" class="sticky bottom-1.5 flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full bg-gradient-to-br from-sage-400 to-sage-600 text-sm font-semibold text-white">{{ initials(nameOf(m)) }}</span>
               <span v-else class="h-10 w-10 shrink-0"></span>
             </template>
-            <template v-else>
+            <template v-else-if="showRowAvatars">
               <img v-if="myAvatar && isRunEnd(m, i)" :src="thumbUrl(myAvatar)" @error="imgFull($event, myAvatar)" @click.stop="openUserInfo(chatState.meId)" class="photo-bw sticky bottom-1.5 h-10 w-10 shrink-0 cursor-pointer rounded-full object-cover" />
               <span v-else-if="isRunEnd(m, i)" @click.stop="openUserInfo(chatState.meId)" class="sticky bottom-1.5 flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full bg-gradient-to-br from-saffron-400 to-saffron-600 text-sm font-semibold text-white">{{ initials(myName) }}</span>
               <span v-else class="h-10 w-10 shrink-0"></span>
@@ -2711,9 +2737,9 @@ onBeforeUnmount(() => {
             </template>
           </div>
 
-          <div v-else class="relative flex items-end gap-2">
+          <div v-else class="relative flex items-end gap-1">
             <button class="mb-0.5 shrink-0 rounded-full p-2 text-ink-700/60 hover:bg-parchment-100 hover:text-saffron-600" title="Прикрепить" :disabled="uploading" @click="fileInput.click()">
-              <AppIcon name="paperclip" :size="24" />
+              <AppIcon name="paperclip" :size="26" />
             </button>
             <input ref="fileInput" type="file" multiple class="hidden" @change="onPickFile" />
 
@@ -2723,7 +2749,7 @@ onBeforeUnmount(() => {
 
             <div class="relative mb-0.5 shrink-0">
               <button class="rounded-full p-2 text-ink-700/60 hover:bg-parchment-100 hover:text-saffron-600" title="Эмодзи" @click="showEmoji = !showEmoji">
-                <AppIcon name="react" :size="28" />
+                <AppIcon name="react" :size="26" />
               </button>
               <template v-if="showEmoji">
                 <div class="fixed inset-0 z-10" @click="showEmoji = false"></div>
@@ -2739,7 +2765,7 @@ onBeforeUnmount(() => {
             <button v-else class="mb-0.5 shrink-0 touch-none select-none rounded-full p-2 text-ink-700/60 transition hover:bg-parchment-100 hover:text-saffron-600"
                     :title="recMode === 'video' ? 'Кружок — удерживайте; коротко — голосовое' : 'Голосовое — удерживайте; коротко — кружок'"
                     :disabled="uploading" @pointerdown="recPointerDown" @contextmenu.prevent>
-              <AppIcon :name="recMode === 'video' ? 'video' : 'mic'" :size="24" />
+              <AppIcon :name="recMode === 'video' ? 'video' : 'mic'" :size="26" />
             </button>
           </div>
 

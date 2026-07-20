@@ -1638,9 +1638,13 @@ async function startCall(withVideo) {
   if (!peerId) { showToast('Не удалось определить собеседника'); return }
   callStart({ peerId, name: activeChat.value.title || '', avatar: activeChat.value.avatar_url || '', video: withVideo })
 }
+// запоминаем выбор пользователя: открыта ли боковая инфо-панель (восстанавливаем после перезагрузки)
+function sidePanelPref() { try { return localStorage.getItem('chatSidePanel') === '1' } catch { return false } }
+function setSidePanelPref(v) { try { localStorage.setItem('chatSidePanel', v ? '1' : '0') } catch { /* ignore */ } }
 async function openInfo(mode = 'side') {
   const id = activeId.value
   infoMode.value = mode === 'popup' ? 'popup' : 'side' // клик по названию — попап; иконка панели — сбоку
+  if (infoMode.value === 'side') setSidePanelPref(true) // запомнили: панель открыта
   showInfo.value = true
   infoData.value = infoCache[id] || null // мгновенно из кэша, если открывали раньше
   try {
@@ -1650,13 +1654,14 @@ async function openInfo(mode = 'side') {
   } catch { /* оставляем кэш */ }
 }
 function closeInfo() { showInfo.value = false; infoData.value = null }
-// Панель открыта и переключились на другой чат: боковой док обновляем на новый чат; попап (профиль по
-// клику на аву) — закрываем, т.к. он не про текущий чат.
+// закрытие боковой панели пользователем (иконка/крестик) — запоминаем «закрыто»
+function closeSidePanel() { setSidePanelPref(false); closeInfo() }
+// (Пере)открываем боковую панель для нового чата, если она открыта ИЛИ пользователь так выбрал (настройка).
+// immediate — восстанавливаем состояние при загрузке страницы.
 watch(activeId, (id) => {
-  if (!showInfo.value) return
-  if (infoMode.value !== 'side') { closeInfo(); return }
-  if (id) openInfo('side'); else closeInfo()
-})
+  if (!id) { if (showInfo.value) closeInfo(); return }
+  if (showInfo.value || sidePanelPref()) openInfo('side')
+}, { immediate: true })
 // ── управление участниками группы (только создатель) ───────────────────────
 const infoMenu = ref(false) // ⋮-меню в шапке инфо-панели (создатель): изменить / добавить участников
 // для ⋮-меню в ШАПКЕ ЧАТА (работает без открытой панели) — тип/владелец берём из объекта чата
@@ -2233,7 +2238,7 @@ onBeforeUnmount(() => {
             <button v-if="activeChat.type === 'direct'" class="rounded-full p-2 text-ink-700/55 transition hover:bg-parchment-100 hover:text-saffron-600" title="Позвонить" @click.stop="startCall(false)">
               <AppIcon name="phone" :size="22" />
             </button>
-            <button class="rounded-full p-2 transition hover:bg-parchment-100 hover:text-saffron-600" :class="showInfo && infoMode === 'side' ? 'text-saffron-600' : 'text-ink-700/55'" title="Боковая панель" @click.stop="showInfo && infoMode === 'side' ? closeInfo() : openInfo('side')">
+            <button class="rounded-full p-2 transition hover:bg-parchment-100 hover:text-saffron-600" :class="showInfo && infoMode === 'side' ? 'text-saffron-600' : 'text-ink-700/55'" title="Боковая панель" @click.stop="showInfo && infoMode === 'side' ? closeSidePanel() : openInfo('side')">
               <AppIcon name="panel-right" :size="24" />
             </button>
             <!-- ⋮-меню группы (крайнее справа) -->
@@ -2267,7 +2272,7 @@ onBeforeUnmount(() => {
                    : 'relative m-auto flex max-h-[92%] w-full max-w-md flex-col overflow-hidden rounded-2xl bg-white shadow-2xl'">
               <header class="flex h-14 shrink-0 items-center gap-2 border-b border-parchment-200 px-4">
                 <div class="flex-1 truncate font-medium text-ink-900">{{ isInfoGroup ? 'Информация о группе' : 'Информация' }}</div>
-                <button class="rounded-lg p-1.5 text-ink-700/60 hover:bg-parchment-100" title="Закрыть" @click="closeInfo"><AppIcon name="close" :size="24" /></button>
+                <button class="rounded-lg p-1.5 text-ink-700/60 hover:bg-parchment-100" title="Закрыть" @click="closeSidePanel"><AppIcon name="close" :size="24" /></button>
               </header>
               <div class="flex-1 overflow-y-auto">
                 <div class="flex flex-col items-center gap-3 p-6">
@@ -3080,6 +3085,9 @@ onBeforeUnmount(() => {
               </button>
             </div>
             <div v-if="ppPeer" class="border-t border-parchment-200 p-2">
+              <button v-if="ppPeer.id && ppPeer.id !== chatState.meId" class="flex w-full items-center gap-3 rounded-lg px-4 py-2.5 text-left text-[15px] text-saffron-700 hover:bg-parchment-100" @click="openContactChat(ppPeer); closeProfilePopup()">
+                <AppIcon name="send" :size="19" /> Отправить сообщение
+              </button>
               <button class="flex w-full items-center gap-3 rounded-lg px-4 py-2.5 text-left text-[15px] text-saffron-700 hover:bg-parchment-100" @click="shareContact(ppPeer)">
                 <AppIcon name="reply" :size="19" class="-scale-x-100" /> Поделиться контактом
               </button>

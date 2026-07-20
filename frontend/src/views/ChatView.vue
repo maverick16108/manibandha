@@ -1577,6 +1577,7 @@ async function openInfo() {
 }
 function closeInfo() { showInfo.value = false; infoData.value = null }
 // ── управление участниками группы (только создатель) ───────────────────────
+const infoMenu = ref(false) // ⋮-меню в шапке инфо-панели (создатель): изменить / добавить участников
 const isInfoGroup = computed(() => infoData.value?.type === 'group')
 const isInfoOwner = computed(() => isInfoGroup.value && infoData.value?.created_by === chatState.meId)
 const infoMembers = computed(() => infoData.value?.members || [])
@@ -2096,7 +2097,19 @@ onBeforeUnmount(() => {
             <div class="relative ml-auto flex h-full w-full flex-col bg-white shadow-2xl sm:max-w-sm">
               <header class="flex items-center gap-3 border-b border-parchment-200 px-4 py-3">
                 <button class="rounded-lg p-1.5 text-ink-700/60 hover:bg-parchment-100" title="Закрыть" @click="closeInfo"><AppIcon name="close" :size="18" /></button>
-                <div class="font-medium text-ink-900">Информация</div>
+                <div class="font-medium text-ink-900">{{ isInfoGroup ? 'Информация о группе' : 'Информация' }}</div>
+                <div v-if="isInfoOwner" class="relative ml-auto">
+                  <button class="rounded-lg p-1.5 text-ink-700/60 hover:bg-parchment-100" title="Ещё" @click.stop="infoMenu = !infoMenu">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="12" cy="19" r="2" /></svg>
+                  </button>
+                  <template v-if="infoMenu">
+                    <div class="fixed inset-0 z-10" @click="infoMenu = false"></div>
+                    <div class="absolute right-0 top-full z-20 mt-1 w-56 overflow-hidden rounded-xl bg-white py-1 shadow-lg ring-1 ring-parchment-200">
+                      <button class="flex w-full items-center gap-3 px-4 py-2.5 text-left text-[15px] text-ink-700 hover:bg-parchment-50" @click="infoMenu = false; openGroupEdit()"><AppIcon name="edit" :size="18" /> Изменить</button>
+                      <button class="flex w-full items-center gap-3 px-4 py-2.5 text-left text-[15px] text-ink-700 hover:bg-parchment-50" @click="infoMenu = false; openAddMembers()"><AppIcon name="plus" :size="18" /> Добавить участников</button>
+                    </div>
+                  </template>
+                </div>
               </header>
               <div class="flex-1 overflow-y-auto">
                 <div class="flex flex-col items-center gap-3 p-6">
@@ -2107,7 +2120,6 @@ onBeforeUnmount(() => {
                     <div v-if="isInfoGroup" class="text-sm text-ink-700/50">{{ infoMembers.length }} {{ pluralWord(infoMembers.length, ['участник', 'участника', 'участников']) }}</div>
                     <div v-else class="text-sm" :class="infoData?.peer?.online ? 'text-saffron-600' : 'text-ink-700/50'">{{ infoData?.peer?.online ? 'в сети' : 'не в сети' }}</div>
                   </div>
-                  <button v-if="isInfoOwner" class="btn-outline mt-1 text-sm" @click="openGroupEdit"><AppIcon name="edit" :size="15" /> Изменить</button>
                 </div>
                 <div v-if="!isInfoGroup" class="divide-y divide-parchment-100 border-t border-parchment-200">
                   <div v-if="infoData?.peer?.phone" class="px-6 py-3"><div class="text-[15px] text-ink-900">{{ infoData.peer.phone }}</div><div class="text-xs text-ink-700/50">Телефон</div></div>

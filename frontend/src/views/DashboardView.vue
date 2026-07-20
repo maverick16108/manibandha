@@ -1,8 +1,8 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onActivated } from 'vue'
 defineOptions({ name: 'DashboardView' })
 import { useRouter } from 'vue-router'
-import client from '../api/client'
+import { cachedGet, peekCache, TTL } from '../composables/apiCache'
 import AppSkeleton from '../components/AppSkeleton.vue'
 import DonutChart from '../components/charts/DonutChart.vue'
 import BarList from '../components/charts/BarList.vue'
@@ -39,22 +39,38 @@ function go(query) {
   router.push({ name: 'disciples', query })
 }
 
-onMounted(async () => {
+const topGroup = (arr) => arr.filter((x) => x.key !== '—').slice(0, 10).map((x) => ({ label: x.key, value: x.count }))
+const CITY = { group_by: 'city' }; const REGION = { group_by: 'region' }
+
+async function load(silent = false) {
+  // мгновенно из общего кеша (без скелетона), если уже загружали
+  const s0 = peekCache('/reports/summary'); const c0 = peekCache('/reports/group', CITY)
+  const r0 = peekCache('/reports/group', REGION); const t0 = peekCache('/reports/timeline')
+  if (s0) summary.value = s0
+  if (c0) cities.value = topGroup(c0)
+  if (r0) regions.value = topGroup(r0)
+  if (t0) timeline.value = t0
+  if (s0 && c0 && r0 && t0) loading.value = false
+  else if (!silent && !summary.value) loading.value = true
   try {
     const [s, c, r, t] = await Promise.all([
-      client.get('/reports/summary'),
-      client.get('/reports/group', { params: { group_by: 'city' } }),
-      client.get('/reports/group', { params: { group_by: 'region' } }),
-      client.get('/reports/timeline'),
+      cachedGet('/reports/summary', { ttl: TTL.list }),
+      cachedGet('/reports/group', { params: CITY, ttl: TTL.list }),
+      cachedGet('/reports/group', { params: REGION, ttl: TTL.list }),
+      cachedGet('/reports/timeline', { ttl: TTL.list }),
     ])
-    summary.value = s.data
-    cities.value = c.data.filter((x) => x.key !== '—').slice(0, 10).map((x) => ({ label: x.key, value: x.count }))
-    regions.value = r.data.filter((x) => x.key !== '—').slice(0, 10).map((x) => ({ label: x.key, value: x.count }))
-    timeline.value = t.data
+    summary.value = s
+    cities.value = topGroup(c)
+    regions.value = topGroup(r)
+    timeline.value = t
   } finally {
     loading.value = false
   }
-})
+}
+onMounted(() => load())
+// keep-alive: первую активацию (сразу после mount) пропускаем, дальше — тихий рефреш без скелетона
+let firstActivate = true
+onActivated(() => { if (firstActivate) { firstActivate = false; return } load(true) })
 </script>
 
 <template>

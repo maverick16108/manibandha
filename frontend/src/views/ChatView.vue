@@ -2556,7 +2556,12 @@ onBeforeUnmount(() => {
           </template>
 
           <!-- оптимистичные загрузки фото (мгновенно, с лоадером; уходят на сервер в фоне) -->
-          <div v-for="pu in pendingUploads.filter((p) => p.chatId === activeId && p.previews.length)" :key="pu.id" class="flex px-1" :class="wide ? 'justify-start' : 'justify-end'">
+          <div v-for="pu in pendingUploads.filter((p) => p.chatId === activeId && p.previews.length)" :key="pu.id" class="flex items-end gap-2 px-1" :class="wide ? 'justify-start' : 'justify-end'">
+            <!-- аватар (в группе) — резервируем сразу, чтобы при появлении реального сообщения не было сдвига -->
+            <template v-if="isGroup">
+              <img v-if="myAvatar" :src="thumbUrl(myAvatar)" class="photo-bw h-10 w-10 shrink-0 rounded-full object-cover" />
+              <span v-else class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-saffron-400 to-saffron-600 text-sm font-semibold text-white">{{ initials(myName) }}</span>
+            </template>
             <div class="relative overflow-hidden rounded-2xl shadow-sm" :class="pu.cap && 'bg-saffron-500'">
               <!-- одиночное фото: ТОТ ЖЕ бокс, что и у итогового сообщения (размер не меняется при загрузке) -->
               <div v-if="pu.previews.length === 1" class="relative overflow-hidden" :style="photoBox(pu.previews[0].aspect)">

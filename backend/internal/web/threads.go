@@ -30,6 +30,8 @@ func isReaction(e string) bool { return reactionIdx(e) < len(threadReactions) }
 
 var reAudio = regexp.MustCompile(`@\[audio\]\([^)]*\)`)
 var rePhoto = regexp.MustCompile(`!\[[^\]]*\]\([^)]*\)`)
+var reContact = regexp.MustCompile(`@\[contact\]\([^)]*\)`)
+var reVideonote = regexp.MustCompile(`@\[videonote\]\([^)]*\)`)
 var reWS = regexp.MustCompile(`\s+`)
 
 func threadSnippet(body string) string {

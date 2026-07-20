@@ -459,7 +459,7 @@ async function confirmDelete() {
   setTimeout(() => { pendingAnchor = null }, 500)
 }
 function cleanBody(b) {
-  return (b || '').replace(/@\[audio\]\([^)]*\)/g, '🎤 Голосовое сообщение').replace(/@\[videonote\]\([^)]*\)/g, '📹 Видеосообщение').replace(/!\[[^\]]*\]\([^)]*\)/g, '').trim()
+  return (b || '').replace(/@\[audio\]\([^)]*\)/g, '🎤 Голосовое сообщение').replace(/@\[videonote\]\([^)]*\)/g, '📹 Видеосообщение').replace(/@\[contact\]\([^|)]*\|([^|)]*)\|[^)]*\)/g, (_m, n) => { try { return '👤 ' + decodeURIComponent(n) } catch { return '👤 Контакт' } }).replace(/!\[[^\]]*\]\([^)]*\)/g, '').trim()
 }
 
 // ── выделение нескольких сообщений (переслать / удалить) ───────────────────
@@ -584,6 +584,7 @@ function quoteText(b) {
     .replace(/@\[audio\]\([^)]*\)/g, '🎤 Голосовое')
     .replace(/@\[videonote\]\([^)]*\)/g, '📹 Видеосообщение')
     .replace(/@\[video\]\([^)]*\)/g, 'Видео')
+    .replace(/@\[contact\]\([^|)]*\|([^|)]*)\|[^)]*\)/g, (_m, n) => { try { return '👤 ' + decodeURIComponent(n) } catch { return '👤 Контакт' } })
     .replace(/@\[file\]\([^|)]*\|([^)]*)\)/g, (_m, name) => { try { return '📎 ' + decodeURIComponent(name) } catch { return '📎 файл' } })
     .replace(/!\[[^\]]*\]\([^)]*\)/g, 'Фото')
     .trim().slice(0, 300)
@@ -608,6 +609,7 @@ function snippet(b) {
     .replace(/@\[audio\]\([^)]*\)/g, '🎤 Голосовое')
     .replace(/@\[videonote\]\([^)]*\)/g, '📹 Видеосообщение')
     .replace(/@\[video\]\([^)]*\)/g, 'Видео')
+    .replace(/@\[contact\]\([^|)]*\|([^|)]*)\|[^)]*\)/g, (_m, n) => { try { return '👤 ' + decodeURIComponent(n) } catch { return '👤 Контакт' } })
     .replace(/@\[file\]\([^|)]*\|([^)]*)\)/g, (_m, name) => { try { return '📎 ' + decodeURIComponent(name) } catch { return '📎 файл' } })
     .replace(/!\[[^\]]*\]\([^)]*\)/g, 'Фото')
     .replace(/\s+/g, ' ').trim().slice(0, 80)
@@ -1595,6 +1597,13 @@ async function openInfo(mode = 'side') {
   } catch { /* оставляем кэш */ }
 }
 function closeInfo() { showInfo.value = false; infoData.value = null }
+// Панель открыта и переключились на другой чат: боковой док обновляем на новый чат; попап (профиль по
+// клику на аву) — закрываем, т.к. он не про текущий чат.
+watch(activeId, (id) => {
+  if (!showInfo.value) return
+  if (infoMode.value !== 'side') { closeInfo(); return }
+  if (id) openInfo('side'); else closeInfo()
+})
 // ── управление участниками группы (только создатель) ───────────────────────
 const infoMenu = ref(false) // ⋮-меню в шапке инфо-панели (создатель): изменить / добавить участников
 const isInfoGroup = computed(() => infoData.value?.type === 'group')
@@ -1737,9 +1746,21 @@ function dayLabel(ds) {
 }
 function shareContact() {
   const p = infoData.value?.peer; if (!p) return
-  const parts = [`👤 ${p.name || 'Контакт'}`]
-  if (p.phone) parts.push(`📞 ${p.phone}`)
-  closeInfo(); openForward([parts.join('\n')])
+  const enc = (s) => encodeURIComponent(s || '')
+  // структурированная карточка контакта: @[contact](id|имя|телефон|аватар)
+  const marker = `@[contact](${p.id || ''}|${enc(p.name)}|${enc(p.phone)}|${enc(p.avatar)})`
+  closeInfo(); openForward([marker])
+}
+const CONTACT_RE = /@\[contact\]\(([^|)]*)\|([^|)]*)\|([^|)]*)\|([^)]*)\)/
+function isContact(m) { return CONTACT_RE.test(m?.body || '') }
+function contactOf(m) {
+  const mm = (m.body || '').match(CONTACT_RE); if (!mm) return null
+  const dec = (s) => { try { return decodeURIComponent(s) } catch { return s } }
+  return { id: mm[1] ? Number(mm[1]) : null, name: dec(mm[2]) || 'Контакт', phone: dec(mm[3]), avatar: dec(mm[4]) || null }
+}
+async function openContactChat(c) {
+  if (!c?.id) return
+  try { const id = await startDirect(c.id); router.push({ name: 'chat', params: { id: String(id) } }) } catch { showToast('Не удалось открыть чат') }
 }
 
 const showGroupEdit = ref(false)
@@ -2481,6 +2502,28 @@ onBeforeUnmount(() => {
               <div v-if="!captionText(m) && parseReactions(m).length" class="flex flex-wrap gap-1 px-0.5">
                 <button v-for="r in parseReactions(m)" :key="r.emoji" @click.stop="onChip(m, r.emoji)" @contextmenu.prevent.stop="openWho($event, r)" title="ПКМ — кто поставил"
                         class="flex items-center gap-1 rounded-full px-2 py-0.5 leading-none ring-1 transition" :class="m.my_reaction === r.emoji ? 'bg-saffron-500/25 text-saffron-800 ring-saffron-400' : 'bg-saffron-500/10 text-ink-700 ring-transparent hover:bg-saffron-500/20'"><span class="text-xl leading-none">{{ r.emoji }}</span><span v-if="r.count < 4 && r.who && r.who.length" class="flex items-center"><template v-for="(w, wi) in r.who" :key="wi"><img v-if="w.avatar" :src="thumbUrl(w.avatar)" class="block h-[22px] w-[22px] rounded-full object-cover" :class="wi > 0 && '-ml-2'" /><span v-else class="flex h-[22px] w-[22px] items-center justify-center rounded-full bg-sage-500 text-[9px] font-semibold text-white" :class="wi > 0 && '-ml-2'">{{ initials(w.name) }}</span></template></span><span v-else-if="r.count > 1" class="text-sm font-semibold tabular-nums text-ink-700">{{ r.count }}</span></button>
+              </div>
+            </div>
+
+            <!-- карточка контакта -->
+            <div v-else-if="isContact(m)" class="relative w-[280px] max-w-full overflow-hidden rounded-2xl shadow-sm"
+                 :class="isMine(m) ? 'bg-saffron-500 text-white' : 'bg-white text-ink-900 ring-1 ring-parchment-200'"
+                 @contextmenu="onContext($event, m)">
+              <div class="flex items-center gap-3 p-3 pb-2">
+                <img v-if="contactOf(m).avatar" :src="thumbUrl(contactOf(m).avatar)" @error="imgFull($event, contactOf(m).avatar)" class="photo-bw h-12 w-12 shrink-0 rounded-full object-cover" />
+                <span v-else class="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-sage-400 to-sage-600 text-base font-semibold text-white">{{ initials(contactOf(m).name) }}</span>
+                <div class="min-w-0 flex-1">
+                  <div class="truncate font-semibold leading-tight">{{ contactOf(m).name }}</div>
+                  <div v-if="contactOf(m).phone" class="truncate text-sm" :class="isMine(m) ? 'text-white/80' : 'text-ink-700/60'">{{ contactOf(m).phone }}</div>
+                </div>
+              </div>
+              <button v-if="contactOf(m).id && contactOf(m).id !== chatState.meId"
+                      class="block w-full border-t py-2.5 text-center text-sm font-semibold uppercase tracking-wide transition"
+                      :class="isMine(m) ? 'border-white/25 text-white hover:bg-white/10' : 'border-parchment-200 text-saffron-700 hover:bg-parchment-50'"
+                      @click.stop="openContactChat(contactOf(m))">Написать</button>
+              <div class="flex items-center justify-end gap-1 px-3 pb-1.5 pt-1 text-[11px]" :class="isMine(m) ? 'text-white/70' : 'text-ink-700/40'">
+                <span>{{ fmtTime(m.created_at) }}</span>
+                <template v-if="statusOf(m)"><AppIcon v-if="statusOf(m) === 'pending'" name="clock" :size="14" /><AppIcon v-else-if="statusOf(m) === 'read'" name="check-double" :size="15" /><AppIcon v-else-if="statusOf(m) === 'sent'" name="check" :size="14" /></template>
               </div>
             </div>
 

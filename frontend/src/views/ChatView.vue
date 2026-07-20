@@ -3046,8 +3046,11 @@ onBeforeUnmount(() => {
 .info-pop-enter-from > .relative, .info-pop-leave-to > .relative { transform: scale(.96); opacity: 0; }
 /* подложка медиа: спиннер поверх цветной подложки, пока не загрузилось; после загрузки — прячем */
 .ph-done .ph-spin { display: none; }
-/* размытая подложка-микропревью (blur-up): картинка «проявляется» из неё, как в Telegram */
-.ph-blur { position: absolute; inset: 0; background-size: cover; background-position: center; filter: blur(14px); transform: scale(1.18); }
+/* размытая подложка-микропревью (blur-up): картинка «проявляется» из неё, как в Telegram.
+   БЕЗ scale(): раньше подложка была увеличена на 18%, и при появлении резкой картинки (scale 1)
+   фото визуально «отдалялось» на несколько пикселей. Микро-превью и так размыто (крошечное,
+   растянутое) — лёгкого blur достаточно, кадрирование совпадает с итоговым фото. */
+.ph-blur { position: absolute; inset: 0; background-size: cover; background-position: center; filter: blur(10px); }
 
 /* лёгкий эффект удаления: «взрывается и исчезает» (быстрое расширение + растворение) */
 .msg-boom { pointer-events: none; will-change: transform, opacity, filter; animation: msgBoom .3s ease-out forwards; }

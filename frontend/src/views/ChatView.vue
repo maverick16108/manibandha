@@ -411,6 +411,17 @@ const peerName = computed(() => {
   return peer?.full_name || 'собеседника'
 })
 function askDelete(m) { if (!m?.id) return; deleteTarget.value = m; deleteForAll.value = isMine(m) }
+// якорь на первое сообщение НИЖЕ удаляемого — чтобы после удаления контент снизу остался на месте,
+// а лента сверху «съехала» вниз (иначе сообщения снизу дёргаются вверх)
+function anchorBelow(deletedId) {
+  const el = scroller.value; if (!el) return null
+  const top = el.getBoundingClientRect().top
+  const nodes = [...el.querySelectorAll('[id^="msg-"]')]
+  const idx = nodes.findIndex((n) => n.id === 'msg-' + deletedId)
+  if (idx < 0) return null
+  const nxt = nodes[idx + 1]
+  return nxt ? { id: nxt.id.slice(4), offset: nxt.getBoundingClientRect().top - top } : null
+}
 async function confirmDelete() {
   const m = deleteTarget.value; deleteTarget.value = null
   if (!m?.id) return
@@ -419,7 +430,11 @@ async function confirmDelete() {
   // лёгкий CSS-эффект удаления: «взрывается и исчезает» (быстрое расширение + растворение)
   const el = document.getElementById(`msg-${m.id}`)
   if (el) { el.classList.add('msg-boom'); await new Promise((r) => setTimeout(r, 300)) }
+  // держим сообщение НИЖЕ удаляемого на месте: контент снизу не двигается, лента сверху съезжает вниз
+  if (!stickBottom.value) { pendingAnchor = anchorBelow(m.id) }
   await deleteMessage(m.id, everyone)
+  await nextTick(); if (pendingAnchor) restoreAnchor(pendingAnchor) // сразу вернуть позицию (ResizeObserver — подстраховка)
+  setTimeout(() => { pendingAnchor = null }, 500)
 }
 function cleanBody(b) {
   return (b || '').replace(/@\[audio\]\([^)]*\)/g, '🎤 Голосовое сообщение').replace(/@\[videonote\]\([^)]*\)/g, '📹 Видеосообщение').replace(/!\[[^\]]*\]\([^)]*\)/g, '').trim()

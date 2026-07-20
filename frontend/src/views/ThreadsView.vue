@@ -59,7 +59,13 @@ async function load(silent = false, force = false) {
   // держится живым (keep-alive) — мгновенно, без скелетона. Явный заход всегда тянет СВЕЖЕЕ.
   if (!silent && !threads.value.length) loading.value = true
   try {
-    threads.value = await cachedGet('/threads', { params: p, ttl: TTL.list, force: force || !silent })
+    const data = await cachedGet('/threads', { params: p, ttl: TTL.list, force: force || !silent })
+    // переприсваиваем список ТОЛЬКО если он реально изменился — иначе тихий рефреш/поллинг вызывает
+    // лишнюю перерисовку и раздел «моргает» при каждом заходе
+    const cur = threads.value
+    const same = Array.isArray(data) && cur.length === data.length &&
+      cur.every((t, i) => t.id === data[i].id && t.updated_at === data[i].updated_at && t.unread === data[i].unread && t.messages_count === data[i].messages_count)
+    if (!same) threads.value = data
   } finally {
     loading.value = false
   }

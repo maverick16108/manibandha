@@ -2304,7 +2304,7 @@ onBeforeUnmount(() => {
                     <button v-if="isInfoOwner" class="flex items-center gap-1 rounded-lg px-2 py-1 text-sm text-saffron-700 hover:bg-parchment-100" @click="openAddMembers"><AppIcon name="plus" :size="16" /> Добавить</button>
                   </div>
                   <div v-for="m in infoMembers" :key="m.id" class="group flex items-center gap-3 px-6 py-2 hover:bg-parchment-50">
-                    <button class="flex min-w-0 flex-1 items-center gap-3 text-left" @click="closeInfo(); openUserInfo(m.id)">
+                    <button class="flex min-w-0 flex-1 items-center gap-3 text-left" @click="openUserInfo(m.id)">
                       <img v-if="m.avatar" :src="thumbUrl(m.avatar)" class="h-10 w-10 shrink-0 rounded-full object-cover" />
                       <span v-else class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-sage-400 to-sage-600 text-sm font-semibold text-white">{{ initials(m.name) }}</span>
                       <span class="min-w-0">

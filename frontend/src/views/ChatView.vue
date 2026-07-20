@@ -1394,11 +1394,15 @@ const winH = ref(typeof window !== 'undefined' ? window.innerHeight : 800)
 // wide: широкая ли область переписки. Считаем ЧИСТОЙ математикой от РЕАКТИВНОЙ ширины окна за вычетом
 // панели списка и (если открыта) боковой инфо-панели — тогда при её открытии узкая лента возвращается
 // к раскладке «свои справа / чужие слева». Без ResizeObserver — верно с первого кадра, без мигания.
+// Порог «широкой» ленты (свыше — всё слева, ниже — свои справа/чужие слева). Держим высоким (как в
+// Telegram: раскладка по разным сторонам включается уже на довольно широком чате), «всё слева» — только
+// для действительно широких экранов.
+const WIDE_THRESHOLD = 1400
 const wide = computed(() => {
   const w = winW.value
   const lw = w >= 640 ? listWidth.value : 0
   const dock = (w >= 640 && sideDockOpen.value) ? 384 : 0
-  return (w - lw - dock) > 900
+  return (w - lw - dock) > WIDE_THRESHOLD
 })
 function onWinResize() { isDesktop.value = window.innerWidth >= 640; winW.value = window.innerWidth; winH.value = window.innerHeight }
 function startResize(e) {

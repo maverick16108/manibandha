@@ -56,6 +56,7 @@ function openVideoFull(e, m) {
 }
 const editingMsg = ref(null)
 const scroller = ref(null)
+const scrollerHover = ref(false) // скроллбар в ленте виден только пока мышь над областью сообщений
 const listWrap = ref(null)
 const stickBottom = ref(true)          // держимся ли у нижнего края (иначе не дёргаем при подгрузке)
 const chatOpening = ref(false)         // прячем ленту на время открытия/позиционирования (без мелькания)
@@ -2479,8 +2480,9 @@ onBeforeUnmount(() => {
         <div class="relative flex min-h-0 flex-1 flex-col">
         <div class="pointer-events-none absolute inset-x-0 top-0 z-20 [&>*]:pointer-events-auto" :class="sideDockOpen && 'sm:!right-96'"><AudioBar /></div>
 
-        <div ref="scroller" class="chat-bg flex flex-1 flex-col overflow-y-auto px-2.5 py-4" :class="sideDockOpen && 'sm:!mr-96 sm:!pr-4'"
-             @scroll="onScroll" @click="onScrollerClick" @mousedown="onScrollerDown" @touchstart="onScrollerDown" @contextmenu.prevent>
+        <div ref="scroller" class="chat-bg flex flex-1 flex-col overflow-y-auto px-2.5 py-4" :class="[sideDockOpen && 'sm:!mr-96 sm:!pr-4', scrollerHover && 'scroll-show']"
+             @scroll="onScroll" @click="onScrollerClick" @mousedown="onScrollerDown" @touchstart="onScrollerDown" @contextmenu.prevent
+             @mouseenter="scrollerHover = true" @mouseleave="scrollerHover = false">
           <div ref="listWrap" class="mt-auto w-full min-w-0 space-y-1">
           <template v-for="run in messageRuns" :key="run.key">
           <!-- встроенная плашка даты между днями (остаётся в ленте); плавающая сверху её дублирует
@@ -2557,7 +2559,7 @@ onBeforeUnmount(() => {
                   <AppIcon name="reply" :size="12" class="-scale-x-100" /> <span>Переслано от</span>
                   <span class="truncate" :class="fwdAuthorId(m) && 'cursor-pointer hover:underline'" @click.stop="fwdAuthorId(m) && openUserInfo(fwdAuthorId(m))">{{ fwdName(m) }}</span>
                 </div>
-                <div class="video-box ph-box relative flex justify-center overflow-hidden" :style="videoBoxStyle(videoOf(m))">
+                <div class="video-box ph-box group/media relative flex justify-center overflow-hidden" :style="videoBoxStyle(videoOf(m))">
                   <span class="ph-spin pointer-events-none absolute inset-0 flex items-center justify-center"><span class="h-8 w-8 animate-spin rounded-full border-2 border-white/45 border-t-white/90"></span></span>
                   <template v-if="videoAuto(m)">
                     <video :src="videoOf(m).url" :poster="thumbUrl(videoOf(m).poster || '')" autoplay muted loop playsinline
@@ -2577,9 +2579,9 @@ onBeforeUnmount(() => {
                     </button>
                   </template>
                   <!-- без подписи: время + галочки ОВЕРЛЕЕМ на самом видео (тёмная плашка, как в Telegram) -->
-                  <div v-if="!captionText(m)" class="pointer-events-none absolute bottom-1.5 right-1.5 flex items-center gap-1 rounded-full bg-black/50 px-2 py-0.5 text-[11px] text-white">
-                    <span>{{ fmtTime(m.created_at) }}</span>
-                    <template v-if="statusOf(m)"><AppIcon v-if="statusOf(m) === 'pending'" name="clock" :size="14" /><AppIcon v-else-if="statusOf(m) === 'read'" name="check-double" :size="15" /><AppIcon v-else-if="statusOf(m) === 'sent'" name="check" :size="14" /></template>
+                  <div v-if="!captionText(m)" class="pointer-events-none absolute bottom-2 right-2 flex items-center gap-1.5 rounded-full bg-black/55 px-2.5 py-1 text-[13px] text-white opacity-0 transition group-hover/media:opacity-100">
+                    <span class="tabular-nums">{{ fmtTime(m.created_at) }}</span>
+                    <template v-if="statusOf(m)"><AppIcon v-if="statusOf(m) === 'pending'" name="clock" :size="16" /><AppIcon v-else-if="statusOf(m) === 'read'" name="check-double" :size="17" /><AppIcon v-else-if="statusOf(m) === 'sent'" name="check" :size="16" /></template>
                   </div>
                 </div>
                 <div v-if="captionText(m)" class="markdown-body break-words px-3.5 pt-1.5 text-[15px]" :class="isMine(m) && 'markdown-on-accent'" v-html="renderChatBody(captionText(m))"></div>
@@ -2618,7 +2620,7 @@ onBeforeUnmount(() => {
                     <div class="whitespace-pre-wrap break-words text-ink-700/70">{{ m.reply_preview }}</div>
                   </div>
                 </div>
-                <div v-if="photoUrls(m).length === 1" class="ph-box relative w-full overflow-hidden" :style="photoBoxStyle(photoUrls(m)[0])">
+                <div v-if="photoUrls(m).length === 1" class="ph-box group/media relative w-full overflow-hidden" :style="photoBoxStyle(photoUrls(m)[0])">
                   <div v-if="microBg(photoUrls(m)[0])" class="ph-blur" :style="microBg(photoUrls(m)[0])"></div>
                   <span class="ph-spin pointer-events-none absolute inset-0 flex items-center justify-center"><span class="h-7 w-7 animate-spin rounded-full border-2 border-white/45 border-t-white/90"></span></span>
                   <img :src="photoUrls(m)[0]" @error="imgFull($event, photoUrls(m)[0]); markImgLoaded($event)" @load="onImgLoad($event, photoUrls(m)[0])"
@@ -3360,6 +3362,6 @@ onBeforeUnmount(() => {
 .chat-bg::-webkit-scrollbar { width: 7px; }
 .chat-bg::-webkit-scrollbar-track { background: transparent; }
 .chat-bg::-webkit-scrollbar-thumb { background-color: transparent; border-radius: 8px; transition: background-color .2s ease; }
-.chat-bg:hover::-webkit-scrollbar-thumb { background-color: rgba(120, 90, 60, 0.35); }
-.chat-bg::-webkit-scrollbar-thumb:hover { background-color: rgba(120, 90, 60, 0.55); }
+.chat-bg.scroll-show::-webkit-scrollbar-thumb { background-color: rgba(120, 90, 60, 0.35); }
+.chat-bg.scroll-show::-webkit-scrollbar-thumb:hover { background-color: rgba(120, 90, 60, 0.55); }
 </style>

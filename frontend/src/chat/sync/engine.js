@@ -9,11 +9,12 @@
 const MAX_ATTEMPTS = 5;
 
 export class ChatEngine {
-  constructor({ db, api, meId, onEphemeral, genUuid, now }) {
+  constructor({ db, api, meId, onEphemeral, onIncoming, genUuid, now }) {
     this.db = db;
     this.api = api;
     this.meId = meId;
     this.onEphemeral = onEphemeral || (() => {});
+    this.onIncoming = onIncoming || (() => {}); // новое входящее сообщение от собеседника (real-time WS)
     this._genUuid = genUuid || (() => globalThis.crypto.randomUUID());
     this._now = now || (() => Date.now());
     this._catchUpQueued = false;
@@ -344,6 +345,7 @@ export class ChatEngine {
       case 'message':
         if (evt.message) {
           await this._applyServerMessage(evt.message);
+          if (evt.message.author_id !== this.meId) { try { this.onIncoming(evt.message); } catch { /* ignore */ } }
           this._queueCatchUp(); // сдвинуть pts (закрыть возможные пропуски)
         }
         break;

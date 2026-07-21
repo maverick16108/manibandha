@@ -37,6 +37,45 @@ function onEphemeral(e) {
   }
 }
 
+// ── уведомление о новом сообщении: счётчик в заголовке вкладки + ненавязчивый звук ──
+const BASE_TITLE = 'Манибандха Прабху';
+function updateTabTitle() {
+  const n = chatState.totalUnread || 0;
+  document.title = n > 0 ? `(${n}) ${BASE_TITLE}` : BASE_TITLE;
+}
+let lastNotifyAt = 0;
+let notifyCtx = null;
+function playNotifySound() {
+  const now = Date.now();
+  if (now - lastNotifyAt < 1500) return; // не частить при пачке сообщений
+  lastNotifyAt = now;
+  try {
+    notifyCtx = notifyCtx || new (window.AudioContext || window.webkitAudioContext)();
+    const ctx = notifyCtx;
+    if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+    const tone = (offset, freq, dur, vol) => {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = 'sine'; o.frequency.value = freq;
+      const t = ctx.currentTime + offset;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(vol, t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g); g.connect(ctx.destination); o.start(t); o.stop(t + dur + 0.03);
+    };
+    // тихий короткий «бип-бип» (восходящий), громкость низкая — не навязчиво
+    tone(0, 660, 0.12, 0.05);
+    tone(0.14, 880, 0.16, 0.05);
+  } catch { /* аудио недоступно */ }
+}
+// новое входящее (от собеседника, real-time). Молчим, если пользователь СЕЙЧАС в этом чате и вкладка активна.
+function onIncomingMessage(m) {
+  if (!m || m.author_id === chatState.meId) return;
+  const viewingThisChat = chatState.activeChatId === m.chat_id
+    && document.visibilityState === 'visible' && document.hasFocus();
+  if (viewingThisChat) return;
+  playNotifySound();
+}
+
 // ── снимок чата в localStorage: мгновенный рендер списка+сообщений при перезагрузке страницы,
 // пока открывается локальная БД (wasm/OPFS). Потом сверяется/перетирается реальными данными.
 const SNAP_KEY = 'chatSnapshotV1';
@@ -79,7 +118,7 @@ export async function initChat({ meId, getToken }) {
     chatState.meId = meId;
     hydrateFromSnapshot(); // мгновенно показать список+чат из снимка, пока открывается БД
     db = await openDatabase();
-    engine = new ChatEngine({ db, api: chatApi, meId, onEphemeral });
+    engine = new ChatEngine({ db, api: chatApi, meId, onEphemeral, onIncoming: onIncomingMessage });
     socket = new ChatSocket({
       getToken,
       onMessage: (evt) => { if (evt && evt.type === 'call') { callHandler && callHandler(evt); } else { engine.handleWs(evt); } },
@@ -264,6 +303,7 @@ async function refreshChats() {
   }
   chatState.chats = out;
   chatState.totalUnread = total;
+  updateTabTitle();
   saveChatSnapshot();
 }
 

@@ -135,7 +135,7 @@ function logout() {
     <!-- Sidebar (скрыт для незаапрувленного кандидата) -->
     <aside
       v-if="showSidebar"
-      class="fixed inset-y-0 left-0 z-30 flex w-64 transform flex-col border-r border-parchment-200 bg-white transition-all lg:translate-x-0"
+      class="fixed inset-y-0 left-0 z-30 flex w-64 transform select-none flex-col border-r border-parchment-200 bg-white transition-all lg:translate-x-0"
       :class="[sidebarOpen ? 'translate-x-0' : '-translate-x-full', collapsed && 'lg:w-16', navResizing && '!transition-none']"
       :style="isDesktop && !collapsed ? { width: navWidth + 'px' } : null"
     >

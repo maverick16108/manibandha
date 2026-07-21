@@ -996,10 +996,8 @@ function onImgLoad(e, u) {
 // 3) адаптивно к ширине колонки переписки и высоте окна; 4) один размер для лоадера и итога.
 // Ширина колонки переписки = окно минус левая нав-панель и панель списка чатов (на десктопе).
 function convWidth() {
-  const nav = winW.value >= 640 ? 72 : 0
-  const list = winW.value >= 640 ? listWidth.value : 0
   const dock = (winW.value >= 640 && sideDockOpen.value) ? 384 : 0 // боковая инфо-панель (sm:w-96) отжимает ленту
-  return Math.max(240, winW.value - nav - list - dock)
+  return Math.max(240, convBase() - dock)
 }
 // Вписываем медиа в прямоугольник (maxW×maxH), сохраняя пропорции. Возвращаем ЯВНЫЕ px, чтобы бокс
 // не зависел от факта загрузки (иначе пузырь схлопывается по intrinsic-размеру пустого <img>/<video>).
@@ -1407,6 +1405,9 @@ function showAuthor(m, i) {
 // широкая область переписки → все сообщения слева; узкая → свои справа, чужие слева
 const convEl = ref(null)
 let resizeObs = null
+// РЕАЛЬНАЯ ширина области переписки (окно − левое меню приложения − панель списка). Меряем сам элемент,
+// т.к. ширина левого меню меняется (свёрнуто 72px / развёрнуто ~256px) — по winW её не угадать.
+const convElW = ref(0)
 
 // ширина панели списка чатов — с возможностью раздвигать (перетаскиванием)
 const listWidth = ref(Number(localStorage.getItem('chatListWidth')) || 320)
@@ -1421,11 +1422,16 @@ const winH = ref(typeof window !== 'undefined' ? window.innerHeight : 800)
 // Telegram: раскладка по разным сторонам включается уже на довольно широком чате), «всё слева» — только
 // для действительно широких экранов.
 const WIDE_THRESHOLD = 1200
-const wide = computed(() => {
-  const w = winW.value
-  const lw = w >= 640 ? listWidth.value : 0
-  // раскладка зависит ТОЛЬКО от ширины окна (минус панель списка), НЕ от боковой инфо-панели
-  return (w - lw) > WIDE_THRESHOLD
+// база = измеренная ширина переписки; до измерения — приблизительно (окно − 72 меню − панель списка)
+function convBase() { return convElW.value || Math.max(240, winW.value - (winW.value >= 640 ? 72 + listWidth.value : 0)) }
+const wide = computed(() => convBase() > WIDE_THRESHOLD) // зависит ТОЛЬКО от ширины переписки, НЕ от боковой панели
+// наблюдаем реальную ширину области переписки (учитывает и левое меню, и панель списка)
+watch(convEl, (el) => {
+  resizeObs?.disconnect()
+  if (el && typeof ResizeObserver !== 'undefined') {
+    resizeObs = new ResizeObserver(() => { convElW.value = el.clientWidth })
+    resizeObs.observe(el); convElW.value = el.clientWidth
+  }
 })
 function onWinResize() { isDesktop.value = window.innerWidth >= 640; winW.value = window.innerWidth; winH.value = window.innerHeight }
 function startResize(e) {

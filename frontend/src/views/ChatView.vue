@@ -3276,7 +3276,7 @@ onBeforeUnmount(() => {
                     @click="groupPhotoInput.click()"
                     @dragenter.prevent.stop="gDragPhoto = true" @dragover.prevent.stop="gDragPhoto = true" @dragleave.prevent.stop="gDragPhoto = false" @drop.prevent.stop="onGroupPhotoDrop">
               <img v-if="gPhoto" :src="gPhoto" class="photo-bw pointer-events-none h-full w-full object-cover" />
-              <span v-else class="pointer-events-none flex h-full w-full items-center justify-center bg-gradient-to-br from-sage-400 to-sage-600 text-3xl font-semibold text-white">{{ initials(gTitle || activeChat?.title) }}</span>
+              <span v-else class="pointer-events-none block h-full w-full bg-gradient-to-br from-sage-400 to-sage-600"></span>
               <span class="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/30 text-white transition group-hover:bg-black/45" :class="gDragPhoto && '!bg-black/55'">
                 <svg v-if="!gUploading" xmlns="http://www.w3.org/2000/svg" width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
                 <span v-else class="text-base">…</span>

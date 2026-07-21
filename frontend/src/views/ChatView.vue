@@ -1688,7 +1688,9 @@ const isActiveGroup = computed(() => activeChat.value?.type === 'group')
 const isActiveOwner = computed(() => isActiveGroup.value && (activeChat.value?.created_by === chatState.meId || infoData.value?.created_by === chatState.meId))
 const isInfoGroup = computed(() => infoData.value?.type === 'group')
 const isInfoOwner = computed(() => isInfoGroup.value && infoData.value?.created_by === chatState.meId)
-const infoMembers = computed(() => infoData.value?.members || [])
+// владелец всегда сверху, остальные в исходном порядке
+function ownerFirst(list) { return [...(list || [])].sort((a, b) => (b.is_owner ? 1 : 0) - (a.is_owner ? 1 : 0)) }
+const infoMembers = computed(() => ownerFirst(infoData.value?.members))
 const panelAvatar = computed(() => isInfoGroup.value ? (infoData.value?.photo || activeChat.value?.avatar_url || null) : infoAvatar.value)
 function memberStatusText(m) {
   if (m.online) return 'в сети'
@@ -1781,7 +1783,7 @@ const ppCounts = computed(() => countRows(profilePopup.value?.counts))
 // попап группы (клик по названию группы): рендерим инфо о группе, НЕ трогая боковую панель
 const ppIsGroup = computed(() => profilePopup.value?.type === 'group')
 const ppGroupAvatar = computed(() => profilePopup.value?.photo || null)
-const ppMembers = computed(() => profilePopup.value?.members || [])
+const ppMembers = computed(() => ownerFirst(profilePopup.value?.members))
 const ppIsOwner = computed(() => ppIsGroup.value && profilePopup.value?.created_by === chatState.meId)
 // ── просмотр всех медиа по типу (как в Telegram) ───────────────────────────
 const mediaBrowser = reactive({ open: false, type: null, title: '', items: [], loading: false, q: '' })
@@ -1938,9 +1940,7 @@ async function copyInviteLink() {
   if (!gInviteLink.value) return
   try { await navigator.clipboard.writeText(gInviteLink.value); showToast('Ссылка скопирована') } catch { showToast('Не удалось скопировать') }
 }
-async function onGroupPhoto(ev) {
-  const f = (ev.target.files || [])[0]
-  if (groupPhotoInput.value) groupPhotoInput.value.value = ''
+async function uploadGroupPhotoFile(f) {
   if (!f || !f.type.startsWith('image/')) return
   gUploading.value = true
   try {
@@ -1948,6 +1948,16 @@ async function onGroupPhoto(ev) {
     const { data } = await client.post('/uploads', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
     gPhoto.value = data.urls?.[0] || gPhoto.value
   } catch { showToast('Не удалось загрузить') } finally { gUploading.value = false }
+}
+async function onGroupPhoto(ev) {
+  const f = (ev.target.files || [])[0]
+  if (groupPhotoInput.value) groupPhotoInput.value.value = ''
+  await uploadGroupPhotoFile(f)
+}
+const gDragPhoto = ref(false)
+function onGroupPhotoDrop(ev) {
+  gDragPhoto.value = false
+  uploadGroupPhotoFile((ev.dataTransfer?.files || [])[0])
 }
 async function saveGroup() {
   const title = gTitle.value.trim()
@@ -3259,15 +3269,17 @@ onBeforeUnmount(() => {
 
     <!-- Модалка настроек группы (название + фото) -->
     <div v-if="showGroupEdit" class="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/40 p-4" @click.self="showGroupEdit = false">
-      <div class="w-full max-w-sm overflow-hidden rounded-xl bg-white shadow-xl">
-        <div class="space-y-4 p-4 pt-5">
-          <div class="flex items-center gap-4">
-            <button type="button" class="group relative h-16 w-16 shrink-0 overflow-hidden rounded-full" :disabled="gUploading" title="Изменить фото" @click="groupPhotoInput.click()">
-              <img v-if="gPhoto" :src="gPhoto" class="photo-bw h-full w-full object-cover" />
-              <span v-else class="flex h-full w-full items-center justify-center bg-gradient-to-br from-sage-400 to-sage-600 text-2xl font-semibold text-white">{{ initials(gTitle || activeChat?.title) }}</span>
-              <span class="absolute inset-0 flex items-center justify-center bg-black/30 text-white transition group-hover:bg-black/45">
-                <svg v-if="!gUploading" xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-                <span v-else class="text-sm">…</span>
+      <div class="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-xl">
+        <div class="space-y-5 p-6">
+          <div class="flex items-center gap-5">
+            <button type="button" class="group relative h-28 w-28 shrink-0 overflow-hidden rounded-full ring-saffron-400 transition" :class="gDragPhoto && 'ring-2 ring-offset-2'" :disabled="gUploading" title="Изменить фото или перетащите изображение"
+                    @click="groupPhotoInput.click()"
+                    @dragenter.prevent.stop="gDragPhoto = true" @dragover.prevent.stop="gDragPhoto = true" @dragleave.prevent.stop="gDragPhoto = false" @drop.prevent.stop="onGroupPhotoDrop">
+              <img v-if="gPhoto" :src="gPhoto" class="photo-bw pointer-events-none h-full w-full object-cover" />
+              <span v-else class="pointer-events-none flex h-full w-full items-center justify-center bg-gradient-to-br from-sage-400 to-sage-600 text-3xl font-semibold text-white">{{ initials(gTitle || activeChat?.title) }}</span>
+              <span class="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/30 text-white transition group-hover:bg-black/45" :class="gDragPhoto && '!bg-black/55'">
+                <svg v-if="!gUploading" xmlns="http://www.w3.org/2000/svg" width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                <span v-else class="text-base">…</span>
               </span>
             </button>
             <input ref="groupPhotoInput" type="file" accept="image/*" class="hidden" @change="onGroupPhoto" />

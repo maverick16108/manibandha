@@ -376,6 +376,13 @@ function closeCtx() { ctx.open = false; ctx.m = null }
 let modalDownOnBg = false
 function modalBgDown(e) { modalDownOnBg = e.target === e.currentTarget }
 function modalBgClick(e, close) { if (modalDownOnBg && e.target === e.currentTarget) close(); modalDownOnBg = false }
+// поиск по участникам группы (появляется при >8): отдельный подэкран внутри попапа/панели (как в Telegram)
+const MEMBER_SEARCH_MIN = 8
+const membersSearch = reactive({ open: false, q: '', source: '' }) // source: 'popup' | 'side'
+const membersSearchInput = ref(null)
+function openMembersSearch(source) { membersSearch.source = source; membersSearch.q = ''; membersSearch.open = true; nextTick(() => membersSearchInput.value?.focus?.()) }
+function closeMembersSearch() { membersSearch.open = false; membersSearch.q = '' }
+function filterMembers(list) { const q = membersSearch.q.trim().toLowerCase(); return q ? (list || []).filter((m) => (m.name || '').toLowerCase().includes(q)) : (list || []) }
 // медиа сообщения (для «Сохранить как…»): url + имя файла
 function ctxDownloadable(m) {
   if (!m || m.deleted) return null
@@ -1676,7 +1683,7 @@ async function openInfo(mode = 'side') {
     try { localStorage.setItem('chatInfoCache', JSON.stringify(infoCache)) } catch { /* ignore */ }
   } catch { /* оставляем кэш */ }
 }
-function closeInfo() { showInfo.value = false; infoData.value = null }
+function closeInfo() { showInfo.value = false; infoData.value = null; if (membersSearch.source === 'side') closeMembersSearch() }
 // закрытие боковой панели пользователем (иконка/крестик) — запоминаем «закрыто»
 function closeSidePanel() { setSidePanelPref(false); closeInfo() }
 // (Пере)открываем боковую панель для нового чата, если она открыта ИЛИ пользователь так выбрал (настройка).
@@ -1780,7 +1787,7 @@ function countRows(c) {
 const infoCountRows = computed(() => countRows(infoData.value?.counts))
 // ── независимый ЦЕНТРАЛЬНЫЙ попап профиля (сосуществует с боковой панелью) ──
 const profilePopup = ref(null) // карточка { peer, counts, chat_id } — для клика по аве/имени/шапке (личный)
-function closeProfilePopup() { profilePopup.value = null }
+function closeProfilePopup() { profilePopup.value = null; if (membersSearch.source === 'popup') closeMembersSearch() }
 const ppPeer = computed(() => profilePopup.value?.peer || null)
 const ppAvatar = computed(() => ppPeer.value?.avatar || null)
 const ppCity = computed(() => { const p = ppPeer.value; return p ? [p.city, p.region].filter(Boolean).join(', ') : '' })
@@ -2061,6 +2068,7 @@ function onGlobalKey(e) {
   if (showGroupEdit.value) { showGroupEdit.value = false; return }
   if (addMembersOpen.value) { addMembersOpen.value = false; return }
   if (ppMenu.value) { ppMenu.value = false; return }
+  if (membersSearch.open) { closeMembersSearch(); return }
   if (profilePopup.value) { closeProfilePopup(); return }
   if (mediaBrowser.open && infoMode.value === 'popup') { closeMediaBrowser(); return }
   if (showInfo.value && infoMode.value === 'popup') { closeInfo(); return }
@@ -2396,7 +2404,10 @@ onBeforeUnmount(() => {
                 <div v-if="isInfoGroup" class="border-t border-parchment-200 pt-2">
                   <div class="flex items-center justify-between px-6 py-2">
                     <div class="text-xs font-semibold uppercase tracking-wide text-ink-700/50">{{ infoMembers.length }} {{ pluralWord(infoMembers.length, ['участник', 'участника', 'участников']) }}</div>
-                    <button v-if="isInfoOwner" class="flex items-center gap-1 rounded-lg px-2 py-1 text-sm text-saffron-700 hover:bg-parchment-100" @click="openAddMembers"><AppIcon name="plus" :size="16" /> Добавить</button>
+                    <div class="flex items-center gap-1">
+                      <button v-if="infoMembers.length > MEMBER_SEARCH_MIN" class="rounded-lg p-1.5 text-ink-700/50 hover:bg-parchment-100 hover:text-saffron-600" title="Поиск участников" @click="openMembersSearch('side')"><AppIcon name="search" :size="18" /></button>
+                      <button v-if="isInfoOwner" class="flex items-center gap-1 rounded-lg px-2 py-1 text-sm text-saffron-700 hover:bg-parchment-100" @click="openAddMembers"><AppIcon name="plus" :size="16" /> Добавить</button>
+                    </div>
                   </div>
                   <div v-for="m in infoMembers" :key="m.id" class="group flex items-center gap-3 px-6 py-2 hover:bg-parchment-50">
                     <button class="flex min-w-0 flex-1 items-center gap-3 text-left" @click="openUserInfo(m.id)">
@@ -2415,6 +2426,34 @@ onBeforeUnmount(() => {
                   <button v-if="!isInfoGroup" class="flex w-full items-center gap-3 rounded-lg px-4 py-2.5 text-left text-[15px] text-saffron-700 hover:bg-parchment-100" @click="shareContact">
                     <AppIcon name="reply" :size="19" class="-scale-x-100" /> Поделиться контактом
                   </button>
+                </div>
+              </div>
+              <!-- поиск по участникам — подэкран внутри панели (как в Telegram) -->
+              <div v-if="membersSearch.open && membersSearch.source === 'side'" class="absolute inset-0 z-10 flex flex-col bg-white">
+                <header class="flex h-14 shrink-0 items-center gap-1 border-b border-parchment-200 px-3">
+                  <button class="rounded-lg p-1.5 text-ink-700/60 hover:bg-parchment-100" title="Назад" @click="closeMembersSearch"><AppIcon name="chevron" :size="22" class="rotate-90" /></button>
+                  <div class="flex-1 truncate font-medium text-ink-900">Участники</div>
+                  <button class="rounded-lg p-1.5 text-ink-700/60 hover:bg-parchment-100" title="Закрыть" @click="closeMembersSearch(); infoMode === 'side' ? closeSidePanel() : closeInfo()"><AppIcon name="close" :size="24" /></button>
+                </header>
+                <div class="border-b border-parchment-200 p-3">
+                  <div class="relative">
+                    <AppIcon name="search" :size="16" class="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-700/40" />
+                    <input ref="membersSearchInput" v-model="membersSearch.q" class="input h-9 w-full pl-8 text-sm" placeholder="Поиск участников" />
+                  </div>
+                </div>
+                <div class="flex-1 overflow-y-auto py-1">
+                  <div v-for="m in filterMembers(infoMembers)" :key="m.id" class="group flex items-center gap-3 px-6 py-2 hover:bg-parchment-50">
+                    <button class="flex min-w-0 flex-1 items-center gap-3 text-left" @click="openUserInfo(m.id)">
+                      <img v-if="m.avatar" :src="thumbUrl(m.avatar)" class="h-10 w-10 shrink-0 rounded-full object-cover" />
+                      <span v-else class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-sage-400 to-sage-600 text-sm font-semibold text-white">{{ initials(m.name) }}</span>
+                      <span class="min-w-0">
+                        <span class="block truncate text-[15px] font-medium text-ink-900">{{ m.name }}<span v-if="m.id === chatState.meId" class="text-ink-700/40"> (вы)</span></span>
+                        <span class="block truncate text-xs" :class="m.online ? 'text-saffron-600' : 'text-ink-700/50'">{{ m.is_owner ? 'владелец' : memberStatusText(m) }}</span>
+                      </span>
+                    </button>
+                    <button v-if="isInfoOwner && m.id !== chatState.meId && !m.is_owner" class="shrink-0 rounded-lg p-1.5 text-ink-700/40 opacity-0 transition hover:bg-red-50 hover:text-red-600 group-hover:opacity-100" title="Удалить из группы" @click="kickMember(m.id)"><AppIcon name="close" :size="16" /></button>
+                  </div>
+                  <p v-if="!filterMembers(infoMembers).length" class="px-6 py-4 text-sm text-ink-700/50">Никто не найден.</p>
                 </div>
               </div>
             </div>
@@ -3221,7 +3260,10 @@ onBeforeUnmount(() => {
             <div v-if="ppIsGroup" class="border-t border-parchment-200 pt-2">
               <div class="flex items-center justify-between px-6 pb-1">
                 <div class="text-xs font-semibold uppercase tracking-wide text-ink-700/50">{{ ppMembers.length }} {{ pluralWord(ppMembers.length, ['участник', 'участника', 'участников']) }}</div>
-                <button v-if="ppIsOwner" class="flex items-center gap-1 rounded-lg px-2 py-1 text-sm text-saffron-700 hover:bg-parchment-100" @click="openAddMembers()"><AppIcon name="plus" :size="16" /> Добавить</button>
+                <div class="flex items-center gap-1">
+                  <button v-if="ppMembers.length > MEMBER_SEARCH_MIN" class="rounded-lg p-1.5 text-ink-700/50 hover:bg-parchment-100 hover:text-saffron-600" title="Поиск участников" @click="openMembersSearch('popup')"><AppIcon name="search" :size="18" /></button>
+                  <button v-if="ppIsOwner" class="flex items-center gap-1 rounded-lg px-2 py-1 text-sm text-saffron-700 hover:bg-parchment-100" @click="openAddMembers()"><AppIcon name="plus" :size="16" /> Добавить</button>
+                </div>
               </div>
               <button v-for="mem in ppMembers" :key="mem.id" class="flex w-full items-center gap-3 px-6 py-2 text-left hover:bg-parchment-50" @click="openUserInfo(mem.id)">
                 <img v-if="mem.avatar" :src="thumbUrl(mem.avatar)" @error="imgFull($event, mem.avatar)" class="h-10 w-10 shrink-0 rounded-full object-cover" />
@@ -3233,6 +3275,28 @@ onBeforeUnmount(() => {
               <button class="flex w-full items-center gap-3 rounded-lg px-4 py-2.5 text-left text-[15px] text-saffron-700 hover:bg-parchment-100" @click="openContactChat(ppPeer); closeProfilePopup()">
                 <AppIcon name="send" :size="19" /> Отправить сообщение
               </button>
+            </div>
+          </div>
+          <!-- поиск по участникам — подэкран внутри попапа (как в Telegram) -->
+          <div v-if="membersSearch.open && membersSearch.source === 'popup'" class="absolute inset-0 z-10 flex flex-col rounded-2xl bg-white">
+            <header class="flex h-14 shrink-0 items-center gap-1 border-b border-parchment-200 px-3">
+              <button class="rounded-lg p-1.5 text-ink-700/60 hover:bg-parchment-100" title="Назад" @click="closeMembersSearch"><AppIcon name="chevron" :size="22" class="rotate-90" /></button>
+              <div class="flex-1 truncate font-medium text-ink-900">Участники</div>
+              <button class="rounded-lg p-1.5 text-ink-700/60 hover:bg-parchment-100" title="Закрыть" @click="closeMembersSearch(); closeProfilePopup()"><AppIcon name="close" :size="24" /></button>
+            </header>
+            <div class="border-b border-parchment-200 p-3">
+              <div class="relative">
+                <AppIcon name="search" :size="16" class="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-700/40" />
+                <input ref="membersSearchInput" v-model="membersSearch.q" class="input h-9 w-full pl-8 text-sm" placeholder="Поиск участников" />
+              </div>
+            </div>
+            <div class="flex-1 overflow-y-auto py-1">
+              <button v-for="mem in filterMembers(ppMembers)" :key="mem.id" class="flex w-full items-center gap-3 px-6 py-2 text-left hover:bg-parchment-50" @click="openUserInfo(mem.id)">
+                <img v-if="mem.avatar" :src="thumbUrl(mem.avatar)" @error="imgFull($event, mem.avatar)" class="h-10 w-10 shrink-0 rounded-full object-cover" />
+                <span v-else class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-sage-400 to-sage-600 text-sm font-semibold text-white">{{ initials(mem.name) }}</span>
+                <span class="min-w-0"><span class="block truncate text-[15px] text-ink-900">{{ mem.name }}</span><span class="block truncate text-xs" :class="mem.online ? 'text-saffron-600' : 'text-ink-700/50'">{{ mem.is_owner ? 'владелец' : memberStatusText(mem) }}</span></span>
+              </button>
+              <p v-if="!filterMembers(ppMembers).length" class="px-6 py-4 text-sm text-ink-700/50">Никто не найден.</p>
             </div>
           </div>
         </div>

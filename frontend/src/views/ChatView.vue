@@ -2489,14 +2489,14 @@ onBeforeUnmount(() => {
         <div class="relative flex min-h-0 flex-1 flex-col">
         <div class="pointer-events-none absolute inset-x-0 top-0 z-20 [&>*]:pointer-events-auto" :class="sideDockOpen && 'sm:!right-96'"><AudioBar /></div>
 
-        <div ref="scroller" class="chat-bg flex flex-1 select-text flex-col overflow-y-auto px-2.5 py-4" :class="[sideDockOpen && 'sm:!mr-96 sm:!pr-4', scrollerHover && 'scroll-show']"
+        <div ref="scroller" class="chat-bg flex flex-1 select-text flex-col overflow-y-auto px-2.5 pb-4 pt-2" :class="[sideDockOpen && 'sm:!mr-96 sm:!pr-4', scrollerHover && 'scroll-show']"
              @scroll="onScroll" @click="onScrollerClick" @mousedown="onScrollerDown" @touchstart="onScrollerDown" @contextmenu.prevent
              @mouseenter="scrollerHover = true" @mouseleave="scrollerHover = false">
           <div ref="listWrap" class="mt-auto w-full min-w-0 space-y-1">
           <template v-for="run in messageRuns" :key="run.key">
           <!-- встроенная плашка даты между днями (остаётся в ленте); плавающая сверху её дублирует
                только когда встроенная ушла вверх за экран (см. updateFloatingDate) -->
-          <div v-if="run.day" :data-daysep="run.dayLabel" class="my-2 flex justify-center">
+          <div v-if="run.day" :data-daysep="run.dayLabel" class="my-2 flex justify-center first:mt-0">
             <span class="rounded-full bg-ink-900/55 px-3 py-1 text-xs font-semibold text-white shadow-sm">{{ run.dayLabel }}</span>
           </div>
           <div v-if="run.unread" class="my-3 flex items-center gap-2 px-2">

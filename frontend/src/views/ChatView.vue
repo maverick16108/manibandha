@@ -2285,7 +2285,7 @@ onBeforeUnmount(() => {
             <button v-if="activeChat.type === 'direct'" class="rounded-full p-2 text-ink-700/55 transition hover:bg-parchment-100 hover:text-saffron-600" title="Позвонить" @click.stop="startCall(false)">
               <AppIcon name="phone" :size="22" />
             </button>
-            <button class="rounded-full p-2 transition hover:bg-parchment-100 hover:text-saffron-600" :class="showInfo && infoMode === 'side' ? 'text-saffron-600' : 'text-ink-700/55'" title="Боковая панель" @click.stop="showInfo && infoMode === 'side' ? closeSidePanel() : openInfo('side')">
+            <button class="rounded-full p-2 transition hover:bg-parchment-100 hover:text-saffron-600" :class="[showInfo && infoMode === 'side' ? 'text-saffron-600' : 'text-ink-700/55', !sidePanelFits && 'invisible']" title="Боковая панель" @click.stop="showInfo && infoMode === 'side' ? closeSidePanel() : openInfo('side')">
               <AppIcon name="panel-right" :size="24" />
             </button>
             <!-- ⋮-меню группы (крайнее справа) -->

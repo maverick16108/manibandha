@@ -1672,10 +1672,11 @@ watch(activeId, (id) => {
   if (showInfo.value || sidePanelPref()) openInfo('side')
 }, { immediate: true })
 // ── управление участниками группы (только создатель) ───────────────────────
-const infoMenu = ref(false) // ⋮-меню в шапке инфо-панели (создатель): изменить / добавить участников
-// для ⋮-меню в ШАПКЕ ЧАТА (работает без открытой панели) — тип/владелец берём из объекта чата
+const infoMenu = ref(false) // ⋮-меню в шапке ИНФО-ПАНЕЛИ/попапа
+const chatMenu = ref(false) // ⋮-меню в шапке ЧАТА (отдельно, чтобы не открывались оба сразу)
+// для ⋮-меню в ШАПКЕ ЧАТА — тип/владелец: из объекта чата, а если подтянута инфа — из неё (надёжнее)
 const isActiveGroup = computed(() => activeChat.value?.type === 'group')
-const isActiveOwner = computed(() => isActiveGroup.value && activeChat.value?.created_by === chatState.meId)
+const isActiveOwner = computed(() => isActiveGroup.value && (activeChat.value?.created_by === chatState.meId || infoData.value?.created_by === chatState.meId))
 const isInfoGroup = computed(() => infoData.value?.type === 'group')
 const isInfoOwner = computed(() => isInfoGroup.value && infoData.value?.created_by === chatState.meId)
 const infoMembers = computed(() => infoData.value?.members || [])
@@ -2026,6 +2027,7 @@ function onGlobalKey(e) {
   if (lb.index >= 0) return
   // Escape закрывает только ПОПАПЫ. Боковой (докнутый) режим инфо-панели/медиа-обзора Escape НЕ трогает.
   if (infoMenu.value) { infoMenu.value = false; return }
+  if (chatMenu.value) { chatMenu.value = false; return }
   if (showGroupEdit.value) { showGroupEdit.value = false; return }
   if (addMembersOpen.value) { addMembersOpen.value = false; return }
   if (ppMenu.value) { ppMenu.value = false; return }
@@ -2290,18 +2292,18 @@ onBeforeUnmount(() => {
             </button>
             <!-- ⋮-меню группы (крайнее справа) -->
             <div v-if="isActiveGroup" class="relative">
-              <button class="rounded-full p-2 text-ink-700/55 transition hover:bg-parchment-100 hover:text-saffron-600" title="Ещё" @click.stop="infoMenu = !infoMenu">
+              <button class="rounded-full p-2 text-ink-700/55 transition hover:bg-parchment-100 hover:text-saffron-600" title="Ещё" @click.stop="chatMenu = !chatMenu; chatMenu && ensureInfoLoaded()">
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="12" cy="19" r="2" /></svg>
               </button>
-              <template v-if="infoMenu">
-                <div class="fixed inset-0 z-10" @click="infoMenu = false"></div>
+              <template v-if="chatMenu">
+                <div class="fixed inset-0 z-10" @click="chatMenu = false"></div>
                 <div class="absolute right-0 top-full z-20 mt-1 w-56 overflow-hidden rounded-xl bg-white py-1 shadow-lg ring-1 ring-parchment-200">
                   <template v-if="isActiveOwner">
-                    <button class="flex w-full items-center gap-3 px-4 py-2.5 text-left text-[15px] text-ink-700 hover:bg-parchment-50" @click="infoMenu = false; openGroupEdit()"><AppIcon name="edit" :size="18" /> Изменить</button>
-                    <button class="flex w-full items-center gap-3 px-4 py-2.5 text-left text-[15px] text-ink-700 hover:bg-parchment-50" @click="infoMenu = false; openAddMembers()"><AppIcon name="plus" :size="18" /> Добавить участников</button>
+                    <button class="flex w-full items-center gap-3 px-4 py-2.5 text-left text-[15px] text-ink-700 hover:bg-parchment-50" @click="chatMenu = false; openGroupEdit()"><AppIcon name="settings" :size="18" /> Управление группой</button>
+                    <button class="flex w-full items-center gap-3 px-4 py-2.5 text-left text-[15px] text-ink-700 hover:bg-parchment-50" @click="chatMenu = false; openAddMembers()"><AppIcon name="plus" :size="18" /> Добавить участников</button>
                     <div class="my-1 h-px bg-parchment-100"></div>
                   </template>
-                  <button class="flex w-full items-center gap-3 px-4 py-2.5 text-left text-[15px] text-red-600 hover:bg-red-50" @click="infoMenu = false; leaveGroupConfirm()"><AppIcon name="trash" :size="18" /> {{ isActiveOwner ? 'Покинуть и удалить' : 'Покинуть' }}</button>
+                  <button class="flex w-full items-center gap-3 px-4 py-2.5 text-left text-[15px] text-red-600 hover:bg-red-50" @click="chatMenu = false; leaveGroupConfirm()"><AppIcon name="trash" :size="18" /> {{ isActiveOwner ? 'Удалить и покинуть' : 'Покинуть' }}</button>
                 </div>
               </template>
             </div>
@@ -2317,9 +2319,25 @@ onBeforeUnmount(() => {
             <div :class="infoMode === 'side'
                    ? 'relative flex h-full w-full flex-col border-l border-parchment-200 bg-white shadow-xl'
                    : 'relative m-auto flex max-h-[92%] w-full max-w-md flex-col overflow-hidden rounded-2xl bg-white shadow-2xl'">
-              <header class="flex h-14 shrink-0 items-center gap-2 border-b border-parchment-200 px-4">
+              <header class="flex h-14 shrink-0 items-center gap-1 border-b border-parchment-200 px-4">
                 <div class="flex-1 truncate font-medium text-ink-900">{{ isInfoGroup ? 'Информация о группе' : 'Информация' }}</div>
-                <button class="rounded-lg p-1.5 text-ink-700/60 hover:bg-parchment-100" title="Закрыть" @click="closeSidePanel"><AppIcon name="close" :size="24" /></button>
+                <div v-if="isInfoGroup" class="relative">
+                  <button class="rounded-lg p-1.5 text-ink-700/60 hover:bg-parchment-100" title="Ещё" @click.stop="infoMenu = !infoMenu">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="12" cy="19" r="2" /></svg>
+                  </button>
+                  <template v-if="infoMenu">
+                    <div class="fixed inset-0 z-10" @click="infoMenu = false"></div>
+                    <div class="absolute right-0 top-full z-20 mt-1 w-56 overflow-hidden rounded-xl bg-white py-1 shadow-lg ring-1 ring-parchment-200">
+                      <template v-if="isInfoOwner">
+                        <button class="flex w-full items-center gap-3 px-4 py-2.5 text-left text-[15px] text-ink-700 hover:bg-parchment-50" @click="infoMenu = false; openGroupEdit()"><AppIcon name="settings" :size="18" /> Управление группой</button>
+                        <button class="flex w-full items-center gap-3 px-4 py-2.5 text-left text-[15px] text-ink-700 hover:bg-parchment-50" @click="infoMenu = false; openAddMembers()"><AppIcon name="plus" :size="18" /> Добавить участников</button>
+                        <div class="my-1 h-px bg-parchment-100"></div>
+                      </template>
+                      <button class="flex w-full items-center gap-3 px-4 py-2.5 text-left text-[15px] text-red-600 hover:bg-red-50" @click="infoMenu = false; leaveGroupConfirm()"><AppIcon name="trash" :size="18" /> {{ isInfoOwner ? 'Удалить и покинуть' : 'Покинуть' }}</button>
+                    </div>
+                  </template>
+                </div>
+                <button class="rounded-lg p-1.5 text-ink-700/60 hover:bg-parchment-100" title="Закрыть" @click="infoMode === 'side' ? closeSidePanel() : closeInfo()"><AppIcon name="close" :size="24" /></button>
               </header>
               <div class="flex-1 overflow-y-auto">
                 <div class="flex flex-col items-center gap-3 p-6">

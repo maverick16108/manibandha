@@ -1828,7 +1828,7 @@ function shareContact(peerArg) {
   const enc = (s) => encodeURIComponent(s || '')
   // структурированная карточка контакта: @[contact](id|имя|телефон|аватар)
   const marker = `@[contact](${p.id || ''}|${enc(p.name)}|${enc(p.phone)}|${enc(p.avatar)})`
-  closeInfo(); closeProfilePopup(); openForward([marker])
+  openForward([marker]) // диалог пересылки поверх; боковую панель/попап НЕ закрываем
 }
 // событие о звонке: @[call](status|длит_сек|видео). status: ok — ответили; cancel — отменён; out — не отвечен.
 // Направление берём из isMine (кто позвонил).
@@ -2518,7 +2518,7 @@ onBeforeUnmount(() => {
               </div>
               <div v-if="parseReactions(m).length" class="flex flex-wrap gap-1 px-0.5">
                 <button v-for="r in parseReactions(m)" :key="r.emoji" @click.stop="onChip(m, r.emoji)" @contextmenu.prevent.stop="openWho($event, r)" title="ПКМ — кто поставил"
-                        class="flex items-center gap-1 rounded-full px-2 py-0.5 leading-none ring-1 transition" :class="m.my_reaction === r.emoji ? 'bg-saffron-500/25 text-saffron-800 ring-saffron-400' : 'bg-saffron-500/20 text-ink-700 ring-saffron-500/25 hover:bg-saffron-500/30'"><span class="text-xl leading-none">{{ r.emoji }}</span><span v-if="r.count < 4 && r.who && r.who.length" class="flex items-center"><template v-for="(w, wi) in r.who" :key="wi"><img v-if="w.avatar" :src="thumbUrl(w.avatar)" class="block h-[22px] w-[22px] rounded-full object-cover" :class="wi > 0 && '-ml-2'" /><span v-else class="flex h-[22px] w-[22px] items-center justify-center rounded-full bg-sage-500 text-[9px] font-semibold text-white" :class="wi > 0 && '-ml-2'">{{ initials(w.name) }}</span></template></span><span v-else-if="r.count > 1" class="text-sm font-semibold tabular-nums text-ink-700">{{ r.count }}</span></button>
+                        class="flex items-center gap-1 rounded-full px-2 py-0.5 leading-none ring-1 transition" :class="m.my_reaction === r.emoji ? 'bg-white text-saffron-700 ring-saffron-400 shadow-sm' : 'bg-white/90 text-ink-700 ring-parchment-300 hover:bg-white'"><span class="text-xl leading-none">{{ r.emoji }}</span><span v-if="r.count < 4 && r.who && r.who.length" class="-my-0.5 -mr-2 flex items-center"><template v-for="(w, wi) in r.who" :key="wi"><img v-if="w.avatar" :src="thumbUrl(w.avatar)" class="block h-[22px] w-[22px] rounded-full object-cover" :class="wi > 0 && '-ml-2'" /><span v-else class="flex h-[22px] w-[22px] items-center justify-center rounded-full bg-sage-500 text-[9px] font-semibold text-white" :class="wi > 0 && '-ml-2'">{{ initials(w.name) }}</span></template></span><span v-else-if="r.count > 1" class="text-sm font-semibold tabular-nums text-ink-700">{{ r.count }}</span></button>
               </div>
             </div>
             <!-- видео-сообщение -->
@@ -2561,7 +2561,7 @@ onBeforeUnmount(() => {
                   <div class="flex flex-wrap gap-1">
                     <button v-for="r in parseReactions(m)" :key="r.emoji" @click.stop="onChip(m, r.emoji)" @contextmenu.prevent.stop="openWho($event, r)" title="ПКМ — кто поставил"
                             class="flex items-center gap-1 rounded-full px-2 py-0.5 leading-none ring-1 transition"
-                            :class="m.my_reaction === r.emoji ? 'bg-saffron-500/25 text-saffron-800 ring-saffron-400' : 'bg-saffron-500/20 text-ink-700 ring-saffron-500/25 hover:bg-saffron-500/30'"><span class="text-xl leading-none">{{ r.emoji }}</span><span v-if="r.count < 4 && r.who && r.who.length" class="-my-0.5 -mr-2 flex items-center"><template v-for="(w, wi) in r.who" :key="wi"><img v-if="w.avatar" :src="thumbUrl(w.avatar)" class="block h-[22px] w-[22px] rounded-full object-cover" :class="wi > 0 && '-ml-2'" /><span v-else class="flex h-[22px] w-[22px] items-center justify-center rounded-full bg-sage-500 text-[9px] font-semibold text-white" :class="wi > 0 && '-ml-2'">{{ initials(w.name) }}</span></template></span><span v-else-if="r.count > 1" class="text-sm font-semibold tabular-nums">{{ r.count }}</span></button>
+                            :class="m.my_reaction === r.emoji ? 'bg-white text-saffron-700 ring-saffron-400 shadow-sm' : 'bg-white/90 text-ink-700 ring-parchment-300 hover:bg-white'"><span class="text-xl leading-none">{{ r.emoji }}</span><span v-if="r.count < 4 && r.who && r.who.length" class="-my-0.5 -mr-2 flex items-center"><template v-for="(w, wi) in r.who" :key="wi"><img v-if="w.avatar" :src="thumbUrl(w.avatar)" class="block h-[22px] w-[22px] rounded-full object-cover" :class="wi > 0 && '-ml-2'" /><span v-else class="flex h-[22px] w-[22px] items-center justify-center rounded-full bg-sage-500 text-[9px] font-semibold text-white" :class="wi > 0 && '-ml-2'">{{ initials(w.name) }}</span></template></span><span v-else-if="r.count > 1" class="text-sm font-semibold tabular-nums">{{ r.count }}</span></button>
                   </div>
                   <div class="flex shrink-0 items-center gap-1 pb-0.5 text-[11px]" :class="isMine(m) ? 'text-white/70' : 'text-ink-700/40'">
                     <span>{{ fmtTime(m.created_at) }}</span>
@@ -2572,7 +2572,7 @@ onBeforeUnmount(() => {
               <!-- без подписи: реакции ЗА пределами видео, без фона -->
               <div v-if="!captionText(m) && parseReactions(m).length" class="flex flex-wrap gap-1 px-0.5">
                 <button v-for="r in parseReactions(m)" :key="r.emoji" @click.stop="onChip(m, r.emoji)" @contextmenu.prevent.stop="openWho($event, r)" title="ПКМ — кто поставил"
-                        class="flex items-center gap-1 rounded-full px-2 py-0.5 leading-none ring-1 transition" :class="m.my_reaction === r.emoji ? 'bg-saffron-500/25 text-saffron-800 ring-saffron-400' : 'bg-saffron-500/20 text-ink-700 ring-saffron-500/25 hover:bg-saffron-500/30'"><span class="text-xl leading-none">{{ r.emoji }}</span><span v-if="r.count < 4 && r.who && r.who.length" class="flex items-center"><template v-for="(w, wi) in r.who" :key="wi"><img v-if="w.avatar" :src="thumbUrl(w.avatar)" class="block h-[22px] w-[22px] rounded-full object-cover" :class="wi > 0 && '-ml-2'" /><span v-else class="flex h-[22px] w-[22px] items-center justify-center rounded-full bg-sage-500 text-[9px] font-semibold text-white" :class="wi > 0 && '-ml-2'">{{ initials(w.name) }}</span></template></span><span v-else-if="r.count > 1" class="text-sm font-semibold tabular-nums text-ink-700">{{ r.count }}</span></button>
+                        class="flex items-center gap-1 rounded-full px-2 py-0.5 leading-none ring-1 transition" :class="m.my_reaction === r.emoji ? 'bg-white text-saffron-700 ring-saffron-400 shadow-sm' : 'bg-white/90 text-ink-700 ring-parchment-300 hover:bg-white'"><span class="text-xl leading-none">{{ r.emoji }}</span><span v-if="r.count < 4 && r.who && r.who.length" class="-my-0.5 -mr-2 flex items-center"><template v-for="(w, wi) in r.who" :key="wi"><img v-if="w.avatar" :src="thumbUrl(w.avatar)" class="block h-[22px] w-[22px] rounded-full object-cover" :class="wi > 0 && '-ml-2'" /><span v-else class="flex h-[22px] w-[22px] items-center justify-center rounded-full bg-sage-500 text-[9px] font-semibold text-white" :class="wi > 0 && '-ml-2'">{{ initials(w.name) }}</span></template></span><span v-else-if="r.count > 1" class="text-sm font-semibold tabular-nums text-ink-700">{{ r.count }}</span></button>
               </div>
             </div>
 
@@ -2611,7 +2611,7 @@ onBeforeUnmount(() => {
                   <div class="flex flex-wrap gap-1">
                     <button v-for="r in parseReactions(m)" :key="r.emoji" @click.stop="onChip(m, r.emoji)" @contextmenu.prevent.stop="openWho($event, r)" title="ПКМ — кто поставил"
                             class="flex items-center gap-1 rounded-full px-2 py-0.5 leading-none ring-1 transition"
-                            :class="m.my_reaction === r.emoji ? 'bg-saffron-500/25 text-saffron-800 ring-saffron-400' : 'bg-saffron-500/20 text-ink-700 ring-saffron-500/25 hover:bg-saffron-500/30'"><span class="text-xl leading-none">{{ r.emoji }}</span><span v-if="r.count < 4 && r.who && r.who.length" class="-my-0.5 -mr-2 flex items-center"><template v-for="(w, wi) in r.who" :key="wi"><img v-if="w.avatar" :src="thumbUrl(w.avatar)" class="block h-[22px] w-[22px] rounded-full object-cover" :class="wi > 0 && '-ml-2'" /><span v-else class="flex h-[22px] w-[22px] items-center justify-center rounded-full bg-sage-500 text-[9px] font-semibold text-white" :class="wi > 0 && '-ml-2'">{{ initials(w.name) }}</span></template></span><span v-else-if="r.count > 1" class="text-sm font-semibold tabular-nums">{{ r.count }}</span></button>
+                            :class="m.my_reaction === r.emoji ? 'bg-white text-saffron-700 ring-saffron-400 shadow-sm' : 'bg-white/90 text-ink-700 ring-parchment-300 hover:bg-white'"><span class="text-xl leading-none">{{ r.emoji }}</span><span v-if="r.count < 4 && r.who && r.who.length" class="-my-0.5 -mr-2 flex items-center"><template v-for="(w, wi) in r.who" :key="wi"><img v-if="w.avatar" :src="thumbUrl(w.avatar)" class="block h-[22px] w-[22px] rounded-full object-cover" :class="wi > 0 && '-ml-2'" /><span v-else class="flex h-[22px] w-[22px] items-center justify-center rounded-full bg-sage-500 text-[9px] font-semibold text-white" :class="wi > 0 && '-ml-2'">{{ initials(w.name) }}</span></template></span><span v-else-if="r.count > 1" class="text-sm font-semibold tabular-nums">{{ r.count }}</span></button>
                   </div>
                   <div class="flex shrink-0 items-center gap-1 pb-0.5 text-[11px]" :class="isMine(m) ? 'text-white/70' : 'text-ink-700/40'">
                     <span>{{ fmtTime(m.created_at) }}</span>
@@ -2627,7 +2627,7 @@ onBeforeUnmount(() => {
               <!-- без подписи: реакции ЗА пределами фото, без фона -->
               <div v-if="!captionText(m) && parseReactions(m).length" class="flex flex-wrap gap-1 px-0.5">
                 <button v-for="r in parseReactions(m)" :key="r.emoji" @click.stop="onChip(m, r.emoji)" @contextmenu.prevent.stop="openWho($event, r)" title="ПКМ — кто поставил"
-                        class="flex items-center gap-1 rounded-full px-2 py-0.5 leading-none ring-1 transition" :class="m.my_reaction === r.emoji ? 'bg-saffron-500/25 text-saffron-800 ring-saffron-400' : 'bg-saffron-500/20 text-ink-700 ring-saffron-500/25 hover:bg-saffron-500/30'"><span class="text-xl leading-none">{{ r.emoji }}</span><span v-if="r.count < 4 && r.who && r.who.length" class="flex items-center"><template v-for="(w, wi) in r.who" :key="wi"><img v-if="w.avatar" :src="thumbUrl(w.avatar)" class="block h-[22px] w-[22px] rounded-full object-cover" :class="wi > 0 && '-ml-2'" /><span v-else class="flex h-[22px] w-[22px] items-center justify-center rounded-full bg-sage-500 text-[9px] font-semibold text-white" :class="wi > 0 && '-ml-2'">{{ initials(w.name) }}</span></template></span><span v-else-if="r.count > 1" class="text-sm font-semibold tabular-nums text-ink-700">{{ r.count }}</span></button>
+                        class="flex items-center gap-1 rounded-full px-2 py-0.5 leading-none ring-1 transition" :class="m.my_reaction === r.emoji ? 'bg-white text-saffron-700 ring-saffron-400 shadow-sm' : 'bg-white/90 text-ink-700 ring-parchment-300 hover:bg-white'"><span class="text-xl leading-none">{{ r.emoji }}</span><span v-if="r.count < 4 && r.who && r.who.length" class="-my-0.5 -mr-2 flex items-center"><template v-for="(w, wi) in r.who" :key="wi"><img v-if="w.avatar" :src="thumbUrl(w.avatar)" class="block h-[22px] w-[22px] rounded-full object-cover" :class="wi > 0 && '-ml-2'" /><span v-else class="flex h-[22px] w-[22px] items-center justify-center rounded-full bg-sage-500 text-[9px] font-semibold text-white" :class="wi > 0 && '-ml-2'">{{ initials(w.name) }}</span></template></span><span v-else-if="r.count > 1" class="text-sm font-semibold tabular-nums text-ink-700">{{ r.count }}</span></button>
               </div>
             </div>
 
@@ -2708,9 +2708,7 @@ onBeforeUnmount(() => {
                   <button v-for="r in parseReactions(m)" :key="r.emoji" @click.stop="onChip(m, r.emoji)" @contextmenu.prevent.stop="openWho($event, r)"
                           title="ПКМ — кто поставил"
                           class="flex items-center gap-1 rounded-full px-2 py-0.5 leading-none ring-1 transition"
-                          :class="isMine(m)
-                            ? (m.my_reaction === r.emoji ? 'bg-white/25 ring-white/60' : 'bg-white/15 ring-white/20 hover:bg-white/25')
-                            : (m.my_reaction === r.emoji ? 'bg-saffron-500/25 text-saffron-800 ring-saffron-400' : 'bg-saffron-500/20 text-ink-700 ring-saffron-500/25 hover:bg-saffron-500/30')">
+                          :class="m.my_reaction === r.emoji ? 'bg-white text-saffron-700 ring-saffron-400 shadow-sm' : 'bg-white/90 text-ink-700 ring-parchment-300 hover:bg-white'">
                     <span class="text-xl leading-none">{{ r.emoji }}</span><span v-if="r.count < 4 && r.who && r.who.length" class="-my-0.5 -mr-2 flex items-center"><template v-for="(w, wi) in r.who" :key="wi"><img v-if="w.avatar" :src="thumbUrl(w.avatar)" class="block h-[22px] w-[22px] rounded-full object-cover" :class="wi > 0 && '-ml-2'" /><span v-else class="flex h-[22px] w-[22px] items-center justify-center rounded-full bg-sage-500 text-[9px] font-semibold text-white" :class="wi > 0 && '-ml-2'">{{ initials(w.name) }}</span></template></span><span v-else-if="r.count > 1" class="text-sm font-semibold tabular-nums">{{ r.count }}</span>
                   </button>
                 </div>
@@ -2804,7 +2802,8 @@ onBeforeUnmount(() => {
         <!-- кнопка «вниз» (видна, когда прокручено вверх) -->
         <transition name="fade">
           <button v-if="activeChat && !stickBottom && !holdRec.active" @click="stickBottom = true; scrollToBottom()" title="Вниз"
-                  class="absolute bottom-24 right-5 z-20 flex h-11 w-11 items-center justify-center rounded-full bg-white text-ink-700 shadow-lg ring-1 ring-parchment-200 transition hover:bg-parchment-50">
+                  class="absolute bottom-24 right-4 z-20 flex h-11 w-11 items-center justify-center rounded-full bg-white text-ink-700 shadow-lg ring-1 ring-parchment-200 transition hover:bg-parchment-50"
+                  :class="sideDockOpen && 'sm:!right-[25rem]'">
             <AppIcon name="chevron" :size="22" />
           </button>
         </transition>

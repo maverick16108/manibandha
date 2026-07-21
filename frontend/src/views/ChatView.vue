@@ -371,6 +371,11 @@ function closeWho() { whoMenu.open = false; whoMenu.list = [] }
 // ── контекстное меню (ПКМ) ─────────────────────────────────────────────
 const ctx = reactive({ open: false, x: 0, y: 0, m: null, selText: '' })
 function closeCtx() { ctx.open = false; ctx.m = null }
+// Закрытие модалки по клику на подложку — но ТОЛЬКО если нажатие И началось, и закончилось на подложке.
+// Иначе выделение текста в инпуте с отпусканием за пределами формы (mouseup на подложке) закрывало окно.
+let modalDownOnBg = false
+function modalBgDown(e) { modalDownOnBg = e.target === e.currentTarget }
+function modalBgClick(e, close) { if (modalDownOnBg && e.target === e.currentTarget) close(); modalDownOnBg = false }
 // медиа сообщения (для «Сохранить как…»): url + имя файла
 function ctxDownloadable(m) {
   if (!m || m.deleted) return null
@@ -1915,7 +1920,7 @@ const gIsPublic = ref(false)
 const gHideHistory = ref(false)
 const gInviteToken = ref('')
 const gInviteBusy = ref(false)
-const gInviteLink = computed(() => gInviteToken.value ? `${location.origin}/app/join/${gInviteToken.value}` : '')
+const gInviteLink = computed(() => gInviteToken.value ? `${location.origin}/i/${gInviteToken.value}` : '')
 async function openGroupEdit() {
   if (!isActiveGroup.value) return
   await ensureInfoLoaded() // панель могла быть закрыта — берём свежие настройки (public/hide/invite)
@@ -3029,7 +3034,7 @@ onBeforeUnmount(() => {
     </template>
 
     <!-- Диалог удаления сообщения -->
-    <div v-if="deleteTarget" class="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/40 p-4" @click.self="deleteTarget = null">
+    <div v-if="deleteTarget" class="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/40 p-4" @mousedown="modalBgDown" @click="modalBgClick($event, () => deleteTarget = null)">
       <div class="w-full max-w-sm overflow-hidden rounded-xl bg-white shadow-xl">
         <div class="p-5">
           <h3 class="font-medium text-ink-900">{{ isMine(deleteTarget) ? 'Удалить это сообщение?' : 'Скрыть это сообщение?' }}</h3>
@@ -3047,7 +3052,7 @@ onBeforeUnmount(() => {
     </div>
 
     <!-- Диалог удаления нескольких сообщений -->
-    <div v-if="deleteManyOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/40 p-4" @click.self="deleteManyOpen = false">
+    <div v-if="deleteManyOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/40 p-4" @mousedown="modalBgDown" @click="modalBgClick($event, () => deleteManyOpen = false)">
       <div class="w-full max-w-sm overflow-hidden rounded-xl bg-white shadow-xl">
         <div class="p-5">
           <h3 class="font-medium text-ink-900">Удалить {{ selected.size }} сообщ.?</h3>
@@ -3064,7 +3069,7 @@ onBeforeUnmount(() => {
     </div>
 
     <!-- Выбор чата для пересылки -->
-    <div v-if="forwardOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/40 p-4" @click.self="forwardOpen = false">
+    <div v-if="forwardOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/40 p-4" @mousedown="modalBgDown" @click="modalBgClick($event, () => forwardOpen = false)">
       <div class="flex max-h-[70vh] w-full max-w-sm flex-col overflow-hidden rounded-xl bg-white shadow-xl">
         <div class="flex items-center gap-2 border-b border-parchment-200 p-3">
           <div class="font-medium text-ink-900">Переслать в…</div>
@@ -3099,7 +3104,7 @@ onBeforeUnmount(() => {
     <!-- Окно звонка и входящий попап вынесены в глобальный CallCenter.vue (монтируется в AppLayout) -->
 
     <!-- Диалог отправки вложений (картинки + файлы) -->
-    <div v-if="showCompose" class="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/40 p-4" @click.self="cancelCompose">
+    <div v-if="showCompose" class="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/40 p-4" @mousedown="modalBgDown" @click="modalBgClick($event, () => cancelCompose())">
       <div class="flex max-h-[85vh] w-full max-w-md flex-col overflow-hidden rounded-xl bg-white shadow-xl">
         <div class="flex items-center justify-between border-b border-parchment-200 px-4 py-3">
           <h3 class="font-medium text-ink-900">{{ composeTitle }}</h3>
@@ -3235,7 +3240,7 @@ onBeforeUnmount(() => {
     </transition>
 
     <!-- Модалка нового чата -->
-    <div v-if="showNew" class="fixed inset-0 z-40 flex items-center justify-center bg-ink-900/40 p-4" @click.self="closeNew">
+    <div v-if="showNew" class="fixed inset-0 z-40 flex items-center justify-center bg-ink-900/40 p-4" @mousedown="modalBgDown" @click="modalBgClick($event, () => closeNew())">
       <div class="flex h-[80vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl bg-white shadow-xl">
         <div class="flex border-b border-parchment-200">
           <button class="flex-1 px-4 py-3 text-sm font-medium" :class="newTab === 'direct' ? 'border-b-2 border-saffron-500 text-saffron-700' : 'text-ink-700/60'" @click="newTab = 'direct'">Личный чат</button>
@@ -3268,7 +3273,7 @@ onBeforeUnmount(() => {
     </div>
 
     <!-- Модалка настроек группы (название + фото) -->
-    <div v-if="showGroupEdit" class="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/40 p-4" @click.self="showGroupEdit = false">
+    <div v-if="showGroupEdit" class="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/40 p-4" @mousedown="modalBgDown" @click="modalBgClick($event, () => showGroupEdit = false)">
       <div class="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-xl">
         <div class="space-y-5 p-6">
           <div class="flex items-center gap-5">
@@ -3320,7 +3325,7 @@ onBeforeUnmount(() => {
     </div>
 
     <!-- Добавление участников в группу (создатель) -->
-    <div v-if="addMembersOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/40 p-4" @click.self="addMembersOpen = false">
+    <div v-if="addMembersOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/40 p-4" @mousedown="modalBgDown" @click="modalBgClick($event, () => addMembersOpen = false)">
       <div class="flex max-h-[80vh] w-full max-w-md flex-col overflow-hidden rounded-xl bg-white shadow-xl">
         <div class="flex items-center justify-between border-b border-parchment-200 px-4 py-3">
           <h3 class="font-medium text-ink-900">Добавить участников</h3>

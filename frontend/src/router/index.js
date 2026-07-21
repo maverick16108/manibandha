@@ -8,6 +8,8 @@ const routes = [
   { path: '/events/:id', name: 'public-event', component: () => import('../views/PublicEventView.vue'), meta: { public: true } },
   { path: '/join/:room', name: 'conference-guest', component: () => import('../views/ConferenceRoomView.vue'), meta: { public: true } },
   { path: '/c/:code', name: 'conference-link', component: () => import('../views/ConferenceLinkView.vue'), meta: { public: true } },
+  // короткая ссылка-приглашение в группу → на защищённый экран вступления
+  { path: '/i/:token', redirect: (to) => ({ name: 'join', params: { token: to.params.token } }) },
   {
     path: '/app',
     component: () => import('../components/AppLayout.vue'),

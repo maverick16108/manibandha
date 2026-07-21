@@ -844,7 +844,8 @@ func (s *Server) requireGroupOwner(w http.ResponseWriter, r *http.Request, id in
 	return &chat
 }
 
-func newInviteToken() string { return randHex() + randHex() }
+// короткий токен приглашения (16 hex = 64 бита — достаточно для инвайта, ссылка компактная)
+func newInviteToken() string { return randHex()[:16] }
 
 // GET /api/chats/{id}/invite — пригласительная ссылка (создаёт токен, если нет). Только создатель.
 func (s *Server) getInvite(w http.ResponseWriter, r *http.Request) {

@@ -2331,7 +2331,7 @@ onBeforeUnmount(() => {
                    : 'relative m-auto flex max-h-[92%] w-full max-w-md flex-col overflow-hidden rounded-2xl bg-white shadow-2xl'">
               <header class="flex h-14 shrink-0 items-center gap-1 border-b border-parchment-200 px-4">
                 <div class="flex-1 truncate font-medium text-ink-900">{{ isInfoGroup ? 'Информация о группе' : 'Информация' }}</div>
-                <div v-if="isInfoGroup" class="relative">
+                <div v-if="isInfoGroup && infoMode === 'popup'" class="relative">
                   <button class="rounded-lg p-1.5 text-ink-700/60 hover:bg-parchment-100" title="Ещё" @click.stop="infoMenu = !infoMenu">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="12" cy="19" r="2" /></svg>
                   </button>

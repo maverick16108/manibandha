@@ -194,6 +194,7 @@ async function handleCallSignal(evt) {
     else if (sub === 'reject') showToast('Звонок отклонён')
     postCallSummary('out') // собеседник завершил/отклонил: если не ответили — «Исходящий» (недозвон)
     cleanupCall()
+    endTone() // собеседник сбросил — короткий сигнал отбоя
   }
 }
 
@@ -223,6 +224,27 @@ function startRingtone(isIncoming) {
   } catch { /* аудио недоступно */ }
 }
 function stopRingtone() { if (ringTimer) { clearInterval(ringTimer); ringTimer = null } if (ringCtx) { try { ringCtx.close() } catch { /* ignore */ } ringCtx = null } }
+// «отбой» — короткий нисходящий сигнал, когда собеседник сбросил / отклонил / занят.
+// Свой AudioContext, чтобы stopRingtone() (закрывает ringCtx) его не оборвал.
+function endTone() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)()
+    if (ctx.state === 'suspended') ctx.resume().catch(() => {})
+    const tone = (offset, freq, dur, vol) => {
+      const o = ctx.createOscillator(), g = ctx.createGain()
+      o.type = 'sine'; o.frequency.value = freq
+      const t = ctx.currentTime + offset
+      g.gain.setValueAtTime(0.0001, t)
+      g.gain.exponentialRampToValueAtTime(vol, t + 0.02)
+      g.gain.setValueAtTime(vol, t + dur - 0.04)
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur)
+      o.connect(g); g.connect(ctx.destination); o.start(t); o.stop(t + dur + 0.05)
+    }
+    tone(0, 480, 0.25, 0.2)
+    tone(0.28, 380, 0.4, 0.2)
+    setTimeout(() => { try { ctx.close() } catch { /* ignore */ } }, 1000)
+  } catch { /* аудио недоступно */ }
+}
 watch(() => call.status, (s) => { if (s === 'calling') startRingtone(false); else stopRingtone() })
 watch(() => incoming.open, (v) => { v ? startRingtone(true) : stopRingtone() })
 

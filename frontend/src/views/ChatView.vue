@@ -1739,7 +1739,7 @@ async function openUserInfo(uid) {
 // клик по шапке чата: группа — боковая панель; личный — центральный попап собеседника (можно вместе с панелью)
 async function openHeaderProfile() {
   const id = activeId.value; if (!id) return
-  if (isActiveGroup.value) { openInfo('popup'); return } // группа — инфо в центральном попапе
+  // НЕЗАВИСИМЫЙ попап (и для группы, и для личного) — не трогает боковую панель
   profilePopup.value = infoCache[id] || null
   try { const { data } = await client.get(`/chats/${id}/info`); profilePopup.value = data; infoCache[id] = data } catch { /* оставляем кэш */ }
 }
@@ -1770,6 +1770,11 @@ const ppPeer = computed(() => profilePopup.value?.peer || null)
 const ppAvatar = computed(() => ppPeer.value?.avatar || null)
 const ppCity = computed(() => { const p = ppPeer.value; return p ? [p.city, p.region].filter(Boolean).join(', ') : '' })
 const ppCounts = computed(() => countRows(profilePopup.value?.counts))
+// попап группы (клик по названию группы): рендерим инфо о группе, НЕ трогая боковую панель
+const ppIsGroup = computed(() => profilePopup.value?.type === 'group')
+const ppGroupAvatar = computed(() => profilePopup.value?.photo || null)
+const ppMembers = computed(() => profilePopup.value?.members || [])
+const ppIsOwner = computed(() => ppIsGroup.value && profilePopup.value?.created_by === chatState.meId)
 // ── просмотр всех медиа по типу (как в Telegram) ───────────────────────────
 const mediaBrowser = reactive({ open: false, type: null, title: '', items: [], loading: false, q: '' })
 const MEDIA_TITLES = { photos: 'Фотографии', videos: 'Видео', files: 'Файлы', voice: 'Голосовые сообщения', links: 'Общие ссылки' }
@@ -3141,17 +3146,27 @@ onBeforeUnmount(() => {
         <div class="absolute inset-0 bg-ink-900/40" @click="closeProfilePopup"></div>
         <div class="relative m-auto flex max-h-[90vh] w-full max-w-md flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
           <header class="flex h-14 shrink-0 items-center gap-1 border-b border-parchment-200 px-4">
-            <div class="flex-1 truncate font-medium text-ink-900">Информация</div>
-            <button v-if="ppPeer && ppPeer.id !== chatState.meId" class="rounded-full p-2 text-ink-700/55 transition hover:bg-parchment-100 hover:text-saffron-600" title="Позвонить" @click="callPeer(ppPeer)"><AppIcon name="phone" :size="20" /></button>
-            <div v-if="ppPeer" class="relative">
+            <div class="flex-1 truncate font-medium text-ink-900">{{ ppIsGroup ? 'Информация о группе' : 'Информация' }}</div>
+            <button v-if="!ppIsGroup && ppPeer && ppPeer.id !== chatState.meId" class="rounded-full p-2 text-ink-700/55 transition hover:bg-parchment-100 hover:text-saffron-600" title="Позвонить" @click="callPeer(ppPeer)"><AppIcon name="phone" :size="20" /></button>
+            <div v-if="ppIsGroup || ppPeer" class="relative">
               <button class="rounded-lg p-1.5 text-ink-700/60 hover:bg-parchment-100" title="Ещё" @click.stop="ppMenu = !ppMenu">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="12" cy="19" r="2" /></svg>
               </button>
               <template v-if="ppMenu">
                 <div class="fixed inset-0 z-10" @click="ppMenu = false"></div>
-                <div class="absolute right-0 top-full z-20 mt-1 w-56 overflow-hidden rounded-xl bg-white py-1 shadow-lg ring-1 ring-parchment-200">
-                  <button class="flex w-full items-center gap-3 px-4 py-2.5 text-left text-[15px] text-ink-700 hover:bg-parchment-50" @click="ppMenu = false; shareContact(ppPeer)"><AppIcon name="reply" :size="18" class="-scale-x-100" /> Поделиться контактом</button>
-                  <button class="flex w-full items-center gap-3 px-4 py-2.5 text-left text-[15px] text-red-600 hover:bg-red-50" @click="deleteContact()"><AppIcon name="trash" :size="18" /> Удалить контакт</button>
+                <div class="absolute right-0 top-full z-20 mt-1 w-60 overflow-hidden whitespace-nowrap rounded-xl bg-white py-1 shadow-lg ring-1 ring-parchment-200">
+                  <template v-if="ppIsGroup">
+                    <template v-if="ppIsOwner">
+                      <button class="flex w-full items-center gap-3 px-4 py-2.5 text-left text-[15px] text-ink-700 hover:bg-parchment-50" @click="closeProfilePopup(); openGroupEdit()"><AppIcon name="settings" :size="18" /> Управление группой</button>
+                      <button class="flex w-full items-center gap-3 px-4 py-2.5 text-left text-[15px] text-ink-700 hover:bg-parchment-50" @click="closeProfilePopup(); openAddMembers()"><AppIcon name="plus" :size="18" /> Добавить участников</button>
+                      <div class="my-1 h-px bg-parchment-100"></div>
+                    </template>
+                    <button class="flex w-full items-center gap-3 px-4 py-2.5 text-left text-[15px] text-red-600 hover:bg-red-50" @click="closeProfilePopup(); leaveGroupConfirm()"><AppIcon name="trash" :size="18" /> {{ ppIsOwner ? 'Удалить и покинуть' : 'Покинуть' }}</button>
+                  </template>
+                  <template v-else>
+                    <button class="flex w-full items-center gap-3 px-4 py-2.5 text-left text-[15px] text-ink-700 hover:bg-parchment-50" @click="ppMenu = false; shareContact(ppPeer)"><AppIcon name="reply" :size="18" class="-scale-x-100" /> Поделиться контактом</button>
+                    <button class="flex w-full items-center gap-3 px-4 py-2.5 text-left text-[15px] text-red-600 hover:bg-red-50" @click="deleteContact()"><AppIcon name="trash" :size="18" /> Удалить контакт</button>
+                  </template>
                 </div>
               </template>
             </div>
@@ -3159,25 +3174,37 @@ onBeforeUnmount(() => {
           </header>
           <div class="flex-1 overflow-y-auto">
             <div class="flex flex-col items-center gap-3 p-6">
-              <img v-if="ppAvatar" :src="ppAvatar" @error="imgFull($event, ppAvatar)" class="h-28 w-28 cursor-zoom-in rounded-full object-cover ring-1 ring-parchment-200" @click="openLightbox(ppAvatar)" />
-              <span v-else class="flex h-28 w-28 items-center justify-center rounded-full bg-gradient-to-br from-saffron-400 to-saffron-600 text-3xl font-semibold text-white">{{ initials(ppPeer?.name) }}</span>
+              <img v-if="(ppIsGroup ? ppGroupAvatar : ppAvatar)" :src="ppIsGroup ? ppGroupAvatar : ppAvatar" @error="imgFull($event, ppIsGroup ? ppGroupAvatar : ppAvatar)" class="h-28 w-28 cursor-zoom-in rounded-full object-cover ring-1 ring-parchment-200" @click="openLightbox(ppIsGroup ? ppGroupAvatar : ppAvatar)" />
+              <span v-else class="flex h-28 w-28 items-center justify-center rounded-full text-3xl font-semibold text-white" :class="ppIsGroup ? 'bg-gradient-to-br from-sage-400 to-sage-600' : 'bg-gradient-to-br from-saffron-400 to-saffron-600'">{{ initials(ppIsGroup ? profilePopup.title : ppPeer?.name) }}</span>
               <div class="text-center">
-                <div class="text-lg font-semibold text-ink-900">{{ ppPeer?.name }}</div>
-                <div class="text-sm" :class="ppPeer?.online ? 'text-saffron-600' : 'text-ink-700/50'">{{ ppPeer?.online ? 'в сети' : 'не в сети' }}</div>
+                <div class="text-lg font-semibold text-ink-900">{{ ppIsGroup ? profilePopup.title : ppPeer?.name }}</div>
+                <div v-if="ppIsGroup" class="text-sm text-ink-700/50">{{ ppMembers.length }} {{ pluralWord(ppMembers.length, ['участник', 'участника', 'участников']) }}</div>
+                <div v-else class="text-sm" :class="ppPeer?.online ? 'text-saffron-600' : 'text-ink-700/50'">{{ ppPeer?.online ? 'в сети' : 'не в сети' }}</div>
               </div>
             </div>
-            <div class="divide-y divide-parchment-100 border-t border-parchment-200">
+            <div v-if="!ppIsGroup" class="divide-y divide-parchment-100 border-t border-parchment-200">
               <button v-if="ppPeer?.phone" class="group flex w-full items-center justify-between gap-2 px-6 py-3 text-left transition hover:bg-parchment-50" title="Копировать телефон" @click="copyPhone(ppPeer.phone)"><span><span class="block text-[15px] text-ink-900">{{ ppPeer.phone }}</span><span class="block text-xs text-ink-700/50">Телефон</span></span><AppIcon name="copy" :size="17" class="shrink-0 text-ink-700/30 transition group-hover:text-saffron-600" /></button>
               <div v-if="ppPeer?.spiritual_name" class="px-6 py-3"><div class="text-[15px] text-ink-900">{{ ppPeer.spiritual_name }}</div><div class="text-xs text-ink-700/50">Духовное имя</div></div>
               <div v-if="ppCity" class="px-6 py-3"><div class="text-[15px] text-ink-900">{{ ppCity }}</div><div class="text-xs text-ink-700/50">Город</div></div>
             </div>
             <div v-if="ppCounts.length" class="divide-y divide-parchment-100 border-t border-parchment-200">
-              <button v-for="row in ppCounts" :key="row.icon" class="flex w-full items-center gap-3 px-6 py-3 text-left transition hover:bg-parchment-50" @click="openMediaBrowser(row.type, profilePopup.chat_id)">
+              <button v-for="row in ppCounts" :key="row.icon" class="flex w-full items-center gap-3 px-6 py-3 text-left transition hover:bg-parchment-50" @click="openMediaBrowser(row.type, profilePopup.chat_id || activeId)">
                 <AppIcon :name="row.icon" :size="20" class="shrink-0 text-ink-700/50" />
                 <span class="text-[15px] text-ink-900"><b class="tabular-nums">{{ row.n }}</b> {{ row.label }}</span>
               </button>
             </div>
-            <div v-if="ppPeer && ppPeer.id && ppPeer.id !== chatState.meId" class="border-t border-parchment-200 p-2">
+            <div v-if="ppIsGroup" class="border-t border-parchment-200 pt-2">
+              <div class="flex items-center justify-between px-6 pb-1">
+                <div class="text-xs font-semibold uppercase tracking-wide text-ink-700/50">{{ ppMembers.length }} {{ pluralWord(ppMembers.length, ['участник', 'участника', 'участников']) }}</div>
+                <button v-if="ppIsOwner" class="flex items-center gap-1 rounded-lg px-2 py-1 text-sm text-saffron-700 hover:bg-parchment-100" @click="closeProfilePopup(); openAddMembers()"><AppIcon name="plus" :size="16" /> Добавить</button>
+              </div>
+              <button v-for="mem in ppMembers" :key="mem.id" class="flex w-full items-center gap-3 px-6 py-2 text-left hover:bg-parchment-50" @click="openUserInfo(mem.id)">
+                <img v-if="mem.avatar" :src="thumbUrl(mem.avatar)" @error="imgFull($event, mem.avatar)" class="h-10 w-10 shrink-0 rounded-full object-cover" />
+                <span v-else class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-sage-400 to-sage-600 text-sm font-semibold text-white">{{ initials(mem.name) }}</span>
+                <span class="min-w-0"><span class="block truncate text-[15px] text-ink-900">{{ mem.name }}</span><span class="block truncate text-xs" :class="mem.online ? 'text-saffron-600' : 'text-ink-700/50'">{{ mem.is_owner ? 'владелец' : memberStatusText(mem) }}</span></span>
+              </button>
+            </div>
+            <div v-if="!ppIsGroup && ppPeer && ppPeer.id && ppPeer.id !== chatState.meId" class="border-t border-parchment-200 p-2">
               <button class="flex w-full items-center gap-3 rounded-lg px-4 py-2.5 text-left text-[15px] text-saffron-700 hover:bg-parchment-100" @click="openContactChat(ppPeer); closeProfilePopup()">
                 <AppIcon name="send" :size="19" /> Отправить сообщение
               </button>
@@ -3225,17 +3252,19 @@ onBeforeUnmount(() => {
       <div class="w-full max-w-sm overflow-hidden rounded-xl bg-white shadow-xl">
         <div class="space-y-4 p-4 pt-5">
           <div class="flex items-center gap-4">
-            <img v-if="gPhoto" :src="gPhoto" class="photo-bw h-16 w-16 shrink-0 rounded-full object-cover" />
-            <span v-else class="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-sage-400 to-sage-600 text-2xl font-semibold text-white">{{ initials(gTitle || activeChat?.title) }}</span>
-            <div class="flex gap-2">
-              <button class="btn-outline text-sm" :disabled="gUploading" @click="groupPhotoInput.click()">{{ gUploading ? '…' : 'Загрузить фото' }}</button>
-              <button v-if="gPhoto" class="btn-ghost text-sm text-red-600" @click="gPhoto = ''">Убрать</button>
-            </div>
+            <button type="button" class="group relative h-16 w-16 shrink-0 overflow-hidden rounded-full" :disabled="gUploading" title="Изменить фото" @click="groupPhotoInput.click()">
+              <img v-if="gPhoto" :src="gPhoto" class="photo-bw h-full w-full object-cover" />
+              <span v-else class="flex h-full w-full items-center justify-center bg-gradient-to-br from-sage-400 to-sage-600 text-2xl font-semibold text-white">{{ initials(gTitle || activeChat?.title) }}</span>
+              <span class="absolute inset-0 flex items-center justify-center bg-black/30 text-white transition group-hover:bg-black/45">
+                <svg v-if="!gUploading" xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                <span v-else class="text-sm">…</span>
+              </span>
+            </button>
             <input ref="groupPhotoInput" type="file" accept="image/*" class="hidden" @change="onGroupPhoto" />
-          </div>
-          <div>
-            <label class="label">Название</label>
-            <input ref="gTitleInput" v-model="gTitle" class="input" placeholder="Название группы" />
+            <div class="min-w-0 flex-1">
+              <label class="label">Название</label>
+              <input ref="gTitleInput" v-model="gTitle" class="input" placeholder="Название группы" />
+            </div>
           </div>
           <!-- Тип группы -->
           <div>
@@ -3244,7 +3273,7 @@ onBeforeUnmount(() => {
               <button type="button" class="flex-1 rounded-lg border px-3 py-2 text-sm transition" :class="!gIsPublic ? 'border-saffron-500 bg-saffron-50 font-semibold text-saffron-700' : 'border-parchment-300 text-ink-700 hover:bg-parchment-100'" @click="gIsPublic = false">Частная</button>
               <button type="button" class="flex-1 rounded-lg border px-3 py-2 text-sm transition" :class="gIsPublic ? 'border-saffron-500 bg-saffron-50 font-semibold text-saffron-700' : 'border-parchment-300 text-ink-700 hover:bg-parchment-100'" @click="gIsPublic = true">Публичная</button>
             </div>
-            <p class="mt-1 text-xs text-ink-700/50">Присоединиться в группу можно по пригласительной ссылке.</p>
+            <p class="mt-1 text-xs text-ink-700/50">{{ gIsPublic ? 'Публичную группу может найти любой пользователь и присоединиться к ней.' : 'Присоединиться в частную группу можно только по пригласительной ссылке.' }}</p>
           </div>
           <!-- История для новых участников -->
           <label class="flex items-center gap-2 text-sm text-ink-800"><input type="checkbox" v-model="gHideHistory" class="h-4 w-4" /> Скрыть историю чата для новых участников</label>

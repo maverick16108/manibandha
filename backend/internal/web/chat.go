@@ -267,9 +267,32 @@ func (s *Server) listContacts(w http.ResponseWriter, r *http.Request) {
 	s.DB.Where("is_active = ? AND id <> ? AND (disciple_id IS NULL OR disciple_id NOT IN (?))",
 		true, u.ID, s.DB.Model(&models.Disciple{}).Select("id").Where("is_approved = ?", false)).
 		Order("full_name").Find(&users)
+	// у части пользователей нет своей аватарки, но есть фото ученика — подставляем его (как в карточке чата)
+	discIDs := make([]int, 0)
+	for i := range users {
+		if users[i].AvatarURL == nil && users[i].DiscipleID != nil {
+			discIDs = append(discIDs, *users[i].DiscipleID)
+		}
+	}
+	photoByDisc := map[int]string{}
+	if len(discIDs) > 0 {
+		var ds []models.Disciple
+		s.DB.Select("id", "photo_url").Where("id IN ? AND photo_url IS NOT NULL", discIDs).Find(&ds)
+		for _, d := range ds {
+			if d.PhotoURL != nil {
+				photoByDisc[d.ID] = *d.PhotoURL
+			}
+		}
+	}
 	out := make([]map[string]any, 0, len(users))
 	for _, x := range users {
-		out = append(out, map[string]any{"id": x.ID, "full_name": x.FullName, "avatar_url": x.AvatarURL, "role": x.Role})
+		var av any = x.AvatarURL
+		if x.AvatarURL == nil && x.DiscipleID != nil {
+			if p, ok := photoByDisc[*x.DiscipleID]; ok {
+				av = p
+			}
+		}
+		out = append(out, map[string]any{"id": x.ID, "full_name": x.FullName, "avatar_url": av, "role": x.Role})
 	}
 	writeJSON(w, http.StatusOK, out)
 }

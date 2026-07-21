@@ -49,9 +49,9 @@
   .badge {
     @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium;
   }
-  /* Black & white photo treatment for the guru imagery */
+  /* Фото по всему проекту — в цвете (ранее применялся ч/б-фильтр) */
   .photo-bw {
-    filter: grayscale(1) contrast(1.05) brightness(1.02);
+    filter: none;
   }
 }
 

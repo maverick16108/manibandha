@@ -1595,8 +1595,10 @@ const showInfo = ref(false)
 // лента отодвигается вправо-паддингом); 'popup' — по клику на аватар/имя, модалка по центру.
 const infoMode = ref('side')
 const infoData = ref(null)
+// боковая панель влезает, только если ленте остаётся ≥800px (иначе прячем — чат становится слишком узким)
+const sidePanelFits = computed(() => !convElW.value || (convElW.value - 384) >= 800)
 // панель сбоку открыта (инфо или медиа-обзор в режиме side) — тогда лента/композер получают правый отступ
-const sideDockOpen = computed(() => infoMode.value === 'side' && (showInfo.value || mediaBrowser.open))
+const sideDockOpen = computed(() => infoMode.value === 'side' && (showInfo.value || mediaBrowser.open) && sidePanelFits.value)
 let infoCache = {}
 try { infoCache = JSON.parse(localStorage.getItem('chatInfoCache') || '{}') || {} } catch { infoCache = {} }
 // статус собеседника в личном чате (в сети / был(а) …)
@@ -1735,7 +1737,7 @@ async function openUserInfo(uid) {
 // клик по шапке чата: группа — боковая панель; личный — центральный попап собеседника (можно вместе с панелью)
 async function openHeaderProfile() {
   const id = activeId.value; if (!id) return
-  if (isActiveGroup.value) { openInfo('side'); return }
+  if (isActiveGroup.value) { openInfo('popup'); return } // группа — инфо в центральном попапе
   profilePopup.value = infoCache[id] || null
   try { const { data } = await client.get(`/chats/${id}/info`); profilePopup.value = data; infoCache[id] = data } catch { /* оставляем кэш */ }
 }
@@ -2308,7 +2310,7 @@ onBeforeUnmount(() => {
 
         <!-- Панель информации: side — доком справа (чат доступен), popup — модалка по центру -->
         <transition :name="infoMode === 'side' ? 'info-slide' : 'info-pop'">
-          <div v-if="showInfo" :class="infoMode === 'side'
+          <div v-if="showInfo && (infoMode !== 'side' || sidePanelFits)" :class="infoMode === 'side'
                  ? 'absolute inset-y-0 right-0 z-30 flex w-full sm:w-96'
                  : 'absolute inset-0 z-40 flex'">
             <div v-if="infoMode === 'popup'" class="absolute inset-0 bg-ink-900/40" @click="closeInfo"></div>
@@ -2373,7 +2375,7 @@ onBeforeUnmount(() => {
 
         <!-- Просмотр медиа по типу — следует режиму инфо-панели (side/popup) -->
         <transition :name="infoMode === 'side' ? 'info-slide' : 'info-pop'">
-          <div v-if="mediaBrowser.open" :class="infoMode === 'side'
+          <div v-if="mediaBrowser.open && (infoMode !== 'side' || sidePanelFits)" :class="infoMode === 'side'
                  ? 'absolute inset-y-0 right-0 z-[35] flex w-full sm:w-96'
                  : 'absolute inset-0 z-40 flex'">
             <div v-if="infoMode === 'popup'" class="absolute inset-0 bg-ink-900/40" @click="closeMediaBrowser"></div>
@@ -2461,7 +2463,7 @@ onBeforeUnmount(() => {
 
         <div ref="scroller" class="chat-bg flex flex-1 flex-col overflow-y-auto px-2.5 py-4" :class="sideDockOpen && 'sm:!mr-96 sm:!pr-4'"
              @scroll="onScroll" @click="onScrollerClick" @mousedown="onScrollerDown" @touchstart="onScrollerDown" @contextmenu.prevent>
-          <div ref="listWrap" class="mt-auto space-y-1">
+          <div ref="listWrap" class="mt-auto w-full min-w-0 space-y-1">
           <template v-for="run in messageRuns" :key="run.key">
           <!-- встроенная плашка даты между днями (остаётся в ленте); плавающая сверху её дублирует
                только когда встроенная ушла вверх за экран (см. updateFloatingDate) -->
@@ -2801,7 +2803,7 @@ onBeforeUnmount(() => {
         </div>
 
         <!-- ОДНА плавающая дата (старая): гаснет по мере приближения следующего дня, «Вчера» встаёт на её место -->
-        <div class="pointer-events-none absolute inset-x-0 top-2 z-[6] flex justify-center" :style="{ opacity: floatDate.show ? floatDate.opacity : 0 }">
+        <div class="pointer-events-none absolute inset-x-0 top-2 z-[6] flex justify-center px-2.5" :class="sideDockOpen && 'sm:!right-96'" :style="{ opacity: floatDate.show ? floatDate.opacity : 0 }">
           <span class="rounded-full bg-ink-900/55 px-3 py-1 text-xs font-semibold text-white shadow-sm backdrop-blur-sm">{{ floatDate.label }}</span>
         </div>
         </div>

@@ -1424,8 +1424,8 @@ const WIDE_THRESHOLD = 1200
 const wide = computed(() => {
   const w = winW.value
   const lw = w >= 640 ? listWidth.value : 0
-  const dock = (w >= 640 && sideDockOpen.value) ? 384 : 0
-  return (w - lw - dock) > WIDE_THRESHOLD
+  // раскладка зависит ТОЛЬКО от ширины окна (минус панель списка), НЕ от боковой инфо-панели
+  return (w - lw) > WIDE_THRESHOLD
 })
 function onWinResize() { isDesktop.value = window.innerWidth >= 640; winW.value = window.innerWidth; winH.value = window.innerHeight }
 function startResize(e) {

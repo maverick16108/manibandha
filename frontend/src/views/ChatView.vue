@@ -2264,7 +2264,7 @@ onBeforeUnmount(() => {
              @dragover="onDragOver" @dragleave="onDragLeave">
       <template v-if="activeChat">
         <!-- Панель выделения нескольких сообщений -->
-        <header v-if="selectMode" class="flex items-center gap-2 border-b border-parchment-200 px-4 py-2.5">
+        <header v-if="selectMode" class="flex items-center gap-2 border-b border-parchment-200 px-4 py-2.5 transition-[padding]" :class="sideDockOpen && 'sm:!pr-[25rem]'">
           <button class="rounded-lg p-1.5 text-ink-700/60 hover:bg-parchment-100" title="Отмена" @click="exitSelect"><AppIcon name="close" :size="18" /></button>
           <div class="flex-1 truncate font-medium text-ink-900">Выбрано: {{ selected.size }}</div>
           <button class="flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium text-saffron-700 hover:bg-parchment-100 disabled:opacity-40" :disabled="!selected.size" @click="forwardSelected">

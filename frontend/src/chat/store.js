@@ -38,10 +38,14 @@ function onEphemeral(e) {
 }
 
 // ── уведомление о новом сообщении: счётчик в заголовке вкладки + ненавязчивый звук ──
+// Тревожим ТОЛЬКО когда вкладка неактивна (пользователь ушёл на другую вкладку/свернул). Пока
+// человек в приложении (вкладка в фокусе) — ни звука, ни бейджа в тайтле (непрочитанные и так
+// видны в списке и на пункте «Чат»).
 const BASE_TITLE = 'Манибандха Прабху';
+function tabActive() { return document.visibilityState === 'visible' && document.hasFocus(); }
 function updateTabTitle() {
   const n = chatState.totalUnread || 0;
-  document.title = n > 0 ? `(${n}) ${BASE_TITLE}` : BASE_TITLE;
+  document.title = (!tabActive() && n > 0) ? `(${n}) ${BASE_TITLE}` : BASE_TITLE;
 }
 let lastNotifyAt = 0;
 let notifyCtx = null;
@@ -67,12 +71,10 @@ function playNotifySound() {
     tone(0.14, 880, 0.16, 0.05);
   } catch { /* аудио недоступно */ }
 }
-// новое входящее (от собеседника, real-time). Молчим, если пользователь СЕЙЧАС в этом чате и вкладка активна.
+// новое входящее (от собеседника, real-time). Звук — только если вкладка неактивна.
 function onIncomingMessage(m) {
   if (!m || m.author_id === chatState.meId) return;
-  const viewingThisChat = chatState.activeChatId === m.chat_id
-    && document.visibilityState === 'visible' && document.hasFocus();
-  if (viewingThisChat) return;
+  if (tabActive()) return; // пользователь в приложении — не тревожим
   playNotifySound();
 }
 
@@ -143,6 +145,10 @@ export async function initChat({ meId, getToken }) {
     window.addEventListener('online', resync);
     document.addEventListener('visibilitychange', onVisibleResync);
     window.addEventListener('focus', resync);
+    // тайтл: показать (N) при уходе с вкладки, убрать бейдж при возврате
+    window.addEventListener('focus', updateTabTitle);
+    window.addEventListener('blur', updateTabTitle);
+    document.addEventListener('visibilitychange', updateTabTitle);
     // очистка индикатора «печатает…»
     typingTimer = setInterval(() => {
       const now = Date.now();
@@ -240,6 +246,10 @@ export function teardownChat() {
   try { window.removeEventListener('online', resync); } catch { /* ignore */ }
   try { document.removeEventListener('visibilitychange', onVisibleResync); } catch { /* ignore */ }
   try { window.removeEventListener('focus', resync); } catch { /* ignore */ }
+  try { window.removeEventListener('focus', updateTabTitle); } catch { /* ignore */ }
+  try { window.removeEventListener('blur', updateTabTitle); } catch { /* ignore */ }
+  try { document.removeEventListener('visibilitychange', updateTabTitle); } catch { /* ignore */ }
+  try { document.title = BASE_TITLE; } catch { /* ignore */ }
   if (safetyTimer) clearInterval(safetyTimer);
   if (typingTimer) clearInterval(typingTimer);
   if (refreshChatsTimer) { clearTimeout(refreshChatsTimer); refreshChatsTimer = null; }

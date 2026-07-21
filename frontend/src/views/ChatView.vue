@@ -1718,11 +1718,11 @@ function toggleAddMember(uid) { const i = addMembersSel.value.indexOf(uid); if (
 async function confirmAddMembers() {
   const ids = [...addMembersSel.value]; addMembersOpen.value = false
   if (!ids.length || !activeId.value) return
-  try { const { data } = await client.post(`/chats/${activeId.value}/members`, { user_ids: ids }); infoData.value = data; infoCache[activeId.value] = data } catch { showToast('Не удалось добавить') }
+  try { const { data } = await client.post(`/chats/${activeId.value}/members`, { user_ids: ids }); infoData.value = data; infoCache[activeId.value] = data; if (profilePopup.value?.type === 'group') profilePopup.value = data } catch { showToast('Не удалось добавить') }
 }
 async function kickMember(uid) {
   if (!activeId.value || !(await confirmDialog({ message: 'Удалить участника из группы?', confirmText: 'Удалить', danger: true }))) return
-  try { const { data } = await client.delete(`/chats/${activeId.value}/members/${uid}`); infoData.value = data; infoCache[activeId.value] = data } catch { showToast('Не удалось удалить') }
+  try { const { data } = await client.delete(`/chats/${activeId.value}/members/${uid}`); infoData.value = data; infoCache[activeId.value] = data; if (profilePopup.value?.type === 'group') profilePopup.value = data } catch { showToast('Не удалось удалить') }
 }
 async function leaveGroupConfirm() {
   const owner = isActiveOwner.value
@@ -1954,6 +1954,7 @@ async function saveGroup() {
   if (!title) return
   await updateChat(activeId.value, { title, photo_url: gPhoto.value || null, is_public: gIsPublic.value, hide_history: gHideHistory.value })
   if (infoData.value) { infoData.value.is_public = gIsPublic.value; infoData.value.hide_history = gHideHistory.value }
+  if (profilePopup.value?.type === 'group') profilePopup.value = { ...profilePopup.value, title, photo: gPhoto.value || null, is_public: gIsPublic.value, hide_history: gHideHistory.value }
   showGroupEdit.value = false
 }
 
@@ -3166,8 +3167,8 @@ onBeforeUnmount(() => {
                 <div class="absolute right-0 top-full z-20 mt-1 w-60 overflow-hidden whitespace-nowrap rounded-xl bg-white py-1 shadow-lg ring-1 ring-parchment-200">
                   <template v-if="ppIsGroup">
                     <template v-if="ppIsOwner">
-                      <button class="flex w-full items-center gap-3 px-4 py-2.5 text-left text-[15px] text-ink-700 hover:bg-parchment-50" @click="closeProfilePopup(); openGroupEdit()"><AppIcon name="settings" :size="18" /> Управление группой</button>
-                      <button class="flex w-full items-center gap-3 px-4 py-2.5 text-left text-[15px] text-ink-700 hover:bg-parchment-50" @click="closeProfilePopup(); openAddMembers()"><AppIcon name="plus" :size="18" /> Добавить участников</button>
+                      <button class="flex w-full items-center gap-3 px-4 py-2.5 text-left text-[15px] text-ink-700 hover:bg-parchment-50" @click="ppMenu = false; openGroupEdit()"><AppIcon name="settings" :size="18" /> Управление группой</button>
+                      <button class="flex w-full items-center gap-3 px-4 py-2.5 text-left text-[15px] text-ink-700 hover:bg-parchment-50" @click="ppMenu = false; openAddMembers()"><AppIcon name="plus" :size="18" /> Добавить участников</button>
                       <div class="my-1 h-px bg-parchment-100"></div>
                     </template>
                     <button class="flex w-full items-center gap-3 px-4 py-2.5 text-left text-[15px] text-red-600 hover:bg-red-50" @click="closeProfilePopup(); leaveGroupConfirm()"><AppIcon name="trash" :size="18" /> {{ ppIsOwner ? 'Удалить и покинуть' : 'Покинуть' }}</button>
@@ -3205,7 +3206,7 @@ onBeforeUnmount(() => {
             <div v-if="ppIsGroup" class="border-t border-parchment-200 pt-2">
               <div class="flex items-center justify-between px-6 pb-1">
                 <div class="text-xs font-semibold uppercase tracking-wide text-ink-700/50">{{ ppMembers.length }} {{ pluralWord(ppMembers.length, ['участник', 'участника', 'участников']) }}</div>
-                <button v-if="ppIsOwner" class="flex items-center gap-1 rounded-lg px-2 py-1 text-sm text-saffron-700 hover:bg-parchment-100" @click="closeProfilePopup(); openAddMembers()"><AppIcon name="plus" :size="16" /> Добавить</button>
+                <button v-if="ppIsOwner" class="flex items-center gap-1 rounded-lg px-2 py-1 text-sm text-saffron-700 hover:bg-parchment-100" @click="openAddMembers()"><AppIcon name="plus" :size="16" /> Добавить</button>
               </div>
               <button v-for="mem in ppMembers" :key="mem.id" class="flex w-full items-center gap-3 px-6 py-2 text-left hover:bg-parchment-50" @click="openUserInfo(mem.id)">
                 <img v-if="mem.avatar" :src="thumbUrl(mem.avatar)" @error="imgFull($event, mem.avatar)" class="h-10 w-10 shrink-0 rounded-full object-cover" />
@@ -3307,7 +3308,7 @@ onBeforeUnmount(() => {
     </div>
 
     <!-- Добавление участников в группу (создатель) -->
-    <div v-if="addMembersOpen" class="fixed inset-0 z-40 flex items-center justify-center bg-ink-900/40 p-4" @click.self="addMembersOpen = false">
+    <div v-if="addMembersOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/40 p-4" @click.self="addMembersOpen = false">
       <div class="flex max-h-[80vh] w-full max-w-md flex-col overflow-hidden rounded-xl bg-white shadow-xl">
         <div class="flex items-center justify-between border-b border-parchment-200 px-4 py-3">
           <h3 class="font-medium text-ink-900">Добавить участников</h3>

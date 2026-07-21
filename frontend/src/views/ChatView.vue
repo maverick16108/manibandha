@@ -1424,7 +1424,8 @@ const winH = ref(typeof window !== 'undefined' ? window.innerHeight : 800)
 const WIDE_THRESHOLD = 1200
 // база = измеренная ширина переписки; до измерения — приблизительно (окно − 72 меню − панель списка)
 function convBase() { return convElW.value || Math.max(240, winW.value - (winW.value >= 640 ? 72 + listWidth.value : 0)) }
-const wide = computed(() => convBase() > WIDE_THRESHOLD) // зависит ТОЛЬКО от ширины переписки, НЕ от боковой панели
+// в ГРУППАХ всегда «всё слева»; раскладка «свои справа/чужие слева» — только в личных чатах при узкой ленте
+const wide = computed(() => isGroup.value || convBase() > WIDE_THRESHOLD)
 // наблюдаем реальную ширину области переписки (учитывает и левое меню, и панель списка)
 watch(convEl, (el) => {
   resizeObs?.disconnect()
@@ -3332,5 +3333,12 @@ onBeforeUnmount(() => {
   background-image: url('../assets/chat-veda-bg.webp');
   background-size: 460px auto;
   background-repeat: repeat;
+  /* тонкий ПОСТОЯННЫЙ скроллбар (не оверлейный) с прозрачной дорожкой — без белой полосы */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(120, 90, 60, 0.35) transparent;
 }
+.chat-bg::-webkit-scrollbar { width: 7px; }
+.chat-bg::-webkit-scrollbar-track { background: transparent; }
+.chat-bg::-webkit-scrollbar-thumb { background-color: rgba(120, 90, 60, 0.35); border-radius: 8px; }
+.chat-bg::-webkit-scrollbar-thumb:hover { background-color: rgba(120, 90, 60, 0.5); }
 </style>

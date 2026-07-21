@@ -2828,7 +2828,8 @@ onBeforeUnmount(() => {
         </div>
 
         <!-- ОДНА плавающая дата (старая): гаснет по мере приближения следующего дня, «Вчера» встаёт на её место -->
-        <div class="pointer-events-none absolute inset-x-0 top-2 z-[6] flex justify-center px-2.5" :class="sideDockOpen && 'sm:!right-96'" :style="{ opacity: floatDate.show ? floatDate.opacity : 0 }">
+        <!-- right-[7px]: не перекрывать ширину скроллбара — иначе центр плавающей плашки уезжает вправо относительно встроенных -->
+        <div class="pointer-events-none absolute left-0 right-[7px] top-2 z-[6] flex justify-center px-2.5" :class="sideDockOpen && 'sm:!right-96'" :style="{ opacity: floatDate.show ? floatDate.opacity : 0 }">
           <span class="rounded-full bg-ink-900/55 px-3 py-1 text-xs font-semibold text-white shadow-sm backdrop-blur-sm">{{ floatDate.label }}</span>
         </div>
         </div>

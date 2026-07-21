@@ -17,6 +17,10 @@
   h1, h2, h3 {
     @apply font-display;
   }
+  /* картинки нельзя «взять и перетащить» (нативный drag браузера) */
+  img {
+    -webkit-user-drag: none;
+  }
 }
 
 @layer components {

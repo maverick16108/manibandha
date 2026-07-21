@@ -1595,8 +1595,8 @@ const showInfo = ref(false)
 // лента отодвигается вправо-паддингом); 'popup' — по клику на аватар/имя, модалка по центру.
 const infoMode = ref('side')
 const infoData = ref(null)
-// боковая панель влезает, только если ленте остаётся ≥800px (иначе прячем — чат становится слишком узким)
-const sidePanelFits = computed(() => !convElW.value || (convElW.value - 384) >= 800)
+// боковая панель влезает, только если ленте остаётся ≥600px (иначе прячем — чат становится слишком узким)
+const sidePanelFits = computed(() => !convElW.value || (convElW.value - 384) >= 600)
 // панель сбоку открыта (инфо или медиа-обзор в режиме side) — тогда лента/композер получают правый отступ
 const sideDockOpen = computed(() => infoMode.value === 'side' && (showInfo.value || mediaBrowser.open) && sidePanelFits.value)
 let infoCache = {}
@@ -3335,12 +3335,13 @@ onBeforeUnmount(() => {
   background-image: url('../assets/chat-veda-bg.webp');
   background-size: 460px auto;
   background-repeat: repeat;
-  /* тонкий ПОСТОЯННЫЙ скроллбар (не оверлейный) с прозрачной дорожкой — без белой полосы */
+  /* тонкий скроллбар с прозрачной дорожкой (без белой полосы); ползунок виден только при наведении
+     на область сообщений — увёл мышку, ползунок пропал */
   scrollbar-width: thin;
-  scrollbar-color: rgba(120, 90, 60, 0.35) transparent;
 }
 .chat-bg::-webkit-scrollbar { width: 7px; }
 .chat-bg::-webkit-scrollbar-track { background: transparent; }
-.chat-bg::-webkit-scrollbar-thumb { background-color: rgba(120, 90, 60, 0.35); border-radius: 8px; }
-.chat-bg::-webkit-scrollbar-thumb:hover { background-color: rgba(120, 90, 60, 0.5); }
+.chat-bg::-webkit-scrollbar-thumb { background-color: transparent; border-radius: 8px; transition: background-color .2s ease; }
+.chat-bg:hover::-webkit-scrollbar-thumb { background-color: rgba(120, 90, 60, 0.35); }
+.chat-bg::-webkit-scrollbar-thumb:hover { background-color: rgba(120, 90, 60, 0.55); }
 </style>

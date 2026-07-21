@@ -2108,7 +2108,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="-m-4 flex h-screen overflow-hidden bg-white sm:-m-6 lg:-m-8" @contextmenu.prevent>
+  <div class="-m-4 flex h-screen select-none overflow-hidden bg-white sm:-m-6 lg:-m-8" @contextmenu.prevent>
     <!-- Список чатов -->
     <aside class="flex w-full shrink-0 flex-col border-r border-parchment-200" :class="activeId ? 'hidden sm:flex' : 'flex'"
            :style="isDesktop ? { width: listWidth + 'px' } : null">
@@ -2402,7 +2402,7 @@ onBeforeUnmount(() => {
                    ? 'relative flex h-full w-full flex-col border-l border-parchment-200 bg-white shadow-xl'
                    : 'relative m-auto flex max-h-[92%] w-full max-w-md flex-col overflow-hidden rounded-2xl bg-white shadow-2xl'">
               <header class="flex items-center gap-2 border-b border-parchment-200 px-3 py-3">
-                <button class="rounded-lg p-1.5 text-ink-700/60 hover:bg-parchment-100" title="Назад" @click="closeMediaBrowser"><AppIcon name="chevron" :size="18" class="rotate-90" /></button>
+                <button class="rounded-lg p-1.5 text-ink-700/60 hover:bg-parchment-100" title="Назад" @click="closeMediaBrowser"><AppIcon name="chevron" :size="24" class="rotate-90" /></button>
                 <div class="flex-1 font-medium text-ink-900">{{ mediaBrowser.title }}</div>
                 <button class="rounded-lg p-1.5 text-ink-700/60 hover:bg-parchment-100" title="Закрыть" @click="closeMediaBrowser(); closeInfo()"><AppIcon name="close" :size="24" /></button>
               </header>
@@ -2480,7 +2480,7 @@ onBeforeUnmount(() => {
         <div class="relative flex min-h-0 flex-1 flex-col">
         <div class="pointer-events-none absolute inset-x-0 top-0 z-20 [&>*]:pointer-events-auto" :class="sideDockOpen && 'sm:!right-96'"><AudioBar /></div>
 
-        <div ref="scroller" class="chat-bg flex flex-1 flex-col overflow-y-auto px-2.5 py-4" :class="[sideDockOpen && 'sm:!mr-96 sm:!pr-4', scrollerHover && 'scroll-show']"
+        <div ref="scroller" class="chat-bg flex flex-1 select-text flex-col overflow-y-auto px-2.5 py-4" :class="[sideDockOpen && 'sm:!mr-96 sm:!pr-4', scrollerHover && 'scroll-show']"
              @scroll="onScroll" @click="onScrollerClick" @mousedown="onScrollerDown" @touchstart="onScrollerDown" @contextmenu.prevent
              @mouseenter="scrollerHover = true" @mouseleave="scrollerHover = false">
           <div ref="listWrap" class="mt-auto w-full min-w-0 space-y-1">
@@ -2884,7 +2884,7 @@ onBeforeUnmount(() => {
             <input ref="fileInput" type="file" multiple class="hidden" @change="onPickFile" />
 
             <textarea ref="inputEl" v-model="body" rows="1" :maxlength="MAX_LEN"
-                      class="chat-input min-h-[2.75rem] flex-1 resize-none rounded-2xl border border-parchment-300 bg-parchment-50 px-4 py-2.5 text-base leading-6 focus:border-saffron-400 focus:outline-none focus:ring-1 focus:ring-saffron-400"
+                      class="chat-input min-h-[2.75rem] flex-1 select-text resize-none rounded-2xl border border-parchment-300 bg-parchment-50 px-4 py-2.5 text-base leading-6 focus:border-saffron-400 focus:outline-none focus:ring-1 focus:ring-saffron-400"
                       placeholder="Сообщение…" @input="onInput" @keydown="onKeydown" @contextmenu="onInputContext"></textarea>
 
             <div class="relative mb-0.5 shrink-0">
@@ -2899,10 +2899,10 @@ onBeforeUnmount(() => {
               </template>
             </div>
 
-            <button v-if="body.trim()" class="mb-0.5 shrink-0 rounded-full bg-saffron-500 p-2 text-white hover:bg-saffron-600" title="Отправить" @click="send">
-              <AppIcon name="send" :size="20" />
+            <button v-if="body.trim()" class="mb-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-saffron-500 text-white hover:bg-saffron-600" title="Отправить" @click="send">
+              <AppIcon name="send" :size="22" />
             </button>
-            <button v-else class="mb-0.5 shrink-0 touch-none select-none rounded-full p-2 text-ink-700/60 transition hover:bg-parchment-100 hover:text-saffron-600"
+            <button v-else class="mb-0.5 flex h-11 w-11 shrink-0 touch-none select-none items-center justify-center rounded-full text-ink-700/60 transition hover:bg-parchment-100 hover:text-saffron-600"
                     :title="recMode === 'video' ? 'Кружок — удерживайте; коротко — голосовое' : 'Голосовое — удерживайте; коротко — кружок'"
                     :disabled="uploading" @pointerdown="recPointerDown" @contextmenu.prevent>
               <AppIcon :name="recMode === 'video' ? 'video' : 'mic'" :size="26" />

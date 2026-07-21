@@ -50,7 +50,7 @@ export function startCall({ peerId, name, avatar, video }) {
   call.peerId = peerId; call.name = name || ''; call.avatar = avatar || ''
   call.localVideo = !!video; call.video = !!video; call.remoteVideo = false
   call.status = 'idle-outgoing'; call.open = true
-  call.outgoing = true; call.connectedAt = 0; call.eventSent = false // для сообщения-события в чат
+  call.outgoing = true; call.connectedAt = 0; call.eventSent = false; call.placed = false // для сообщения-события в чат
 }
 // событие о звонке в чат отправляет ВЫЗЫВАЮЩИЙ (чтобы не дублировать): @[call](status|длит.сек|видео)
 // status: ok — ответили; cancel — вызывающий отменил до ответа; out — отклонили/не ответили
@@ -62,7 +62,7 @@ async function postCallEvent(peerId, status, dur, video) {
 }
 // reasonIfNo — статус, если НЕ ответили (cancel — я отменил; out — отклонили/не ответили)
 function postCallSummary(reasonIfNo) {
-  if (!call.outgoing || !call.peerId || call.eventSent) return
+  if (!call.outgoing || !call.peerId || call.eventSent || !call.placed) return // не начали звонок — не пишем
   call.eventSent = true
   const answered = !!call.connectedAt
   const status = answered ? 'ok' : reasonIfNo
@@ -88,7 +88,7 @@ function setupPc(peerId, cfg, polite) {
   }
 }
 export async function placeCall() {
-  call.status = 'calling'
+  call.status = 'calling'; call.placed = true // звонок реально начат (иначе «Отмена» до звонка не пишет событие)
   try { await ensureLocalStream(call.localVideo) }
   catch { showToast('Нет доступа к микрофону/камере'); endCall(); return }
   const rtcCfg = await getRtcConfig()

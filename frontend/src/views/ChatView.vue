@@ -63,13 +63,17 @@ const chatOpening = ref(false)         // прячем ленту на врем�
 // Дата вверху — ОДНА плавающая плашка (не sticky-собратья, которые пилятся стопкой). Показывает дату
 // верхнего видимого сообщения; при смене дня — кроссфейд НА МЕСТЕ (старая гаснет, новая встаёт).
 // Встроенные разделители в ленте плавно ГАСНУТ, входя в зону плашки, чтобы не дублироваться.
-const floatDate = reactive({ label: '', show: false, opacity: 1 })
+const floatDate = reactive({ label: '', show: false, opacity: 1, left: 0, width: 0 })
 let floatRaf = 0
 function updateFloatingDate() {
   if (floatRaf) return
   floatRaf = requestAnimationFrame(() => {
     floatRaf = 0
     const el = scroller.value; if (!el) { floatDate.show = false; return }
+    // Горизонтальный бокс плавающей плашки === бокс ленты (listWrap): встроенные плашки центрируются
+    // именно в нём, поэтому меряем его и центрируем плавающую там же (учитывает паддинги, скроллбар, боковую панель).
+    const lw = listWrap.value
+    if (lw) { const lr = lw.getBoundingClientRect(), wr = el.parentElement.getBoundingClientRect(); floatDate.left = lr.left - wr.left; floatDate.width = lr.width }
     const line = el.getBoundingClientRect().top + 8 // позиция плавающей плашки (top-2)
     const seps = el.querySelectorAll('[data-daysep]')
     let label = ''
@@ -1431,11 +1435,11 @@ const wide = computed(() => isGroup.value || convBase() > WIDE_THRESHOLD)
 watch(convEl, (el) => {
   resizeObs?.disconnect()
   if (el && typeof ResizeObserver !== 'undefined') {
-    resizeObs = new ResizeObserver(() => { convElW.value = el.clientWidth })
+    resizeObs = new ResizeObserver(() => { convElW.value = el.clientWidth; updateFloatingDate() })
     resizeObs.observe(el); convElW.value = el.clientWidth
   }
 })
-function onWinResize() { isDesktop.value = window.innerWidth >= 640; winW.value = window.innerWidth; winH.value = window.innerHeight }
+function onWinResize() { isDesktop.value = window.innerWidth >= 640; winW.value = window.innerWidth; winH.value = window.innerHeight; updateFloatingDate() }
 function startResize(e) {
   const startX = e.clientX
   const startW = listWidth.value
@@ -2828,8 +2832,8 @@ onBeforeUnmount(() => {
         </div>
 
         <!-- ОДНА плавающая дата (старая): гаснет по мере приближения следующего дня, «Вчера» встаёт на её место -->
-        <!-- right-[7px]: не перекрывать ширину скроллбара — иначе центр плавающей плашки уезжает вправо относительно встроенных -->
-        <div class="pointer-events-none absolute left-0 right-[7px] top-2 z-[6] flex justify-center px-2.5" :class="sideDockOpen && 'sm:!right-96'" :style="{ opacity: floatDate.show ? floatDate.opacity : 0 }">
+        <!-- бокс плашки === бокс ленты (замеряется в updateFloatingDate) — центр точно совпадает со встроенными -->
+        <div class="pointer-events-none absolute top-2 z-[6] flex justify-center" :style="{ left: floatDate.left + 'px', width: floatDate.width + 'px', opacity: floatDate.show ? floatDate.opacity : 0 }">
           <span class="rounded-full bg-ink-900/55 px-3 py-1 text-xs font-semibold text-white shadow-sm backdrop-blur-sm">{{ floatDate.label }}</span>
         </div>
         </div>

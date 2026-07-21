@@ -388,12 +388,14 @@ function ctxSaveAs() {
   a.href = d.url; a.download = d.name; a.target = '_blank'; a.rel = 'noopener'
   document.body.appendChild(a); a.click(); a.remove()
 }
+const ctxMenuEl = ref(null)
+const ctxMenuSize = reactive({ w: 240, h: 560 }) // реальный размер меряем после открытия (кол-во пунктов разное)
 const ctxStyle = computed(() => {
   const vw = typeof window !== 'undefined' ? window.innerWidth : 9999
   const vh = typeof window !== 'undefined' ? window.innerHeight : 9999
   return {
-    left: Math.max(8, Math.min(ctx.x, vw - 220)) + 'px',
-    top: Math.max(8, Math.min(ctx.y, vh - 340)) + 'px', // меню высокое (6 пунктов + реакции) — не даём уйти за низ
+    left: Math.max(8, Math.min(ctx.x, vw - ctxMenuSize.w - 8)) + 'px',
+    top: Math.max(8, Math.min(ctx.y, vh - ctxMenuSize.h - 8)) + 'px', // не даём уйти за низ/верх экрана
   }
 })
 function onContext(e, m) {
@@ -402,6 +404,8 @@ function onContext(e, m) {
   ctx.x = e.clientX; ctx.y = e.clientY; ctx.m = m
   ctx.selText = (window.getSelection?.().toString() || '').trim()
   ctx.open = true
+  // после рендера меряем фактические размеры меню и переклампливаем позицию (нижнее сообщение — меню вверх)
+  nextTick(() => { const el = ctxMenuEl.value; if (el) { ctxMenuSize.w = el.offsetWidth; ctxMenuSize.h = el.offsetHeight } })
 }
 const EDIT_WINDOW = 24 * 3600_000
 function canEdit(m) { return isMine(m) && m.id && !m.deleted && !isVoice(m) && (Date.now() - new Date(m.created_at).getTime()) <= EDIT_WINDOW }
@@ -2984,7 +2988,7 @@ onBeforeUnmount(() => {
     <!-- Контекстное меню (ПКМ) -->
     <template v-if="ctx.open">
       <div class="fixed inset-0 z-40" @click="closeCtx" @contextmenu.prevent="closeCtx"></div>
-      <div class="fixed z-50 w-60 overflow-hidden rounded-xl bg-white py-1 shadow-xl ring-1 ring-parchment-200" :style="ctxStyle">
+      <div ref="ctxMenuEl" class="fixed z-50 max-h-[calc(100dvh-1rem)] w-60 overflow-y-auto rounded-xl bg-white py-1 shadow-xl ring-1 ring-parchment-200" :style="ctxStyle">
         <div class="flex justify-around px-2 py-2">
           <button v-for="e in REACTION_EMOJIS" :key="e" class="rounded-full p-1 text-2xl leading-none transition hover:scale-125" @click="ctxReact(e)">{{ e }}</button>
         </div>

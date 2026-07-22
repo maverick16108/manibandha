@@ -43,6 +43,7 @@ async function load() {
 const searchInput = ref(null)
 function onDocType(e) {
   if (e.ctrlKey || e.metaKey || e.altKey) return
+  if (e.key === 'Escape' && parts.value) { closeParticipants(); return }
   if (e.key === 'Escape' && editing.value) { cancelEdit(); return }
   const t = e.target
   if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return

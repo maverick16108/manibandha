@@ -147,7 +147,7 @@ async function remove(r) {
           </thead>
           <tbody>
             <template v-for="r in filtered" :key="r.id">
-              <tr class="border-b border-parchment-100 align-top transition hover:bg-parchment-50/60">
+              <tr class="cursor-pointer border-b border-parchment-100 align-top transition hover:bg-parchment-50/60" @click="playing = playing === r.id ? null : r.id">
                 <td class="px-5 py-3.5">
                   <div class="font-medium text-ink-900">{{ r.title }}</div>
                   <div v-if="r.conference_title && r.conference_title !== r.title" class="text-xs text-ink-700/45">{{ r.conference_title }}</div>
@@ -163,7 +163,7 @@ async function remove(r) {
                   </span>
                   <span v-else class="text-ink-700/40">—</span>
                 </td>
-                <td class="px-5 py-3.5">
+                <td class="px-5 py-3.5" @click.stop>
                   <div class="flex items-center justify-end gap-1">
                     <button class="btn-ghost whitespace-nowrap text-sm" title="Кто был на созвоне" @click="openParticipants(r)"><AppIcon name="users" :size="16" /> Кто был</button>
                     <button class="btn-outline whitespace-nowrap text-sm" @click="playing = playing === r.id ? null : r.id"><AppIcon name="play" :size="14" /> {{ playing === r.id ? 'Скрыть' : 'Смотреть' }}</button>

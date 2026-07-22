@@ -191,7 +191,7 @@ onActivated(() => {
           <thead class="border-b border-parchment-200 bg-parchment-50 text-left text-xs uppercase tracking-wide text-ink-700/60">
             <tr>
               <th class="px-4 py-3">Имя</th>
-              <th class="px-4 py-3">Статус</th>
+              <th class="px-4 py-3">{{ filters.event_month ? 'Событие' : 'Статус' }}</th>
               <th class="px-4 py-3">Область / Город</th>
               <th class="px-4 py-3">Куратор</th>
             </tr>
@@ -222,9 +222,12 @@ onActivated(() => {
                   </RouterLink>
                 </td>
                 <td class="px-4 py-3">
-                  <span class="badge" :class="STATUS_BADGE[d.initiation_status]">{{ STATUS_LABELS[d.initiation_status] }}</span>
-                  <!-- событие в выбранном месяце показываем только если оно ОТЛИЧАЕТСЯ от текущего статуса (иначе дубль) -->
-                  <span v-if="eventLabel(d) && eventLabel(d) !== STATUS_LABELS[d.initiation_status]" class="badge ml-1 bg-orange-100 text-orange-800" :title="`Событие в ${monthLabel(filters.event_month)}`">{{ eventLabel(d) }}</span>
+                  <!-- при фильтре по месяцу (клик по графику) показываем СОБЫТИЕ месяца вместо текущего статуса -->
+                  <template v-if="filters.event_month">
+                    <span v-if="eventLabel(d)" class="badge bg-orange-100 text-orange-800">{{ eventLabel(d) }}</span>
+                    <span v-else class="text-ink-700/40">—</span>
+                  </template>
+                  <span v-else class="badge" :class="STATUS_BADGE[d.initiation_status]">{{ STATUS_LABELS[d.initiation_status] }}</span>
                 </td>
                 <td class="px-4 py-3 text-ink-700">{{ d.region || d.country || '—' }}<span v-if="d.city">, {{ d.city }}</span></td>
                 <td class="px-4 py-3 text-ink-700">{{ d.mentor?.name || '—' }}</td>

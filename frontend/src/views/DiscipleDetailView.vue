@@ -2,6 +2,7 @@
 import { ref, reactive, onMounted, computed } from 'vue'
 import { useRoute, useRouter, RouterLink } from 'vue-router'
 import client from '../api/client'
+import { invalidatePrefix } from '../composables/apiCache'
 import { useAuthStore } from '../stores/auth'
 import { confirmDialog } from '../composables/confirm'
 import AppSelect from '../components/AppSelect.vue'
@@ -63,6 +64,7 @@ async function removeItem(item) {
 async function remove() {
   if (!(await confirmDialog({ message: 'Удалить ученика безвозвратно?' }))) return
   await client.delete(`/disciples/${id.value}`)
+  invalidatePrefix('/reports'); invalidatePrefix('/disciples') // обновить дашборд и список
   router.push({ name: 'disciples' })
 }
 

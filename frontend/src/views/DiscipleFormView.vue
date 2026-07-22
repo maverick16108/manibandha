@@ -9,6 +9,7 @@ import AppDatePicker from '../components/AppDatePicker.vue'
 import PhotoUpload from '../components/PhotoUpload.vue'
 import PhoneInput from '../components/PhoneInput.vue'
 import { STATUS_LABELS, STATUS_ORDER, MARITAL_LABELS, GENDER_LABELS } from '../lib/format'
+import { invalidatePrefix } from '../composables/apiCache'
 import { usePageTitle } from '../composables/pageTitle'
 
 const genderOptions = [{ value: '', label: '—' }, ...Object.entries(GENDER_LABELS).map(([value, label]) => ({ value, label }))]
@@ -94,6 +95,9 @@ function validate() {
 // убирать ошибку поля, как только оно заполнено
 watch(form, () => { for (const k of Object.keys(errors)) if (String(form[k] ?? '').trim()) delete errors[k] })
 
+// после изменения ученика сбрасываем кеш разделов, которые от него зависят —
+// иначе дашборд (сводка/города/таймлайн) и список учеников показывают старые данные
+function invalidateDiscipleCaches() { invalidatePrefix('/reports'); invalidatePrefix('/disciples') }
 async function save() {
   error.value = ''
   if (!validate()) { error.value = 'Заполните обязательные поля, отмеченные звёздочкой.'; return }
@@ -103,10 +107,12 @@ async function save() {
     if (isEdit.value) {
       await client.patch(`/disciples/${id.value}`, payload)
       saved.value = true
+      invalidateDiscipleCaches()
       router.push({ name: 'disciple', params: { id: id.value } })
     } else {
       const { data } = await client.post('/disciples', payload)
       saved.value = true
+      invalidateDiscipleCaches()
       router.push({ name: 'disciple', params: { id: data.id } })
     }
   } catch (e) {

@@ -42,7 +42,7 @@ function go(query) {
 const topGroup = (arr) => arr.filter((x) => x.key !== '—').slice(0, 10).map((x) => ({ label: x.key, value: x.count }))
 const CITY = { group_by: 'city' }; const REGION = { group_by: 'region' }
 
-async function load(silent = false) {
+async function load(silent = false, force = false) {
   // мгновенно из общего кеша (без скелетона), если уже загружали
   const s0 = peekCache('/reports/summary'); const c0 = peekCache('/reports/group', CITY)
   const r0 = peekCache('/reports/group', REGION); const t0 = peekCache('/reports/timeline')
@@ -54,10 +54,10 @@ async function load(silent = false) {
   else if (!silent && !summary.value) loading.value = true
   try {
     const [s, c, r, t] = await Promise.all([
-      cachedGet('/reports/summary', { ttl: TTL.list }),
-      cachedGet('/reports/group', { params: CITY, ttl: TTL.list }),
-      cachedGet('/reports/group', { params: REGION, ttl: TTL.list }),
-      cachedGet('/reports/timeline', { ttl: TTL.list }),
+      cachedGet('/reports/summary', { ttl: TTL.list, force }),
+      cachedGet('/reports/group', { params: CITY, ttl: TTL.list, force }),
+      cachedGet('/reports/group', { params: REGION, ttl: TTL.list, force }),
+      cachedGet('/reports/timeline', { ttl: TTL.list, force }),
     ])
     summary.value = s
     cities.value = topGroup(c)
@@ -68,9 +68,10 @@ async function load(silent = false) {
   }
 }
 onMounted(() => load())
-// keep-alive: первую активацию (сразу после mount) пропускаем, дальше — тихий рефреш без скелетона
+// keep-alive: первую активацию (сразу после mount) пропускаем, дальше — ПРИНУДИТЕЛЬНЫЙ тихий рефреш
+// (force=true), чтобы дашборд всегда отражал правки анкет учеников независимо от кеша/TTL
 let firstActivate = true
-onActivated(() => { if (firstActivate) { firstActivate = false; return } load(true) })
+onActivated(() => { if (firstActivate) { firstActivate = false; return } load(true, true) })
 </script>
 
 <template>

@@ -62,6 +62,19 @@ const geom = computed(() => {
   }))
   return { n, niceMax, ticks, x, y, lines }
 })
+
+// тултип: что произошло в наведённый месяц (получение пранамы / инициации) — по сериям с count > 0
+const TIPW = 172
+const tip = computed(() => {
+  const i = hover.value
+  if (i < 0 || !props.data[i]) return null
+  const d = props.data[i]
+  const rows = SERIES.filter((s) => (d[s.key] || 0) > 0).map((s) => ({ color: s.color, text: `${s.label}: ${d[s.key]}` }))
+  const h = rows.length ? 32 + rows.length * 16 : 44
+  const gx = geom.value.x(i)
+  const x = Math.max(4, Math.min(W - TIPW - 4, gx - TIPW / 2))
+  return { x, y: padT + 4, h, month: monthLabel(d.period), rows }
+})
 </script>
 
 <template>
@@ -103,6 +116,17 @@ const geom = computed(() => {
               :x="geom.x(i) - plotW / (2 * Math.max(1, geom.n))" :y="padT"
               :width="plotW / Math.max(1, geom.n)" :height="plotH" fill="transparent"
               class="cursor-pointer" @mouseenter="hover = i" @click="emit('select', d.period)" />
+      </g>
+
+      <!-- тултип: что произошло в этом месяце (получение пранамы / инициации) -->
+      <g v-if="tip" style="pointer-events: none">
+        <rect :x="tip.x" :y="tip.y" :width="TIPW" :height="tip.h" rx="8" fill="#ffffff" stroke="#e7dcc9" stroke-width="1" />
+        <text :x="tip.x + 10" :y="tip.y + 18" font-size="11.5" font-weight="700" fill="#2b2320">{{ tip.month }}</text>
+        <template v-for="(r, ri) in tip.rows" :key="ri">
+          <circle :cx="tip.x + 14" :cy="tip.y + 35 + ri * 16" r="3.5" :fill="r.color" />
+          <text :x="tip.x + 24" :y="tip.y + 39 + ri * 16" font-size="11" fill="#5a4a3a">{{ r.text }}</text>
+        </template>
+        <text v-if="!tip.rows.length" :x="tip.x + 10" :y="tip.y + 35" font-size="11" fill="#9c8f7c">нет событий</text>
       </g>
     </svg>
     <p v-else class="py-8 text-center text-sm text-ink-700/50">Нет данных по датам</p>

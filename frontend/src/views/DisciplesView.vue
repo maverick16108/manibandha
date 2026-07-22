@@ -105,9 +105,14 @@ function onDocKey(e) {
 onMounted(() => document.addEventListener('keydown', onDocKey))
 onBeforeUnmount(() => document.removeEventListener('keydown', onDocKey))
 
+// применяем фильтры из URL (deep-link с дашборда): сбрасываем и ставим только пришедшие в query
+let lastSeeded = ''
+function seedFromQuery() {
+  for (const k of Object.keys(filters)) filters[k] = route.query[k] != null ? String(route.query[k]) : ''
+  lastSeeded = JSON.stringify(route.query)
+}
 onMounted(() => {
-  // seed filters from URL query (deep links from the dashboard)
-  for (const k of Object.keys(filters)) if (route.query[k] != null) filters[k] = String(route.query[k])
+  seedFromQuery()
   // данные фильтров (в т.ч. тяжёлый /cities ~107КБ) — из общего кеша (прогреваются заранее), в фоне
   Promise.all([
     cachedGet('/disciples', { params: { is_mentor: true, limit: 500 }, ttl: TTL.list }),
@@ -117,10 +122,20 @@ onMounted(() => {
   // таблицу грузим сразу
   load().finally(() => { seeding = false })
 })
-// keep-alive: при ВОЗВРАТЕ в раздел — тихий рефреш без скелетона (первую активацию после
-// монтирования пропускаем, чтобы не грузить дважды)
+// keep-alive: onMounted сеет фильтры лишь однажды. При заходе по НОВОЙ ссылке (напр. с дашборда —
+// другой query) пере-применяем фильтры из URL; при обычном возврате (тот же query) — просто тихий рефреш.
 let firstActivate = true
-onActivated(() => { if (firstActivate) { firstActivate = false; return } load(true) })
+onActivated(() => {
+  if (JSON.stringify(route.query) !== lastSeeded) {
+    seeding = true
+    seedFromQuery()
+    load(true).finally(() => { seeding = false })
+    firstActivate = false
+    return
+  }
+  if (firstActivate) { firstActivate = false; return }
+  load(true)
+})
 </script>
 
 <template>

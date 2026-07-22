@@ -91,7 +91,7 @@ async function saveEdit(r) {
     const { data } = await client.patch(`/conferences/recordings/${r.id}`, { title: editForm.value.title, description: editForm.value.description })
     Object.assign(r, { title: data.title, description: data.description })
     editing.value = null
-  } catch (e) { alert(e.response?.data?.detail || 'Не удалось сохранить') } finally { saving.value = false }
+  } catch (e) { showToast(e.response?.data?.detail || 'Не удалось сохранить') } finally { saving.value = false }
 }
 async function remove(r) {
   const ok = await confirmDialog({ message: `Удалить запись «${r.title}»? Файл будет удалён с сервера безвозвратно.`, confirmText: 'Удалить', danger: true })
@@ -100,7 +100,7 @@ async function remove(r) {
     await client.delete(`/conferences/recordings/${r.id}`)
     recordings.value = recordings.value.filter((x) => x.id !== r.id)
     if (playing.value === r.id) playing.value = null
-  } catch (e) { alert(e.response?.data?.detail || 'Не удалось удалить') }
+  } catch (e) { showToast(e.response?.data?.detail || 'Не удалось удалить') }
 }
 </script>
 

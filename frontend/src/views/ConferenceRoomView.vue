@@ -7,6 +7,7 @@ import AppIcon from '../components/AppIcon.vue'
 import ConfTile from '../components/ConfTile.vue'
 import { usePageTitle } from '../composables/pageTitle'
 import { confirmDialog } from '../composables/confirm'
+import { showToast } from '../composables/toast'
 
 usePageTitle('Конференция')
 const route = useRoute()
@@ -229,7 +230,7 @@ async function toggleHand() {
 // ── модерация: разрешить/запретить публикацию ──
 async function permit(identity, kind, allow, exceptId) {
   try { await client.post(`/conferences/${id}/permit`, { identity, kind, allow, except: exceptId || null }) }
-  catch (e) { alert(e.response?.data?.detail || 'Не удалось') }
+  catch (e) { showToast(e.response?.data?.detail || 'Не удалось') }
 }
 // состояние сегментных переключателей «всем» (действие + подсветка)
 const allowAll = reactive({ audio: true, video: true, screen: true })
@@ -254,7 +255,7 @@ async function toggleRecord() {
   try {
     const { data } = await client.post(`/conferences/${id}/record/${recording.value ? 'stop' : 'start'}`)
     recording.value = !!data.recording
-  } catch (e) { alert(e.response?.data?.detail || 'Не удалось') } finally { recBusy.value = false }
+  } catch (e) { showToast(e.response?.data?.detail || 'Не удалось') } finally { recBusy.value = false }
 }
 
 // ── удаление участников (бан) ──
@@ -273,13 +274,13 @@ async function kick(identity, name) {
   try {
     const { data } = await client.post(`/conferences/${id}/kick`, { identity, name })
     bans.value = data.bans || bans.value
-  } catch (e) { alert(e.response?.data?.detail || 'Не удалось') }
+  } catch (e) { showToast(e.response?.data?.detail || 'Не удалось') }
 }
 async function unban(identity) {
   try {
     const { data } = await client.delete(`/conferences/${id}/bans/${encodeURIComponent(identity)}`)
     bans.value = data.bans || bans.value
-  } catch (e) { alert(e.response?.data?.detail || 'Не удалось') }
+  } catch (e) { showToast(e.response?.data?.detail || 'Не удалось') }
 }
 
 // ── ширина ленты участников справа (тянется мышью; при большой ширине — в 2 столбца) ──

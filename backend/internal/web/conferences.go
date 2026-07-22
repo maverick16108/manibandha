@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -92,12 +93,19 @@ func (s *Server) mintToken(identity, name, room string, canPublish bool, sources
 }
 
 func (s *Server) twirp(service, method, bearer string, body map[string]any) (map[string]any, error) {
+	return s.twirpTimeout(service, method, bearer, body, 10*time.Second)
+}
+
+// twirpTimeout — как twirp, но с настраиваемым таймаутом. Запуск egress (StartRoomCompositeEgress)
+// на слабом сервере отвечает медленно (10-14с): при 10с клиент отваливался с «request canceled»,
+// хотя egress уже стартовал → пользователь видел «Не удалось начать запись», а запись была осиротевшей.
+func (s *Server) twirpTimeout(service, method, bearer string, body map[string]any, timeout time.Duration) (map[string]any, error) {
 	url := s.Cfg.LiveKitAPIURL + "/twirp/livekit." + service + "/" + method
 	data, _ := json.Marshal(body)
 	req, _ := http.NewRequest("POST", url, bytes.NewReader(data))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+bearer)
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := &http.Client{Timeout: timeout}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
@@ -119,6 +127,23 @@ func (s *Server) egressService(method string, body map[string]any) (map[string]a
 	return s.twirp("Egress", method, s.egressToken(), body)
 }
 
+// maybeAutoRecord — запускает запись, если у конференции включена авто-запись и активной записи ещё нет.
+// Вызывается по webhook room_started (комната уже существует). Автор записи — ведущий.
+func (s *Server) maybeAutoRecord(c *models.Conference) {
+	if !c.AutoRecord || !s.recordingOn() {
+		return
+	}
+	var cnt int64
+	s.DB.Model(&models.ConferenceRecording{}).Where("conference_id = ? AND status IN ?", c.ID, []string{"active", "stopping"}).Count(&cnt)
+	if cnt > 0 {
+		return
+	}
+	fn := "conf" + strconv.Itoa(c.ID) + "-" + randHex()[:12] + ".mp4"
+	if eid := s.startEgress(c.Room, fn, s.recHeight()); eid != "" {
+		s.DB.Create(&models.ConferenceRecording{ConferenceID: c.ID, EgressID: &eid, Filename: &fn, Status: "active", StartedAt: time.Now(), CreatedBy: c.HostID})
+	}
+}
+
 func (s *Server) closeRoom(room string) {
 	if !s.lkConfigured() {
 		return
@@ -138,8 +163,10 @@ func (s *Server) startEgress(room, filename string, height int) string {
 		"fileOutputs": []map[string]any{{"fileType": "MP4", "filepath": "/out/" + filename}},
 		"advanced":    map[string]any{"width": res[0], "height": height, "framerate": 20, "videoBitrate": res[1], "audioBitrate": 128},
 	}
-	info, err := s.egressService("StartRoomCompositeEgress", body)
+	// запуск egress отвечает медленно — даём до 40с, чтобы получить egressId и не осиротить запись
+	info, err := s.twirpTimeout("Egress", "StartRoomCompositeEgress", s.egressToken(), body, 40*time.Second)
 	if err != nil || info == nil {
+		log.Printf("[egress] StartRoomCompositeEgress failed: err=%v info=%v", err, info)
 		return ""
 	}
 	if v, ok := info["egressId"].(string); ok {
@@ -528,16 +555,8 @@ func (s *Server) joinConference(w http.ResponseWriter, r *http.Request) {
 		s.DB.Model(&models.Conference{}).Where("id = ?", id).Updates(map[string]any{"status": "live", "started_at": gorm.Expr("now()")})
 		c.Status = "live"
 	}
-	if isHost && c.AutoRecord && s.recordingOn() {
-		var cnt int64
-		s.DB.Model(&models.ConferenceRecording{}).Where("conference_id = ? AND status = ?", c.ID, "active").Count(&cnt)
-		if cnt == 0 {
-			fn := "conf" + strconv.Itoa(c.ID) + "-" + randHex()[:12] + ".mp4"
-			if eid := s.startEgress(c.Room, fn, s.recHeight()); eid != "" {
-				s.DB.Create(&models.ConferenceRecording{ConferenceID: c.ID, EgressID: &eid, Filename: &fn, Status: "active", StartedAt: time.Now(), CreatedBy: &u.ID})
-			}
-		}
-	}
+	// авто-запись НЕ запускаем здесь (комната в LiveKit ещё не существует — хост только получил токен,
+	// но не подключился → egress падает с «room does not exist»). Запускаем по webhook room_started.
 	var sources []string
 	if isHost {
 		sources = nil
@@ -1074,7 +1093,12 @@ func (s *Server) livekitWebhook(w http.ResponseWriter, r *http.Request) {
 	if rm, ok := data["room"].(map[string]any); ok {
 		room, _ = rm["name"].(string)
 	}
-	if event == "room_finished" && room != "" {
+	if event == "room_started" && room != "" {
+		var c models.Conference
+		if err := s.DB.Where("room = ?", room).First(&c).Error; err == nil {
+			go s.maybeAutoRecord(&c) // комната создана — можно ставить авто-запись (egress стартует долго)
+		}
+	} else if event == "room_finished" && room != "" {
 		var c models.Conference
 		if err := s.DB.Where("room = ? AND status = ?", room, "live").First(&c).Error; err == nil {
 			s.DB.Model(&models.Conference{}).Where("id = ?", c.ID).Updates(map[string]any{"status": "ended", "ended_at": gorm.Expr("now()")})

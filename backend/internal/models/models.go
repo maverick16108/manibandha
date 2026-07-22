@@ -440,8 +440,10 @@ type ConferenceRecording struct {
 	SizeBytes    int64      `gorm:"column:size_bytes" json:"size_bytes"`
 	StartedAt    time.Time  `gorm:"column:started_at" json:"-"`
 	EndedAt      *time.Time `gorm:"column:ended_at" json:"-"`
+	CreatedBy    *int       `gorm:"column:created_by" json:"created_by"`
 
 	Conference *Conference `gorm:"foreignKey:ConferenceID" json:"-"`
+	Recorder   *User       `gorm:"foreignKey:CreatedBy" json:"-"`
 }
 
 func (ConferenceRecording) TableName() string { return "conference_recordings" }

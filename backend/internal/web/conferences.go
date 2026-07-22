@@ -503,7 +503,7 @@ func (s *Server) joinConference(w http.ResponseWriter, r *http.Request) {
 		if cnt == 0 {
 			fn := "conf" + strconv.Itoa(c.ID) + "-" + randHex()[:12] + ".mp4"
 			if eid := s.startEgress(c.Room, fn, s.recHeight()); eid != "" {
-				s.DB.Create(&models.ConferenceRecording{ConferenceID: c.ID, EgressID: &eid, Filename: &fn, Status: "active"})
+				s.DB.Create(&models.ConferenceRecording{ConferenceID: c.ID, EgressID: &eid, Filename: &fn, Status: "active", StartedAt: time.Now(), CreatedBy: &u.ID})
 			}
 		}
 	}
@@ -789,12 +789,16 @@ func (s *Server) recOut(rec *models.ConferenceRecording, confTitle *string, canE
 	if confTitle != nil {
 		ct = *confTitle
 	}
+	var recorder any
+	if rec.Recorder != nil {
+		recorder = rec.Recorder.FullName
+	}
 	return map[string]any{
 		"id": rec.ID, "conference_id": rec.ConferenceID, "conference_title": ct,
 		"title": title, "description": rec.Description, "status": rec.Status,
 		"duration_ms": rec.DurationMs, "size_bytes": rec.SizeBytes,
 		"started_at": tsUTC(rec.StartedAt), "ended_at": tsPtr(rec.EndedAt),
-		"can_edit": canEdit, "url": url,
+		"recorded_by": recorder, "can_edit": canEdit, "url": url,
 	}
 }
 
@@ -826,7 +830,8 @@ func (s *Server) recordStart(w http.ResponseWriter, r *http.Request) {
 		httpErr(w, http.StatusBadGateway, "Не удалось начать запись")
 		return
 	}
-	s.DB.Create(&models.ConferenceRecording{ConferenceID: c.ID, EgressID: &eid, Filename: &fn, Status: "active"})
+	u := currentUser(r)
+	s.DB.Create(&models.ConferenceRecording{ConferenceID: c.ID, EgressID: &eid, Filename: &fn, Status: "active", StartedAt: time.Now(), CreatedBy: &u.ID})
 	writeJSON(w, http.StatusOK, map[string]any{"recording": true})
 }
 
@@ -852,7 +857,7 @@ func (s *Server) listRecordings(w http.ResponseWriter, r *http.Request) {
 	u := currentUser(r)
 	s.reconcileRecordings() // добрать статус у зависших/остановленных записей (потерянный webhook)
 	var rows []models.ConferenceRecording
-	s.DB.Preload("Conference").Where("status = ? AND filename IS NOT NULL", "done").
+	s.DB.Preload("Conference").Preload("Recorder").Where("status = ? AND filename IS NOT NULL", "done").
 		Order("started_at DESC").Find(&rows)
 	dirty := false
 	for i := range rows {

@@ -64,6 +64,7 @@ function fmtDur(ms) {
   return h ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`
 }
 function fmtSize(b) { const mb = (b || 0) / 1048576; return mb >= 1024 ? `${(mb / 1024).toFixed(1)} ГБ` : `${Math.max(1, Math.round(mb))} МБ` }
+function initials(name) { return (name || '?').trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase() }
 
 function startEdit(r) { editing.value = r.id; editForm.value = { title: r.title || '', description: r.description || '' } }
 function cancelEdit() { editing.value = null }
@@ -87,7 +88,7 @@ async function remove(r) {
 </script>
 
 <template>
-  <div class="mx-auto max-w-4xl">
+  <div class="w-full">
     <p class="mb-4 text-ink-700/60">Записи прошедших конференций — можно смотреть, скачивать и подписывать</p>
 
     <!-- поиск + фильтр по дате -->
@@ -112,43 +113,75 @@ async function remove(r) {
     <div v-else-if="!recordings.length" class="card p-10 text-center text-ink-700/50">Записей пока нет</div>
     <div v-else-if="!filtered.length" class="card p-10 text-center text-ink-700/50">Ничего не найдено</div>
 
-    <div v-else class="space-y-3">
-      <div v-for="r in filtered" :key="r.id" class="card p-4 sm:p-5">
-        <!-- режим просмотра -->
-        <template v-if="editing !== r.id">
-          <div class="flex items-start justify-between gap-3">
-            <div class="min-w-0">
-              <h3 class="truncate font-display text-lg font-semibold text-ink-900">{{ r.title }}</h3>
-              <div class="mt-0.5 text-xs text-ink-700/50">
-                <span v-if="r.conference_title && r.conference_title !== r.title">{{ r.conference_title }} · </span>{{ fmt(r.started_at) }} · {{ fmtDur(r.duration_ms) }} · {{ fmtSize(r.size_bytes) }}
-              </div>
-              <p v-if="r.description" class="mt-1.5 whitespace-pre-wrap text-sm text-ink-700/80">{{ r.description }}</p>
-            </div>
-            <div class="flex shrink-0 items-center gap-1.5">
-              <button class="btn-outline text-sm" @click="playing = playing === r.id ? null : r.id"><AppIcon name="play" :size="14" /> {{ playing === r.id ? 'Скрыть' : 'Смотреть' }}</button>
-              <a :href="recUrl(r)" download class="btn-ghost p-2" title="Скачать"><AppIcon name="download" :size="18" /></a>
-              <button v-if="r.can_edit" class="btn-ghost p-2" title="Изменить название и описание" @click="startEdit(r)"><AppIcon name="edit" :size="18" /></button>
-              <button v-if="r.can_edit" class="rounded-lg p-2 text-ink-700/40 transition hover:bg-red-50 hover:text-red-600" title="Удалить запись" @click="remove(r)"><AppIcon name="trash" :size="18" /></button>
-            </div>
-          </div>
-          <video v-if="playing === r.id" :src="recUrl(r)" controls autoplay class="mt-3 w-full rounded-lg bg-ink-900"></video>
-        </template>
-
-        <!-- режим редактирования -->
-        <div v-else class="space-y-3">
-          <div>
-            <label class="label">Название записи</label>
-            <input v-model="editForm.title" class="input" :placeholder="r.conference_title || 'Название'" />
-          </div>
-          <div>
-            <label class="label">Описание</label>
-            <textarea v-model="editForm.description" rows="3" class="input resize-y" placeholder="О чём эта запись (необязательно)"></textarea>
-          </div>
-          <div class="flex gap-2">
-            <button class="btn-primary" :disabled="saving" @click="saveEdit(r)">{{ saving ? '…' : 'Сохранить' }}</button>
-            <button class="btn-ghost" @click="cancelEdit">Отмена</button>
-          </div>
-        </div>
+    <!-- таблица записей на всю ширину -->
+    <div v-else class="card overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="w-full min-w-[860px] border-collapse text-left">
+          <thead class="border-b border-parchment-200 bg-parchment-50 text-xs uppercase tracking-wide text-ink-700/55">
+            <tr>
+              <th class="px-5 py-3 font-semibold">Название</th>
+              <th class="px-4 py-3 font-semibold">Дата и время</th>
+              <th class="px-4 py-3 font-semibold">Длительность</th>
+              <th class="px-4 py-3 font-semibold">Размер</th>
+              <th class="px-4 py-3 font-semibold">Кто записал</th>
+              <th class="px-5 py-3 text-right font-semibold">Действия</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template v-for="r in filtered" :key="r.id">
+              <tr class="border-b border-parchment-100 align-top transition hover:bg-parchment-50/60">
+                <td class="px-5 py-3.5">
+                  <div class="font-medium text-ink-900">{{ r.title }}</div>
+                  <div v-if="r.conference_title && r.conference_title !== r.title" class="text-xs text-ink-700/45">{{ r.conference_title }}</div>
+                  <p v-if="r.description" class="mt-0.5 max-w-md truncate text-sm text-ink-700/70">{{ r.description }}</p>
+                </td>
+                <td class="whitespace-nowrap px-4 py-3.5 text-sm text-ink-700">{{ fmt(r.started_at) }}</td>
+                <td class="whitespace-nowrap px-4 py-3.5 text-sm tabular-nums text-ink-700">{{ fmtDur(r.duration_ms) }}</td>
+                <td class="whitespace-nowrap px-4 py-3.5 text-sm tabular-nums text-ink-700">{{ fmtSize(r.size_bytes) }}</td>
+                <td class="px-4 py-3.5 text-sm text-ink-700">
+                  <span v-if="r.recorded_by" class="inline-flex items-center gap-2">
+                    <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-saffron-400 to-saffron-600 text-[11px] font-semibold text-white">{{ initials(r.recorded_by) }}</span>
+                    <span class="whitespace-nowrap">{{ r.recorded_by }}</span>
+                  </span>
+                  <span v-else class="text-ink-700/40">—</span>
+                </td>
+                <td class="px-5 py-3.5">
+                  <div class="flex items-center justify-end gap-1">
+                    <button class="btn-outline whitespace-nowrap text-sm" @click="playing = playing === r.id ? null : r.id"><AppIcon name="play" :size="14" /> {{ playing === r.id ? 'Скрыть' : 'Смотреть' }}</button>
+                    <a :href="recUrl(r)" download class="btn-ghost p-2" title="Скачать"><AppIcon name="download" :size="18" /></a>
+                    <button v-if="r.can_edit" class="btn-ghost p-2" title="Изменить название и описание" @click="startEdit(r)"><AppIcon name="edit" :size="18" /></button>
+                    <button v-if="r.can_edit" class="rounded-lg p-2 text-ink-700/40 transition hover:bg-red-50 hover:text-red-600" title="Удалить запись" @click="remove(r)"><AppIcon name="trash" :size="18" /></button>
+                  </div>
+                </td>
+              </tr>
+              <!-- развёрнутый плеер -->
+              <tr v-if="playing === r.id" class="border-b border-parchment-100 bg-ink-900/[0.03]">
+                <td colspan="6" class="px-5 py-4">
+                  <video :src="recUrl(r)" controls autoplay class="max-h-[70vh] w-full rounded-lg bg-ink-900"></video>
+                </td>
+              </tr>
+              <!-- редактирование названия/описания -->
+              <tr v-if="editing === r.id" class="border-b border-parchment-100 bg-parchment-50/50">
+                <td colspan="6" class="px-5 py-4">
+                  <div class="max-w-xl space-y-3">
+                    <div>
+                      <label class="label">Название записи</label>
+                      <input v-model="editForm.title" class="input" :placeholder="r.conference_title || 'Название'" />
+                    </div>
+                    <div>
+                      <label class="label">Описание</label>
+                      <textarea v-model="editForm.description" rows="3" class="input resize-y" placeholder="О чём эта запись (необязательно)"></textarea>
+                    </div>
+                    <div class="flex gap-2">
+                      <button class="btn-primary" :disabled="saving" @click="saveEdit(r)">{{ saving ? '…' : 'Сохранить' }}</button>
+                      <button class="btn-ghost" @click="cancelEdit">Отмена</button>
+                    </div>
+                  </div>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
       </div>
     </div>
   </div>

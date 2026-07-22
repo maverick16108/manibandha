@@ -43,6 +43,7 @@ async function load() {
 const searchInput = ref(null)
 function onDocType(e) {
   if (e.ctrlKey || e.metaKey || e.altKey) return
+  if (e.key === 'Escape' && editing.value) { cancelEdit(); return }
   const t = e.target
   if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
   if (editing.value !== null) return
@@ -66,8 +67,12 @@ function fmtDur(ms) {
 function fmtSize(b) { const mb = (b || 0) / 1048576; return mb >= 1024 ? `${(mb / 1024).toFixed(1)} ГБ` : `${Math.max(1, Math.round(mb))} МБ` }
 function initials(name) { return (name || '?').trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase() }
 
-function startEdit(r) { editing.value = r.id; editForm.value = { title: r.title || '', description: r.description || '' } }
+function startEdit(r) { editing.value = r; editForm.value = { title: r.title || '', description: r.description || '' } }
 function cancelEdit() { editing.value = null }
+// закрытие попапа по клику на фон — только если нажатие И началось, и закончилось на фоне
+let editBgDownFlag = false
+function editBgDown(e) { editBgDownFlag = e.target === e.currentTarget }
+function editBgClick(e) { if (editBgDownFlag && e.target === e.currentTarget) cancelEdit(); editBgDownFlag = false }
 async function saveEdit(r) {
   saving.value = true
   try {
@@ -160,28 +165,33 @@ async function remove(r) {
                   <video :src="recUrl(r)" controls autoplay class="max-h-[70vh] w-full rounded-lg bg-ink-900"></video>
                 </td>
               </tr>
-              <!-- редактирование названия/описания -->
-              <tr v-if="editing === r.id" class="border-b border-parchment-100 bg-parchment-50/50">
-                <td colspan="6" class="px-5 py-4">
-                  <div class="max-w-xl space-y-3">
-                    <div>
-                      <label class="label">Название записи</label>
-                      <input v-model="editForm.title" class="input" :placeholder="r.conference_title || 'Название'" />
-                    </div>
-                    <div>
-                      <label class="label">Описание</label>
-                      <textarea v-model="editForm.description" rows="3" class="input resize-y" placeholder="О чём эта запись (необязательно)"></textarea>
-                    </div>
-                    <div class="flex gap-2">
-                      <button class="btn-primary" :disabled="saving" @click="saveEdit(r)">{{ saving ? '…' : 'Сохранить' }}</button>
-                      <button class="btn-ghost" @click="cancelEdit">Отмена</button>
-                    </div>
-                  </div>
-                </td>
-              </tr>
             </template>
           </tbody>
         </table>
+      </div>
+    </div>
+
+    <!-- попап редактирования названия/описания записи -->
+    <div v-if="editing" class="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/40 p-4" @mousedown="editBgDown" @click="editBgClick">
+      <div class="w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-xl">
+        <header class="flex items-center justify-between border-b border-parchment-200 px-5 py-3.5">
+          <h3 class="font-medium text-ink-900">Редактирование записи</h3>
+          <button class="rounded-lg p-1.5 text-ink-700/60 transition hover:bg-parchment-100" title="Закрыть" @click="cancelEdit"><AppIcon name="close" :size="22" /></button>
+        </header>
+        <div class="space-y-4 p-5">
+          <div>
+            <label class="label">Название записи</label>
+            <input v-model="editForm.title" class="input" :placeholder="editing.conference_title || 'Название'" @keydown.enter="saveEdit(editing)" />
+          </div>
+          <div>
+            <label class="label">Описание</label>
+            <textarea v-model="editForm.description" rows="4" class="input resize-y" placeholder="О чём эта запись (необязательно)"></textarea>
+          </div>
+        </div>
+        <div class="flex justify-end gap-2 border-t border-parchment-200 px-5 py-3.5">
+          <button class="btn-ghost" @click="cancelEdit">Отмена</button>
+          <button class="btn-primary" :disabled="saving" @click="saveEdit(editing)">{{ saving ? '…' : 'Сохранить' }}</button>
+        </div>
       </div>
     </div>
   </div>

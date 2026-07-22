@@ -79,7 +79,8 @@ async function openParticipants(r) {
 }
 function closeParticipants() { parts.value = null }
 
-function startEdit(r) { editing.value = r; editForm.value = { title: r.title || '', description: r.description || '' } }
+const editTitleInput = ref(null)
+function startEdit(r) { editing.value = r; editForm.value = { title: r.title || '', description: r.description || '' }; nextTick(() => { editTitleInput.value?.focus?.(); editTitleInput.value?.select?.() }) }
 function cancelEdit() { editing.value = null }
 // закрытие попапа по клику на фон — только если нажатие И началось, и закончилось на фоне
 let editBgDownFlag = false
@@ -194,7 +195,7 @@ async function remove(r) {
         <div class="space-y-4 p-5">
           <div>
             <label class="label">Название записи</label>
-            <input v-model="editForm.title" class="input" :placeholder="editing.conference_title || 'Название'" @keydown.enter="saveEdit(editing)" />
+            <input ref="editTitleInput" v-model="editForm.title" class="input" :placeholder="editing.conference_title || 'Название'" @keydown.enter="saveEdit(editing)" />
           </div>
           <div>
             <label class="label">Описание</label>

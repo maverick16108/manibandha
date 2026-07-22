@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onActivated } from 'vue'
 defineOptions({ name: 'RolesView' })
 import client from '../api/client'
 import AppIcon from '../components/AppIcon.vue'
@@ -133,6 +133,9 @@ async function remove() {
 }
 
 onMounted(load)
+// keep-alive: обновляем при возврате в раздел (первую активацию пропускаем — не грузим дважды)
+let firstActivate = true
+onActivated(() => { if (firstActivate) { firstActivate = false; return } load() })
 </script>
 
 <template>

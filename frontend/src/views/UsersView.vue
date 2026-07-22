@@ -1,5 +1,5 @@
 <script setup>
-import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, reactive, computed, onMounted, onActivated, onBeforeUnmount, nextTick } from 'vue'
 defineOptions({ name: 'UsersView' })
 import client from '../api/client'
 import AppSelect from '../components/AppSelect.vue'
@@ -138,6 +138,9 @@ async function remove(u) {
 }
 
 onMounted(load)
+// keep-alive: обновляем при возврате в раздел (первую активацию пропускаем — не грузим дважды)
+let firstActivate = true
+onActivated(() => { if (firstActivate) { firstActivate = false; return } load() })
 </script>
 
 <template>

@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, computed, onMounted, onActivated, onBeforeUnmount, nextTick } from 'vue'
 defineOptions({ name: 'RecordingsArchiveView' })
 import client from '../api/client'
 import { useAuthStore } from '../stores/auth'
@@ -51,6 +51,9 @@ function onDocType(e) {
   if (e.key.length === 1) { search.value += e.key; e.preventDefault(); nextTick(() => searchInput.value?.focus()) }
 }
 onMounted(() => { backTarget.value = { name: 'conference' }; load(); document.addEventListener('keydown', onDocType) })
+// keep-alive: обновляем список записей при возврате (первую активацию пропускаем)
+let firstActivate = true
+onActivated(() => { if (firstActivate) { firstActivate = false; return } load() })
 onBeforeUnmount(() => document.removeEventListener('keydown', onDocType))
 
 function recUrl(r) { return `${r.url}?token=${encodeURIComponent(auth.token)}` }

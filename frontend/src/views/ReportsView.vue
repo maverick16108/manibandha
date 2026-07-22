@@ -1,5 +1,5 @@
 <script setup>
-import { ref, reactive, onMounted, watch } from 'vue'
+import { ref, reactive, onMounted, onActivated, watch } from 'vue'
 defineOptions({ name: 'ReportsView' })
 import { RouterLink } from 'vue-router'
 import client from '../api/client'
@@ -86,6 +86,9 @@ onMounted(async () => {
   countriesOpt.value = [{ value: '', label: 'Все страны' }, ...co.data.map((x) => ({ value: x.name, label: x.name }))]
   await load()
 })
+// keep-alive: пересобираем отчёт при возврате в раздел (первую активацию пропускаем)
+let firstActivate = true
+onActivated(() => { if (firstActivate) { firstActivate = false; return } load() })
 </script>
 
 <template>

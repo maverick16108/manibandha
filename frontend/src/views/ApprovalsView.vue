@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, onActivated, onBeforeUnmount } from 'vue'
 defineOptions({ name: 'ApprovalsView' })
 import { useRouter } from 'vue-router'
 import client from '../api/client'
@@ -84,6 +84,9 @@ onMounted(() => {
   document.addEventListener('visibilitychange', onVisible)
 })
 onBeforeUnmount(() => { clearInterval(poll); document.removeEventListener('visibilitychange', onVisible) })
+// keep-alive: мгновенное обновление списка заявок при возврате в раздел
+let firstActivate = true
+onActivated(() => { if (firstActivate) { firstActivate = false; return } load(true) })
 </script>
 
 <template>

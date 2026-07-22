@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, computed, onMounted, onActivated, onBeforeUnmount, nextTick } from 'vue'
 defineOptions({ name: 'ConferenceView' })
 import { useRouter } from 'vue-router'
 import client from '../api/client'
@@ -47,6 +47,9 @@ onMounted(async () => {
   document.addEventListener('keydown', onDocType)
 })
 onBeforeUnmount(() => { clearInterval(poll); clearInterval(tick); document.removeEventListener('keydown', onDocType) })
+// keep-alive: мгновенное обновление списка конференций при возврате в раздел
+let firstActivate = true
+onActivated(() => { if (firstActivate) { firstActivate = false; return } load(true) })
 
 function elapsed(iso) {
   if (!iso) return ''

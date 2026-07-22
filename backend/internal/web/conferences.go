@@ -155,6 +155,37 @@ func (s *Server) stopEgress(egressID string) {
 	s.egressService("StopEgress", map[string]any{"egressId": egressID})
 }
 
+// stopEgressWhenReady — останавливает egress ТОЛЬКО после того, как он реально запустился (EGRESS_ACTIVE).
+// Egress на этом сервере стартует ~20-30с (запуск chrome+gstreamer). Если нажать «стоп» раньше, LiveKit
+// отвечает «Stop called before pipeline could start» и АБОРТИТ запись без файла — короткие записи терялись.
+// Ждём активного состояния (до ~75с), даём ~2с контента и останавливаем корректно → получаем файл.
+func (s *Server) stopEgressWhenReady(egressID string) {
+	active := false
+	for i := 0; i < 75; i++ {
+		out, err := s.egressService("ListEgress", map[string]any{"egressId": egressID})
+		if err == nil && out != nil {
+			if items, ok := out["items"].([]any); ok && len(items) > 0 {
+				if info, ok := items[0].(map[string]any); ok {
+					switch anyStr(info["status"]) {
+					case "EGRESS_ACTIVE":
+						active = true
+					case "EGRESS_COMPLETE", "EGRESS_FAILED", "EGRESS_ABORTED", "EGRESS_ENDING":
+						return // уже завершается/завершился сам — трогать не нужно
+					}
+				}
+			}
+		}
+		if active {
+			break
+		}
+		time.Sleep(time.Second)
+	}
+	if active {
+		time.Sleep(2 * time.Second) // гарантируем немного контента в файле
+	}
+	s.stopEgress(egressID)
+}
+
 // ── доступ ────────────────────────────────────────────────────────────────
 
 func (s *Server) confEditable(userID int, c *models.Conference) bool {
@@ -847,7 +878,7 @@ func (s *Server) recordStop(w http.ResponseWriter, r *http.Request) {
 		// проверкой активных (иначе повторное «начать запись» до прихода webhook не создаёт egress).
 		s.DB.Model(&models.ConferenceRecording{}).Where("id = ?", rec.ID).Update("status", "stopping")
 		if rec.EgressID != nil {
-			s.stopEgress(*rec.EgressID)
+			go s.stopEgressWhenReady(*rec.EgressID) // не аборти́ть ещё стартующий egress — иначе файл теряется
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"recording": false})

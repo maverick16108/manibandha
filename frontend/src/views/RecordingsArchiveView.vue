@@ -67,6 +67,17 @@ function fmtDur(ms) {
 function fmtSize(b) { const mb = (b || 0) / 1048576; return mb >= 1024 ? `${(mb / 1024).toFixed(1)} ГБ` : `${Math.max(1, Math.round(mb))} МБ` }
 function initials(name) { return (name || '?').trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase() }
 
+// ── кто был на созвоне ──
+const parts = ref(null)        // { title, list } | null — открытый попап
+const partsLoading = ref(false)
+async function openParticipants(r) {
+  parts.value = { title: r.conference_title || r.title, list: [] }
+  partsLoading.value = true
+  try { const { data } = await client.get(`/conferences/${r.conference_id}/participants`); if (parts.value) parts.value.list = data.participants || [] }
+  catch { if (parts.value) parts.value.list = [] } finally { partsLoading.value = false }
+}
+function closeParticipants() { parts.value = null }
+
 function startEdit(r) { editing.value = r; editForm.value = { title: r.title || '', description: r.description || '' } }
 function cancelEdit() { editing.value = null }
 // закрытие попапа по клику на фон — только если нажатие И началось, и закончилось на фоне
@@ -152,6 +163,7 @@ async function remove(r) {
                 </td>
                 <td class="px-5 py-3.5">
                   <div class="flex items-center justify-end gap-1">
+                    <button class="btn-ghost whitespace-nowrap text-sm" title="Кто был на созвоне" @click="openParticipants(r)"><AppIcon name="users" :size="16" /> Кто был</button>
                     <button class="btn-outline whitespace-nowrap text-sm" @click="playing = playing === r.id ? null : r.id"><AppIcon name="play" :size="14" /> {{ playing === r.id ? 'Скрыть' : 'Смотреть' }}</button>
                     <a :href="recUrl(r)" download class="btn-ghost p-2" title="Скачать"><AppIcon name="download" :size="18" /></a>
                     <button v-if="r.can_edit" class="btn-ghost p-2" title="Изменить название и описание" @click="startEdit(r)"><AppIcon name="edit" :size="18" /></button>
@@ -191,6 +203,30 @@ async function remove(r) {
         <div class="flex justify-end gap-2 border-t border-parchment-200 px-5 py-3.5">
           <button class="btn-ghost" @click="cancelEdit">Отмена</button>
           <button class="btn-primary" :disabled="saving" @click="saveEdit(editing)">{{ saving ? '…' : 'Сохранить' }}</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- попап «кто был на созвоне» -->
+    <div v-if="parts" class="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/40 p-4" @click.self="closeParticipants">
+      <div class="flex max-h-[80vh] w-full max-w-md flex-col overflow-hidden rounded-2xl bg-white shadow-xl">
+        <header class="flex items-center justify-between gap-2 border-b border-parchment-200 px-5 py-3.5">
+          <div class="min-w-0">
+            <h3 class="font-medium text-ink-900">Кто был на созвоне</h3>
+            <div v-if="parts.title" class="truncate text-xs text-ink-700/50">{{ parts.title }}</div>
+          </div>
+          <button class="rounded-lg p-1.5 text-ink-700/60 transition hover:bg-parchment-100" title="Закрыть" @click="closeParticipants"><AppIcon name="close" :size="22" /></button>
+        </header>
+        <div class="flex-1 overflow-y-auto p-2">
+          <p v-if="partsLoading" class="p-6 text-center text-sm text-ink-700/50">Загрузка…</p>
+          <p v-else-if="!parts.list.length" class="p-6 text-center text-sm text-ink-700/50">Нет данных об участниках</p>
+          <div v-else>
+            <div v-for="(p, i) in parts.list" :key="i" class="flex items-center gap-3 rounded-lg px-3 py-2 hover:bg-parchment-50">
+              <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-semibold text-white" :class="p.is_guest ? 'bg-gradient-to-br from-sage-400 to-sage-600' : 'bg-gradient-to-br from-saffron-400 to-saffron-600'">{{ initials(p.name || 'Гость') }}</span>
+              <span class="min-w-0 flex-1 truncate text-[15px] text-ink-900">{{ p.name || 'Без имени' }}</span>
+              <span v-if="p.is_guest" class="badge shrink-0 bg-parchment-200 text-ink-700/70">гость</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>

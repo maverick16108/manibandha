@@ -254,6 +254,7 @@ func (s *Server) Router() http.Handler {
 		pr.Get("/conferences/recordings", s.listRecordings)
 		pr.Patch("/conferences/recordings/{id}", s.updateRecording)
 		pr.Delete("/conferences/recordings/{id}", s.deleteRecording)
+		pr.Get("/conferences/{id}/participants", s.listConferenceParticipants)
 		pr.Patch("/conferences/{id}", s.updateConference)
 		pr.Delete("/conferences/{id}", s.deleteConference)
 		pr.Post("/conferences/{id}/join", s.joinConference)

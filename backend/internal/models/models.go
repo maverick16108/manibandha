@@ -446,6 +446,18 @@ type ConferenceRecording struct {
 	Recorder   *User       `gorm:"foreignKey:CreatedBy" json:"-"`
 }
 
+// ConferenceParticipant — кто заходил в конференцию (для «кто был на созвоне»).
+type ConferenceParticipant struct {
+	ID           int       `gorm:"primaryKey" json:"id"`
+	ConferenceID int       `gorm:"column:conference_id" json:"conference_id"`
+	Identity     string    `gorm:"column:identity" json:"identity"`
+	Name         *string   `gorm:"column:name" json:"name"`
+	IsGuest      bool      `gorm:"column:is_guest" json:"is_guest"`
+	JoinedAt     time.Time `gorm:"column:joined_at" json:"-"`
+}
+
+func (ConferenceParticipant) TableName() string { return "conference_participants" }
+
 func (ConferenceRecording) TableName() string { return "conference_recordings" }
 
 // Event — событие календаря.

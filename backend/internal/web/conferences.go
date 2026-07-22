@@ -884,6 +884,45 @@ func (s *Server) recordStop(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"recording": false})
 }
 
+// recordParticipant — фиксируем участника, зашедшего в конференцию (webhook participant_joined).
+// Гость определяется по префиксу identity ("g_"), зарегистрированный пользователь — "u<id>".
+func (s *Server) recordParticipant(room string, pm map[string]any) {
+	identity := anyStr(pm["identity"])
+	if identity == "" {
+		return
+	}
+	var c models.Conference
+	if err := s.DB.Where("room = ?", room).First(&c).Error; err != nil {
+		return
+	}
+	name := strings.TrimSpace(anyStr(pm["name"]))
+	var namePtr *string
+	if name != "" {
+		namePtr = &name
+	}
+	isGuest := strings.HasPrefix(identity, "g_")
+	s.DB.Exec(`INSERT INTO conference_participants (conference_id, identity, name, is_guest)
+		VALUES (?, ?, ?, ?)
+		ON CONFLICT (conference_id, identity) DO UPDATE SET name = COALESCE(EXCLUDED.name, conference_participants.name)`,
+		c.ID, identity, namePtr, isGuest)
+}
+
+// GET /conferences/{id}/participants — кто был на созвоне (зарегистрированные + гости).
+func (s *Server) listConferenceParticipants(w http.ResponseWriter, r *http.Request) {
+	id, _ := strconv.Atoi(chi.URLParam(r, "id"))
+	var rows []models.ConferenceParticipant
+	s.DB.Where("conference_id = ?", id).Order("is_guest ASC, joined_at ASC").Find(&rows)
+	out := []map[string]any{}
+	for i := range rows {
+		var nm any
+		if rows[i].Name != nil {
+			nm = *rows[i].Name
+		}
+		out = append(out, map[string]any{"name": nm, "is_guest": rows[i].IsGuest})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"participants": out})
+}
+
 func (s *Server) listRecordings(w http.ResponseWriter, r *http.Request) {
 	u := currentUser(r)
 	s.reconcileRecordings() // добрать статус у зависших/остановленных записей (потерянный webhook)
@@ -1046,6 +1085,10 @@ func (s *Server) livekitWebhook(w http.ResponseWriter, r *http.Request) {
 					s.stopEgress(*rec.EgressID)
 				}
 			}
+		}
+	} else if event == "participant_joined" && room != "" {
+		if pm, ok := data["participant"].(map[string]any); ok {
+			s.recordParticipant(room, pm)
 		}
 	} else if (event == "egress_ended" || event == "egress_updated") && data["egressInfo"] != nil {
 		info, _ := data["egressInfo"].(map[string]any)

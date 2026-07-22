@@ -838,6 +838,9 @@ func (s *Server) recordStop(w http.ResponseWriter, r *http.Request) {
 	var recs []models.ConferenceRecording
 	s.DB.Where("conference_id = ? AND status = ?", c.ID, "active").Find(&recs)
 	for _, rec := range recs {
+		// сразу помечаем «stopping», чтобы новая запись в этой же конференции не блокировалась
+		// проверкой активных (иначе повторное «начать запись» до прихода webhook не создаёт egress).
+		s.DB.Model(&models.ConferenceRecording{}).Where("id = ?", rec.ID).Update("status", "stopping")
 		if rec.EgressID != nil {
 			s.stopEgress(*rec.EgressID)
 		}
@@ -847,6 +850,7 @@ func (s *Server) recordStop(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) listRecordings(w http.ResponseWriter, r *http.Request) {
 	u := currentUser(r)
+	s.reconcileRecordings() // добрать статус у зависших/остановленных записей (потерянный webhook)
 	var rows []models.ConferenceRecording
 	s.DB.Preload("Conference").Where("status = ? AND filename IS NOT NULL", "done").
 		Order("started_at DESC").Find(&rows)
@@ -1014,7 +1018,7 @@ func (s *Server) livekitWebhook(w http.ResponseWriter, r *http.Request) {
 			eid = anyStr(info["egress_id"])
 		}
 		var rec models.ConferenceRecording
-		if err := s.DB.Where("egress_id = ? AND status = ?", eid, "active").First(&rec).Error; err == nil {
+		if err := s.DB.Where("egress_id = ? AND status IN ?", eid, []string{"active", "stopping"}).First(&rec).Error; err == nil {
 			s.applyEgressWebhook(&rec, event, info)
 		}
 	}
@@ -1052,6 +1056,44 @@ func (s *Server) applyEgressWebhook(rec *models.ConferenceRecording, event strin
 			s.probeFile(rec)
 			s.DB.Model(&models.ConferenceRecording{}).Where("id = ?", rec.ID).
 				Updates(map[string]any{"duration_ms": rec.DurationMs, "size_bytes": rec.SizeBytes, "filename": rec.Filename})
+		}
+	}
+}
+
+// reconcileRecordings — самолечение списка: если webhook egress_ended потерялся, добираем финальный
+// статус напрямую у LiveKit (или, как крайний случай, по готовому файлу на диске). Благодаря этому
+// короткие/«потерянные» записи всё равно попадают в список, а не зависают в статусе active/stopping.
+func (s *Server) reconcileRecordings() {
+	var recs []models.ConferenceRecording
+	// все остановленные (stopping) + давно «висящие» active (сессия оборвалась без webhook)
+	s.DB.Where("status = ? OR (status = ? AND started_at < now() - interval '6 hours')", "stopping", "active").Find(&recs)
+	for i := range recs {
+		rec := &recs[i]
+		if rec.EgressID == nil {
+			continue
+		}
+		if out, err := s.egressService("ListEgress", map[string]any{"egressId": *rec.EgressID}); err == nil && out != nil {
+			if items, ok := out["items"].([]any); ok && len(items) > 0 {
+				if info, ok := items[0].(map[string]any); ok {
+					switch anyStr(info["status"]) {
+					case "EGRESS_COMPLETE", "EGRESS_FAILED", "EGRESS_ABORTED", "EGRESS_LIMIT_REACHED":
+						s.applyEgressWebhook(rec, "egress_ended", info)
+					}
+					continue
+				}
+			}
+		}
+		// LiveKit не отдал данных по egress — финализируем по файлу на диске, если он уже записан
+		if rec.Filename != nil {
+			path := filepath.Join(s.Cfg.RecordingsDir, filepath.Base(*rec.Filename))
+			if fi, e := os.Stat(path); e == nil && fi.Size() > 0 {
+				s.DB.Model(&models.ConferenceRecording{}).Where("id = ?", rec.ID).
+					Updates(map[string]any{"status": "done", "ended_at": gorm.Expr("now()")})
+				s.DB.First(rec, rec.ID)
+				s.probeFile(rec)
+				s.DB.Model(&models.ConferenceRecording{}).Where("id = ?", rec.ID).
+					Updates(map[string]any{"duration_ms": rec.DurationMs, "size_bytes": rec.SizeBytes})
+			}
 		}
 	}
 }

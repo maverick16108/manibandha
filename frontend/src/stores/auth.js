@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import client from '../api/client'
+import { clearCache } from '../composables/apiCache'
 
 export const useAuthStore = defineStore('auth', {
   state: () => ({
@@ -77,6 +78,9 @@ export const useAuthStore = defineStore('auth', {
       this.roles = []
       this.pending = false
       localStorage.removeItem('token')
+      // очищаем общий кеш GET-ответов разделов, иначе следующий пользователь на том же
+      // браузере видит данные предыдущего (ученики/обзор/бейджи)
+      clearCache()
     },
   },
 })

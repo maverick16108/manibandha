@@ -80,7 +80,8 @@ function onIncomingMessage(m) {
 
 // ── снимок чата в localStorage: мгновенный рендер списка+сообщений при перезагрузке страницы,
 // пока открывается локальная БД (wasm/OPFS). Потом сверяется/перетирается реальными данными.
-const SNAP_KEY = 'chatSnapshotV1';
+// снимок и БД — ПЕР-ЮЗЕР (иначе на общем браузере другой пользователь видит чужие чаты/сообщения)
+function snapKey() { return `chatSnapshotV1_${chatState.meId || 'x'}`; }
 let snapTimer = null;
 function saveChatSnapshot() {
   if (snapTimer) return;
@@ -93,13 +94,13 @@ function saveChatSnapshot() {
         members: c.members || [],
         last: c.last ? { body: c.last.body, author_id: c.last.author_id, author_name: c.last.author_name, created_at: c.last.created_at, seq: c.last.seq, status: c.last.status, deleted: c.last.deleted } : null,
       }));
-      localStorage.setItem(SNAP_KEY, JSON.stringify({ chats, activeId: chatState.activeChatId, messages: chatState.activeChatId ? chatState.messages.slice(-60) : [] }));
+      localStorage.setItem(snapKey(), JSON.stringify({ chats, activeId: chatState.activeChatId, messages: chatState.activeChatId ? chatState.messages.slice(-60) : [] }));
     } catch { /* ignore */ }
   }, 500);
 }
 function hydrateFromSnapshot() {
   try {
-    const snap = JSON.parse(localStorage.getItem(SNAP_KEY) || 'null');
+    const snap = JSON.parse(localStorage.getItem(snapKey()) || 'null');
     if (!snap) return;
     if (Array.isArray(snap.chats) && snap.chats.length) chatState.chats = snap.chats;
     if (snap.activeId && Array.isArray(snap.messages) && snap.messages.length) {
@@ -119,7 +120,7 @@ export async function initChat({ meId, getToken }) {
   starting = (async () => {
     chatState.meId = meId;
     hydrateFromSnapshot(); // мгновенно показать список+чат из снимка, пока открывается БД
-    db = await openDatabase();
+    db = await openDatabase(`manibandha-chat-${meId}`);
     engine = new ChatEngine({ db, api: chatApi, meId, onEphemeral, onIncoming: onIncomingMessage });
     socket = new ChatSocket({
       getToken,
@@ -254,11 +255,18 @@ export function teardownChat() {
   if (typingTimer) clearInterval(typingTimer);
   if (refreshChatsTimer) { clearTimeout(refreshChatsTimer); refreshChatsTimer = null; }
   db = engine = socket = unsub = safetyTimer = typingTimer = null;
+  starting = null; // ВАЖНО: иначе следующий initChat вернёт старый промис и не переинициализируется под нового пользователя
   chatState.ready = false;
   chatState.chats = [];
   chatState.messages = [];
+  chatState.members = [];
+  chatState.contacts = [];
+  chatState.typing = {};
   chatState.activeChatId = null;
+  chatState.renderedChatId = null;
+  chatState.unreadBeforeSeq = 0;
   chatState.totalUnread = 0;
+  chatState.meId = null;
 }
 
 // refreshChats дорогой (N+1 запрос «последнее сообщение» по каждому чату) — при

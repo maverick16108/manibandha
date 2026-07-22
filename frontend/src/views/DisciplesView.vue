@@ -223,7 +223,8 @@ onActivated(() => {
                 </td>
                 <td class="px-4 py-3">
                   <span class="badge" :class="STATUS_BADGE[d.initiation_status]">{{ STATUS_LABELS[d.initiation_status] }}</span>
-                  <span v-if="eventLabel(d)" class="badge ml-1 bg-orange-100 text-orange-800">{{ eventLabel(d) }}</span>
+                  <!-- событие в выбранном месяце показываем только если оно ОТЛИЧАЕТСЯ от текущего статуса (иначе дубль) -->
+                  <span v-if="eventLabel(d) && eventLabel(d) !== STATUS_LABELS[d.initiation_status]" class="badge ml-1 bg-orange-100 text-orange-800" :title="`Событие в ${monthLabel(filters.event_month)}`">{{ eventLabel(d) }}</span>
                 </td>
                 <td class="px-4 py-3 text-ink-700">{{ d.region || d.country || '—' }}<span v-if="d.city">, {{ d.city }}</span></td>
                 <td class="px-4 py-3 text-ink-700">{{ d.mentor?.name || '—' }}</td>

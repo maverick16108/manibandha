@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, onActivated, onBeforeUnmount, watch, nextTick } from 'vue'
 defineOptions({ name: 'CalendarView' })
 import { RouterLink } from 'vue-router'
 import client from '../api/client'
@@ -99,6 +99,10 @@ const feedPoints = computed(() => listFeed.value.map((e) => {
 }))
 
 onMounted(load)
+// keep-alive: onMounted срабатывает один раз — при ВОЗВРАТЕ (например, после «Изменить/Сохранить»)
+// перезагружаем список, чтобы изменения были видны сразу. Первую активацию пропускаем (не грузим дважды).
+let firstActivate = true
+onActivated(() => { if (firstActivate) { firstActivate = false; return } load() })
 </script>
 
 <template>

@@ -6,6 +6,7 @@ import AppIcon from '../components/AppIcon.vue'
 import AppSkeleton from '../components/AppSkeleton.vue'
 import { confirmDialog } from '../composables/confirm'
 import { usePageTitle } from '../composables/pageTitle'
+import { useAutoRefresh } from '../composables/useAutoRefresh'
 
 usePageTitle('Роли и доступ')
 
@@ -46,8 +47,8 @@ function makeDraft(role) {
   }
 }
 
-async function load() {
-  loading.value = true
+async function load(silent = false) {
+  if (!silent) loading.value = true
   try {
     const [r, c] = await Promise.all([client.get('/roles'), client.get('/capabilities')])
     roles.value = r.data
@@ -133,9 +134,7 @@ async function remove() {
 }
 
 onMounted(load)
-// keep-alive: обновляем при возврате в раздел (первую активацию пропускаем — не грузим дважды)
-let firstActivate = true
-onActivated(() => { if (firstActivate) { firstActivate = false; return } load() })
+useAutoRefresh(load)
 </script>
 
 <template>

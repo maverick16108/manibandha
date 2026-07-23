@@ -14,6 +14,7 @@ import { renderMarkdown } from '../lib/markdown'
 import { extractImageUrls, preloadImages } from '../lib/preload'
 import { formatDate } from '../lib/format'
 import { usePageTitle } from '../composables/pageTitle'
+import { useAutoRefresh } from '../composables/useAutoRefresh'
 import { onEscape } from '../composables/useEscape'
 
 usePageTitle('События')
@@ -99,10 +100,7 @@ const feedPoints = computed(() => listFeed.value.map((e) => {
 }))
 
 onMounted(load)
-// keep-alive: onMounted срабатывает один раз — при ВОЗВРАТЕ (например, после «Изменить/Сохранить»)
-// перезагружаем список, чтобы изменения были видны сразу. Первую активацию пропускаем (не грузим дважды).
-let firstActivate = true
-onActivated(() => { if (firstActivate) { firstActivate = false; return } load(true) })
+useAutoRefresh(load) // тихое обновление при возврате в раздел и при фокусе вкладки (чужие изменения подтянутся сами)
 </script>
 
 <template>

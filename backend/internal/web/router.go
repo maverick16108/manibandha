@@ -30,6 +30,7 @@ func (s *Server) Router() http.Handler {
 	api.Get("/events/public/upcoming", s.publicUpcoming)
 	api.Get("/events/public", s.publicList)
 	api.Get("/events/public/{id}", s.publicDetail)
+	api.Get("/gallery/public/home", s.publicHomeGallery)
 
 	// auth (публичные)
 	api.Post("/auth/login", s.login)
@@ -98,6 +99,22 @@ func (s *Server) Router() http.Handler {
 	api.Group(func(pr chi.Router) {
 		pr.Use(s.auth, s.requireCap("settings.manage"))
 		pr.Put("/settings", s.updateSettings)
+	})
+
+	// галерея: просмотр — право gallery.view
+	api.Group(func(pr chi.Router) {
+		pr.Use(s.auth, s.requireCap("gallery.view"))
+		pr.Get("/gallery/albums", s.listGalleryAlbums)
+		pr.Get("/gallery/albums/{id}", s.getGalleryAlbum)
+	})
+	// галерея: управление — право gallery.manage
+	api.Group(func(pr chi.Router) {
+		pr.Use(s.auth, s.requireCap("gallery.manage"))
+		pr.Post("/gallery/albums", s.createGalleryAlbum)
+		pr.Patch("/gallery/albums/{id}", s.updateGalleryAlbum)
+		pr.Delete("/gallery/albums/{id}", s.deleteGalleryAlbum)
+		pr.Post("/gallery/albums/{id}/photos", s.addGalleryPhotos)
+		pr.Delete("/gallery/photos/{id}", s.deleteGalleryPhoto)
 	})
 
 	// форум: чтение — право forum.view

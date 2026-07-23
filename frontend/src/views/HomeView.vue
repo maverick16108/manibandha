@@ -1,6 +1,8 @@
 <script>
-// кеш событий между заходами на страницу (модульная область, вне setup)
+// кеш между заходами на страницу (модульная область, вне setup)
 let eventsCache = []
+let galleryCache = []
+let galleryBwCache = false
 </script>
 
 <script setup>
@@ -19,18 +21,26 @@ function eventDates(e) {
   const s = fmtDay(e.starts_on)
   return e.ends_on && e.ends_on !== e.starts_on ? `${s} — ${fmtDay(e.ends_on)}` : s
 }
+// Guru photos live in /public/guru/. Bound via :src so Vite serves them from /public.
+const hero = '/guru/hero.jpg' // splash — atmospheric profile
+const portrait = '/guru/1.jpg' // clear portrait — About & login
+// галерея тянется из предопределённого альбома «Главная» (раздел Галерея), с флагом ч/б
+const gallery = ref(galleryCache)
+const galleryBw = ref(galleryBwCache)
+
 onMounted(async () => {
   try {
     const { data } = await client.get('/events/public/upcoming')
     events.value = data
     eventsCache = data // запомнить для следующего возврата на страницу
   } catch { /* тихо */ }
+  try {
+    const { data } = await client.get('/gallery/public/home')
+    gallery.value = data.photos || []
+    galleryBw.value = !!data.bw
+    galleryCache = gallery.value; galleryBwCache = galleryBw.value
+  } catch { /* тихо */ }
 })
-
-// Guru photos live in /public/guru/. Bound via :src so Vite serves them from /public.
-const hero = '/guru/hero.jpg' // splash — atmospheric profile
-const portrait = '/guru/1.jpg' // clear portrait — About & login
-const gallery = Array.from({ length: 12 }, (_, i) => `/guru/gallery/${String(i + 1).padStart(2, '0')}.jpg`)
 
 // Filmstrip scrolling
 const strip = ref(null)
@@ -42,8 +52,8 @@ function scrollStrip(dir) {
 const lightbox = ref(-1)
 function openLb(i) { lightbox.value = i; document.body.style.overflow = 'hidden' }
 function closeLb() { lightbox.value = -1; document.body.style.overflow = '' }
-function lbPrev() { lightbox.value = (lightbox.value - 1 + gallery.length) % gallery.length }
-function lbNext() { lightbox.value = (lightbox.value + 1) % gallery.length }
+function lbPrev() { const n = gallery.value.length; lightbox.value = (lightbox.value - 1 + n) % n }
+function lbNext() { const n = gallery.value.length; lightbox.value = (lightbox.value + 1) % n }
 // Свайп по фото на мобиле
 let touchX = 0
 function onTouchStart(e) { touchX = e.changedTouches[0].clientX }
@@ -82,7 +92,7 @@ const service = [
 
     <!-- Hero -->
     <section class="relative min-h-[100svh] overflow-hidden">
-      <img :src="hero" alt="Манибандха Прабху" class="photo-bw absolute inset-0 h-full w-full object-cover object-[52%_14%]" />
+      <img :src="hero" alt="Манибандха Прабху" :class="galleryBw && 'grayscale'" class="photo-bw absolute inset-0 h-full w-full object-cover object-[52%_14%]" />
       <!-- bottom gradient (mobile legibility) + left gradient (desktop, text sits right) -->
       <div class="absolute inset-0 bg-gradient-to-t from-ink-900 via-ink-900/65 to-ink-900/40 lg:via-ink-900/40 lg:to-ink-900/30"></div>
       <div class="absolute inset-0 hidden md:block bg-gradient-to-l from-ink-900/85 via-ink-900/25 to-transparent"></div>
@@ -124,7 +134,7 @@ const service = [
         </div>
         <div class="order-1 md:order-2">
           <div class="overflow-hidden rounded-2xl border border-parchment-300 shadow-lg">
-            <img :src="portrait" alt="Манибандха Прабху" class="photo-bw aspect-[4/5] w-full object-cover" />
+            <img :src="portrait" alt="Манибандха Прабху" :class="galleryBw && 'grayscale'" class="photo-bw aspect-[4/5] w-full object-cover" />
           </div>
         </div>
       </div>
@@ -187,7 +197,7 @@ const service = [
     </section>
 
     <!-- Gallery — swipeable filmstrip + lightbox -->
-    <section class="py-20">
+    <section v-if="gallery.length" class="py-20">
       <div class="mx-auto mb-8 flex max-w-6xl items-center justify-between px-6">
         <h2 class="font-home text-4xl font-semibold text-ink-900">Галерея</h2>
         <div class="hidden gap-2 sm:flex">
@@ -205,7 +215,7 @@ const service = [
           class="group relative aspect-[3/4] w-56 shrink-0 snap-start overflow-hidden rounded-xl border border-parchment-300 shadow-sm sm:w-64"
           @click="openLb(i)"
         >
-          <img :src="src" alt="Манибандха Прабху" loading="lazy" class="photo-bw h-full w-full object-cover transition duration-500 group-hover:scale-105" />
+          <img :src="src" alt="Манибандха Прабху" loading="lazy" :class="galleryBw && 'grayscale'" class="photo-bw h-full w-full object-cover transition duration-500 group-hover:scale-105" />
           <span class="absolute inset-0 flex items-center justify-center bg-ink-900/0 transition group-hover:bg-ink-900/25">
             <AppIcon name="expand" :size="26" class="text-white opacity-0 transition group-hover:opacity-100" />
           </span>
@@ -224,7 +234,7 @@ const service = [
           <button class="absolute left-3 z-10 flex h-12 w-12 items-center justify-center rounded-full bg-ink-900/50 text-white/90 backdrop-blur-sm hover:bg-ink-900/70 hover:text-white sm:left-6" @click="lbPrev">
             <AppIcon name="chevron" :size="28" class="rotate-90" />
           </button>
-          <img :src="gallery[lightbox]" alt="Манибандха Прабху" class="photo-bw max-h-[88vh] max-w-[92vw] touch-pan-y select-none rounded-lg object-contain shadow-2xl" @touchstart.passive="onTouchStart" @touchend.passive="onTouchEnd" />
+          <img :src="gallery[lightbox]" alt="Манибандха Прабху" :class="galleryBw && 'grayscale'" class="photo-bw max-h-[88vh] max-w-[92vw] touch-pan-y select-none rounded-lg object-contain shadow-2xl" @touchstart.passive="onTouchStart" @touchend.passive="onTouchEnd" />
           <button class="absolute right-3 z-10 flex h-12 w-12 items-center justify-center rounded-full bg-ink-900/50 text-white/90 backdrop-blur-sm hover:bg-ink-900/70 hover:text-white sm:right-6" @click="lbNext">
             <AppIcon name="chevron" :size="28" class="-rotate-90" />
           </button>

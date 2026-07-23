@@ -9,6 +9,7 @@ import PhoneInput from '../components/PhoneInput.vue'
 import { confirmDialog } from '../composables/confirm'
 import { ROLE_LABELS } from '../lib/format'
 import { usePageTitle } from '../composables/pageTitle'
+import { useAutoRefresh } from '../composables/useAutoRefresh'
 
 usePageTitle('Пользователи')
 
@@ -45,8 +46,8 @@ const form = reactive({ email: '', full_name: '', phone: '', role: 'secretary', 
 const disciples = ref([])
 const discipleOptions = computed(() => [{ value: '', label: '— не привязан —' }, ...disciples.value.map((d) => ({ value: d.id, label: d.spiritual_name || d.material_name }))])
 
-async function load() {
-  loading.value = true
+async function load(silent = false) {
+  if (!silent) loading.value = true
   try {
     const [u, d, r] = await Promise.all([
       client.get('/users'),
@@ -138,9 +139,7 @@ async function remove(u) {
 }
 
 onMounted(load)
-// keep-alive: обновляем при возврате в раздел (первую активацию пропускаем — не грузим дважды)
-let firstActivate = true
-onActivated(() => { if (firstActivate) { firstActivate = false; return } load() })
+useAutoRefresh(load)
 </script>
 
 <template>

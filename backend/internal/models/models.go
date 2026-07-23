@@ -458,6 +458,33 @@ type ConferenceParticipant struct {
 
 func (ConferenceParticipant) TableName() string { return "conference_participants" }
 
+// GalleryAlbum — альбом галереи. is_home — предопределённый альбом для главной страницы.
+type GalleryAlbum struct {
+	ID          int       `gorm:"primaryKey" json:"id"`
+	Title       string    `gorm:"column:title" json:"title"`
+	Description *string   `gorm:"column:description" json:"description"`
+	IsHome      bool      `gorm:"column:is_home" json:"is_home"`
+	SortOrder   int       `gorm:"column:sort_order" json:"sort_order"`
+	CreatedAt   time.Time `gorm:"column:created_at" json:"-"`
+	UpdatedAt   time.Time `gorm:"column:updated_at" json:"-"`
+
+	Photos []GalleryPhoto `gorm:"foreignKey:AlbumID" json:"-"`
+}
+
+func (GalleryAlbum) TableName() string { return "gallery_albums" }
+
+// GalleryPhoto — фотография в альбоме.
+type GalleryPhoto struct {
+	ID        int       `gorm:"primaryKey" json:"id"`
+	AlbumID   int       `gorm:"column:album_id" json:"album_id"`
+	URL       string    `gorm:"column:url" json:"url"`
+	Caption   *string   `gorm:"column:caption" json:"caption"`
+	SortOrder int       `gorm:"column:sort_order" json:"sort_order"`
+	CreatedAt time.Time `gorm:"column:created_at" json:"-"`
+}
+
+func (GalleryPhoto) TableName() string { return "gallery_photos" }
+
 func (ConferenceRecording) TableName() string { return "conference_recordings" }
 
 // Event — событие календаря.

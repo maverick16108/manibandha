@@ -7,6 +7,7 @@ import AppSkeleton from '../components/AppSkeleton.vue'
 import { usePageTitle } from '../composables/pageTitle'
 import { localCacheStats, wipeLocalChatCache } from '../chat/store'
 import { confirmDialog } from '../composables/confirm'
+import { useAutoRefresh } from '../composables/useAutoRefresh'
 
 usePageTitle('Настройки')
 
@@ -50,8 +51,8 @@ const form = ref({ forum_edit_window_minutes: 60, auth_expire_days: 30, recordin
 const prefetchOn = ref(localStorage.getItem('apiPrefetch') !== '0')
 function togglePrefetch() { try { localStorage.setItem('apiPrefetch', prefetchOn.value ? '1' : '0') } catch { /* ignore */ } }
 
-async function load() {
-  loading.value = true
+async function load(silent = false) {
+  if (!silent) loading.value = true
   try {
     const { data } = await client.get('/settings')
     form.value = {
@@ -65,6 +66,7 @@ async function load() {
   }
 }
 onMounted(load)
+useAutoRefresh(load)
 
 function step(key, delta, min) {
   const v = Number(form.value[key]) || 0

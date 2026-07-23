@@ -71,6 +71,7 @@ const nav = [
   { name: 'service-reports', label: 'Отчёты', icon: 'reports', caps: ['reports.write', 'reports.read_all'] },
   { name: 'forum', label: 'Форум', icon: 'forum', caps: ['forum.view'] },
   { name: 'conference', label: 'Конференция', icon: 'video', caps: ['conference.view'] },
+  { name: 'gallery', label: 'Галерея', icon: 'image', caps: ['gallery.view'] },
   { name: 'dictionaries', label: 'Справочники', icon: 'pin', caps: ['dictionaries.manage'] },
   { name: 'users', label: 'Пользователи', icon: 'users', caps: ['users.manage'] },
   { name: 'roles', label: 'Роли', icon: 'key', caps: ['roles.manage'] },

@@ -72,8 +72,8 @@ function prevMonth() { let { y, m } = cursor.value; m--; if (m < 1) { m = 12; y-
 function nextMonth() { let { y, m } = cursor.value; m++; if (m > 12) { m = 1; y++ } cursor.value = { y, m } }
 function isTodayCell(d) { return d && cursor.value.y === now.getFullYear() && cursor.value.m === now.getMonth() + 1 && d === now.getDate() }
 
-async function load() {
-  loading.value = true
+async function load(silent = false) {
+  if (!silent || !events.value.length) loading.value = true // скелетон только на первой загрузке, не при каждом возврате
   try {
     const { data } = await client.get('/events')
     await preloadImages(data.flatMap((e) => extractImageUrls(e.description))) // фото вперёд — без скачков
@@ -102,7 +102,7 @@ onMounted(load)
 // keep-alive: onMounted срабатывает один раз — при ВОЗВРАТЕ (например, после «Изменить/Сохранить»)
 // перезагружаем список, чтобы изменения были видны сразу. Первую активацию пропускаем (не грузим дважды).
 let firstActivate = true
-onActivated(() => { if (firstActivate) { firstActivate = false; return } load() })
+onActivated(() => { if (firstActivate) { firstActivate = false; return } load(true) })
 </script>
 
 <template>

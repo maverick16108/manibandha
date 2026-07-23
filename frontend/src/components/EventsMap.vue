@@ -34,12 +34,12 @@ function stops() {
     .sort((a, b) => (a.e.starts_on || '').localeCompare(b.e.starts_on || ''))
 }
 
-function numberIcon(label) {
+function numberIcon(label, color) {
   const s = String(label)
   const w = Math.max(26, 12 + s.length * 8) // расширяем «пилюлю», если в городе несколько событий (напр. «2, 7»)
   return L.divIcon({
     className: '',
-    html: `<div style="width:${w}px;height:26px;border-radius:13px;background:#c8742a;color:#fff;display:flex;align-items:center;justify-content:center;font:600 12px/1 system-ui;box-shadow:0 1px 4px rgba(0,0,0,.35);border:2px solid #fff;white-space:nowrap;padding:0 5px">${s}</div>`,
+    html: `<div style="width:${w}px;height:26px;border-radius:13px;background:${color};color:#fff;display:flex;align-items:center;justify-content:center;font:600 12px/1 system-ui;box-shadow:0 1px 4px rgba(0,0,0,.35);border:2px solid #fff;white-space:nowrap;padding:0 5px">${s}</div>`,
     iconSize: [w, 26], iconAnchor: [w / 2, 13],
   })
 }
@@ -69,9 +69,13 @@ function arrowIcon(deg, color) {
 // сливаются; величина подъёма растёт с длиной перегона (длинные выгибаются сильнее).
 function curve(a, b, lift = 1, seg = 26) {
   const mLat = (a[0] + b[0]) / 2, mLng = (a[1] + b[1]) / 2
-  const d = Math.hypot(b[0] - a[0], b[1] - a[1])
+  const dLat = b[0] - a[0], dLng = b[1] - a[1]
+  const d = Math.hypot(dLat, dLng) || 1
   const bend = Math.min(0.22 * d + 0.4, 5) * lift
-  const cLat = mLat + bend, cLng = mLng
+  // выгиб ПЕРПЕНДИКУЛЯРНО ходу, «влево по движению»: восток→запад и обратно выгибаются в РАЗНЫЕ
+  // стороны (не сливаются); при движении на восток дуга уходит вверх (как и просили)
+  const cLat = mLat + bend * (dLng / d)
+  const cLng = mLng - bend * (dLat / d)
   const out = []
   for (let i = 0; i <= seg; i++) {
     const t = i / seg, u = 1 - t
@@ -80,14 +84,25 @@ function curve(a, b, lift = 1, seg = 26) {
   return out
 }
 
-// обрезаем концы дуги, чтобы линия НЕ заходила на кружки-точки (зазор R пикселей вокруг каждого узла)
+// обрезаем концы дуги ровно на R пикселей от каждого узла (интерполяцией, а не выбрасывая целые точки —
+// иначе на длинных перегонах шаг между точками огромный и линия «обрывается» далеко от точки)
 function trimEnds(path, R) {
-  if (!map || path.length < 2) return path
+  if (!map || path.length < 3) return path
   const px = path.map((p) => map.latLngToLayerPoint(L.latLng(p[0], p[1])))
   const n = px.length
-  let s = 0; while (s < n - 1 && px[0].distanceTo(px[s]) < R) s++
-  let e = n - 1; while (e > 0 && px[n - 1].distanceTo(px[e]) < R) e--
-  return s >= e ? null : path.slice(s, e + 1)
+  const lerp = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]
+  let sIdx = -1, sPt = null
+  for (let i = 1; i < n; i++) {
+    const d = px[0].distanceTo(px[i])
+    if (d >= R) { const dp = px[0].distanceTo(px[i - 1]); sPt = lerp(path[i - 1], path[i], (R - dp) / (d - dp || 1)); sIdx = i; break }
+  }
+  let eIdx = -1, ePt = null
+  for (let i = n - 2; i >= 0; i--) {
+    const d = px[n - 1].distanceTo(px[i])
+    if (d >= R) { const dp = px[n - 1].distanceTo(px[i + 1]); ePt = lerp(path[i + 1], path[i], (R - dp) / (d - dp || 1)); eIdx = i; break }
+  }
+  if (sPt == null || ePt == null || sIdx > eIdx) return null
+  return [sPt, ...path.slice(sIdx, eIdx + 1), ePt]
 }
 
 function render(fit = true) {
@@ -99,11 +114,17 @@ function render(fit = true) {
   if (!pts.length) return
 
   const latlngs = pts.map((p) => p.c)
-  // маршрут — восходящие дуги (пунктир); лёгкий разброс высоты по индексу, чтобы соседние не сливались
+  const keyOf = (c) => c[0].toFixed(2) + ',' + c[1].toFixed(2)
+  // маршрут — дуги, выгнутые перпендикулярно ходу. Повторные перегоны между теми же городами
+  // (в т.ч. «туда-обратно») выгибаются шире по мере повторения — не ложатся друг на друга.
+  const pairSeen = new Map()
   for (let i = 0; i < latlngs.length - 1; i++) {
     const a = latlngs[i], b = latlngs[i + 1]
     if (a[0] === b[0] && a[1] === b[1]) continue // подряд один город — нулевой сегмент не рисуем
-    const path = trimEnds(curve(a, b, 1 + 0.16 * (i % 4)), 18) // 18px зазор — линия не заходит на кружки
+    const pk = keyOf(a) + '>' + keyOf(b)
+    const occ = pairSeen.get(pk) || 0; pairSeen.set(pk, occ + 1)
+    const lift = 1 + 0.6 * occ + 0.12 * (i % 3) // повтор того же направления — шире; лёгкий джиттер по индексу
+    const path = trimEnds(curve(a, b, lift), 18) // 18px зазор — линия не заходит на кружки
     if (!path) continue
     const color = ROUTE_COLORS[i % ROUTE_COLORS.length]
     L.polyline(path, { color, weight: 3.5, opacity: 0.8, dashArray: '10 9', lineCap: 'round', lineJoin: 'round' }).addTo(layer)
@@ -115,7 +136,6 @@ function render(fit = true) {
 
   // группируем события по городу: один маркер, но в нём номера ВСЕХ событий там (напр. «2, 7»)
   const groups = new Map()
-  const keyOf = (c) => c[0].toFixed(2) + ',' + c[1].toFixed(2)
   pts.forEach((p, i) => {
     const k = keyOf(p.c)
     if (!groups.has(k)) groups.set(k, { c: p.c, nums: [], events: [] })
@@ -135,7 +155,8 @@ function render(fit = true) {
         .addTo(layer)
         .bindTooltip('Гуру сейчас здесь', { permanent: true, direction: 'top', offset: [0, -18], className: 'guru-tip' })
     }
-    const marker = L.marker(g.c, { icon: numberIcon(g.nums.join(', ')), zIndexOffset: 200 })
+    const gColor = ROUTE_COLORS[(g.nums[0] - 1) % ROUTE_COLORS.length] // цвет = цвет исходящей линии этой точки
+    const marker = L.marker(g.c, { icon: numberIcon(g.nums.join(', '), gColor), zIndexOffset: 200 })
       .addTo(layer)
       .bindPopup(popupHtml(g))
     marker.on('popupopen', (ev) => {

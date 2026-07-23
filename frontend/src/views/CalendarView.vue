@@ -106,8 +106,8 @@ onActivated(() => { if (firstActivate) { firstActivate = false; return } load() 
 </script>
 
 <template>
-  <div :class="mode === 'map' ? '' : 'mx-auto max-w-6xl'">
-    <div class="mb-6 flex flex-wrap items-center justify-between gap-3">
+  <div>
+    <div class="mx-auto mb-6 flex max-w-6xl flex-wrap items-center justify-between gap-3">
       <p class="text-ink-700/60">Где находится гуру и что происходит</p>
       <div class="flex flex-wrap items-center gap-2">
         <!-- переключатель вида -->
@@ -130,18 +130,18 @@ onActivated(() => { if (firstActivate) { firstActivate = false; return } load() 
     </div>
 
     <!-- current location banner -->
-    <div v-if="current" class="card mb-6 border-saffron-400/50 bg-saffron-500/5 p-5">
+    <div v-if="current" class="mx-auto card mb-6 max-w-6xl border-saffron-400/50 bg-saffron-500/5 p-5">
       <div class="mb-1 text-sm uppercase tracking-wide text-saffron-700">Сейчас</div>
       <div class="font-display text-2xl text-ink-900">{{ current.title }}</div>
       <div v-if="current.location" class="text-ink-700">📍 {{ current.location }} · {{ dateRange(current) }}</div>
     </div>
 
-    <div v-if="loading" class="space-y-4">
+    <div v-if="loading" class="mx-auto max-w-6xl space-y-4">
       <div v-for="i in 3" :key="i" class="card space-y-3 p-5"><AppSkeleton w="w-56" h="h-6" /><AppSkeleton /><AppSkeleton w="w-2/3" /></div>
     </div>
 
     <!-- LIST -->
-    <div v-else-if="mode === 'list'" class="lg:flex lg:items-start lg:gap-6">
+    <div v-else-if="mode === 'list'" class="mx-auto max-w-6xl lg:flex lg:items-start lg:gap-6">
       <div class="min-w-0 flex-1 space-y-4">
         <div v-for="e in listFeed" :id="`ev-${e.id}`" :key="e.id" class="card scroll-mt-24 p-5" :class="isNow(e) && 'border-saffron-400/50'">
           <div class="flex items-start justify-between gap-3">
@@ -171,7 +171,7 @@ onActivated(() => { if (firstActivate) { firstActivate = false; return } load() 
     </div>
 
     <!-- CALENDAR -->
-    <div v-else-if="mode === 'calendar'" class="card p-4 sm:p-6">
+    <div v-else-if="mode === 'calendar'" class="mx-auto card max-w-6xl p-4 sm:p-6">
       <div class="mb-4 flex items-center justify-between">
         <button class="flex h-9 w-9 items-center justify-center rounded-full border border-parchment-300 text-ink-700 hover:bg-parchment-100" @click="prevMonth">
           <AppIcon name="chevron" :size="18" class="rotate-90" />
@@ -208,7 +208,7 @@ onActivated(() => { if (firstActivate) { firstActivate = false; return } load() 
 
     <!-- MAP -->
     <div v-else-if="mode === 'map'">
-      <div class="card mb-4 flex flex-wrap items-end gap-3 p-4">
+      <div class="mx-auto card mb-4 flex max-w-6xl flex-wrap items-end gap-3 p-4">
         <div>
           <label class="label">С</label>
           <div class="w-40"><AppDatePicker v-model="mapFrom" /></div>

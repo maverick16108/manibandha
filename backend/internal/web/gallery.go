@@ -84,16 +84,19 @@ func (s *Server) updateGalleryAlbum(w http.ResponseWriter, r *http.Request) {
 	var p map[string]any
 	_ = decodeJSON(r, &p)
 	upd := map[string]any{}
-	if v, ok := p["title"]; ok {
-		if t := truncRunes(strings.TrimSpace(anyStr(v)), 255); t != "" {
-			upd["title"] = t
+	// предопределённый альбом «Главная» не переименовывается — можно менять только ч/б-флаг
+	if !a.IsHome {
+		if v, ok := p["title"]; ok {
+			if t := truncRunes(strings.TrimSpace(anyStr(v)), 255); t != "" {
+				upd["title"] = t
+			}
 		}
-	}
-	if v, ok := p["description"]; ok {
-		if d := strings.TrimSpace(anyStr(v)); d == "" {
-			upd["description"] = nil
-		} else {
-			upd["description"] = d
+		if v, ok := p["description"]; ok {
+			if d := strings.TrimSpace(anyStr(v)); d == "" {
+				upd["description"] = nil
+			} else {
+				upd["description"] = d
+			}
 		}
 	}
 	if len(upd) > 0 {

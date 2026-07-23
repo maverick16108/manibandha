@@ -71,9 +71,8 @@ async function delAlbum() {
 }
 
 // ── фотографии ──
-async function onFiles(ev) {
-  const files = [...(ev.target.files || [])]
-  if (fileInput.value) fileInput.value.value = ''
+async function uploadFiles(fileList) {
+  const files = [...(fileList || [])].filter((f) => f.type.startsWith('image/'))
   if (!files.length || !open.value) return
   uploading.value = true
   try {
@@ -87,6 +86,10 @@ async function onFiles(ev) {
     }
   } catch { showToast('Не удалось загрузить фото') } finally { uploading.value = false }
 }
+function onFiles(ev) { const f = ev.target.files; if (fileInput.value) fileInput.value.value = ''; uploadFiles(f) }
+// drag-and-drop загрузка в открытый альбом
+const dragOver = ref(false)
+function onDrop(ev) { dragOver.value = false; if (canManage.value) uploadFiles(ev.dataTransfer?.files) }
 async function delPhoto(p) {
   if (!(await confirmDialog({ message: 'Удалить фотографию?', confirmText: 'Удалить', danger: true }))) return
   try { await client.delete(`/gallery/photos/${p.id}`); open.value.photos = open.value.photos.filter((x) => x.id !== p.id); invalidatePrefix('/gallery') }
@@ -145,7 +148,7 @@ function lbPrev() { if (open.value?.photos?.length) lb.value = (lb.value - 1 + o
         </div>
         <div v-if="canManage" class="flex shrink-0 items-center gap-2">
           <button class="btn-outline text-sm" @click="fileInput.click()" :disabled="uploading"><AppIcon name="image" :size="15" /> {{ uploading ? 'Загрузка…' : 'Добавить фото' }}</button>
-          <button class="btn-ghost p-2" title="Переименовать" @click="editCurrent"><AppIcon name="edit" :size="18" /></button>
+          <button v-if="!open.is_home" class="btn-ghost p-2" title="Переименовать" @click="editCurrent"><AppIcon name="edit" :size="18" /></button>
           <button v-if="!open.is_home" class="rounded-lg p-2 text-ink-700/40 transition hover:bg-red-50 hover:text-red-600" title="Удалить альбом" @click="delAlbum"><AppIcon name="trash" :size="18" /></button>
           <input ref="fileInput" type="file" accept="image/*" multiple class="hidden" @change="onFiles" />
         </div>
@@ -156,12 +159,21 @@ function lbPrev() { if (open.value?.photos?.length) lb.value = (lb.value - 1 + o
         <input type="checkbox" :checked="open.bw" @change="toggleBw" /> Показывать фото на главной чёрно-белыми
       </label>
 
-      <div v-if="!open.photos.length" class="card p-12 text-center text-ink-700/50">В альбоме пока нет фотографий</div>
+      <!-- зона перетаскивания фото (drag-and-drop) -->
+      <div class="relative rounded-2xl transition" :class="dragOver && 'ring-2 ring-saffron-400 ring-offset-2'"
+           @dragenter.prevent="canManage && (dragOver = true)" @dragover.prevent @dragleave.prevent="dragOver = false" @drop.prevent="onDrop">
+        <div v-if="dragOver" class="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-2xl bg-saffron-500/10 text-saffron-700">
+          <span class="rounded-full bg-white/90 px-4 py-2 text-sm font-medium shadow">Отпустите, чтобы добавить фото</span>
+        </div>
 
-      <div v-else class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-        <div v-for="(p, i) in open.photos" :key="p.id" class="group relative aspect-square overflow-hidden rounded-xl bg-parchment-100">
-          <img :src="thumbUrl(p.url)" @error="imgFull($event, p.url)" class="h-full w-full cursor-zoom-in object-cover transition duration-300 group-hover:scale-105" @click="lb = i" />
-          <button v-if="canManage" class="absolute right-2 top-2 rounded-lg bg-black/45 p-1.5 text-white opacity-0 transition hover:bg-red-600 group-hover:opacity-100" title="Удалить" @click.stop="delPhoto(p)"><AppIcon name="trash" :size="16" /></button>
+        <div v-if="!open.photos.length" class="card p-12 text-center text-ink-700/50">
+          {{ canManage ? 'Перетащите фотографии сюда или нажмите «Добавить фото»' : 'В альбоме пока нет фотографий' }}
+        </div>
+        <div v-else class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+          <div v-for="(p, i) in open.photos" :key="p.id" class="group relative aspect-square overflow-hidden rounded-xl bg-parchment-100">
+            <img :src="thumbUrl(p.url)" @error="imgFull($event, p.url)" class="h-full w-full cursor-zoom-in object-cover transition duration-300 group-hover:scale-105" @click="lb = i" />
+            <button v-if="canManage" class="absolute right-2 top-2 rounded-lg bg-black/45 p-1.5 text-white opacity-0 transition hover:bg-red-600 group-hover:opacity-100" title="Удалить" @click.stop="delPhoto(p)"><AppIcon name="trash" :size="16" /></button>
+          </div>
         </div>
       </div>
     </template>

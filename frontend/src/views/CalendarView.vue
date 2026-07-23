@@ -106,7 +106,7 @@ onActivated(() => { if (firstActivate) { firstActivate = false; return } load() 
 </script>
 
 <template>
-  <div class="mx-auto max-w-6xl">
+  <div :class="mode === 'map' ? '' : 'mx-auto max-w-6xl'">
     <div class="mb-6 flex flex-wrap items-center justify-between gap-3">
       <p class="text-ink-700/60">Где находится гуру и что происходит</p>
       <div class="flex flex-wrap items-center gap-2">
@@ -219,8 +219,8 @@ onActivated(() => { if (firstActivate) { firstActivate = false; return } load() 
         </div>
         <p class="ml-auto text-sm text-ink-700/60">Маршрут гуру · событий: <b class="text-ink-900">{{ mapEvents.length }}</b></p>
       </div>
-      <!-- карта во всю ширину и до низа экрана (отрицательные поля гасят паддинги main) -->
-      <div class="-mx-4 -mb-4 h-[calc(100dvh-15rem)] sm:-mx-6 sm:-mb-6 lg:-mx-8 lg:-mb-8">
+      <!-- карта во всю ширину и до самого низа экрана (высоту EventsMap задаёт сам, поля гасят паддинги main) -->
+      <div class="-mx-4 -mb-4 sm:-mx-6 sm:-mb-6 lg:-mx-8 lg:-mb-8">
         <EventsMap :events="mapEvents" @open="selected = $event" />
       </div>
     </div>

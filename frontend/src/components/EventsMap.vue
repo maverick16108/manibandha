@@ -10,8 +10,16 @@ const props = defineProps({
 const emit = defineEmits(['open'])
 
 const mapEl = ref(null)
+const rootEl = ref(null)
 let map = null
 let layer = null
+// высота = ровно до низа экрана (без переполнения/скролла)
+function fitHeight() {
+  if (!rootEl.value) return
+  const top = rootEl.value.getBoundingClientRect().top
+  rootEl.value.style.height = Math.max(320, window.innerHeight - top) + 'px'
+  if (map) map.invalidateSize()
+}
 
 const MON = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек']
 function fmt(iso) { if (!iso) return ''; const [y, m, d] = iso.split('-'); return `${+d} ${MON[+m - 1]} ${y}` }
@@ -46,10 +54,12 @@ function guruIcon() {
     iconSize: [52, 52], iconAnchor: [26, 26],
   })
 }
-function arrowIcon(deg) {
+// приглушённая палитра (НЕ радуга) — соседние перегоны разного цвета, чтобы линии не сливались
+const ROUTE_COLORS = ['#c8742a', '#3f7d6e', '#9c4a3c', '#4a6d9c', '#8a6d2b', '#6b5b8a', '#5a7a3f']
+function arrowIcon(deg, color) {
   return L.divIcon({
     className: '',
-    html: `<div style="color:#c8742a;font-size:16px;line-height:1;transform:rotate(${deg}deg);text-shadow:0 0 3px #fff,0 0 3px #fff">▶</div>`,
+    html: `<div style="color:${color};font-size:16px;line-height:1;transform:rotate(${deg}deg);text-shadow:0 0 3px #fff,0 0 3px #fff">▶</div>`,
     iconSize: [16, 16], iconAnchor: [8, 8],
   })
 }
@@ -95,11 +105,12 @@ function render(fit = true) {
     if (a[0] === b[0] && a[1] === b[1]) continue // подряд один город — нулевой сегмент не рисуем
     const path = trimEnds(curve(a, b, 1 + 0.16 * (i % 4)), 18) // 18px зазор — линия не заходит на кружки
     if (!path) continue
-    L.polyline(path, { color: '#c8742a', weight: 3.5, opacity: 0.7, dashArray: '10 9', lineCap: 'round', lineJoin: 'round' }).addTo(layer)
+    const color = ROUTE_COLORS[i % ROUTE_COLORS.length]
+    L.polyline(path, { color, weight: 3.5, opacity: 0.8, dashArray: '10 9', lineCap: 'round', lineJoin: 'round' }).addTo(layer)
     const m = Math.floor(path.length / 2)
     const p0 = path[Math.max(0, m - 1)], p1 = path[Math.min(path.length - 1, m + 1)]
     const deg = Math.atan2(-(p1[0] - p0[0]), p1[1] - p0[1]) * 180 / Math.PI
-    L.marker(path[m], { icon: arrowIcon(deg), interactive: false }).addTo(layer)
+    L.marker(path[m], { icon: arrowIcon(deg, color), interactive: false }).addTo(layer)
   }
 
   // группируем события по городу: один маркер, но в нём номера ВСЕХ событий там (напр. «2, 7»)
@@ -158,15 +169,17 @@ onMounted(async () => {
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '© OpenStreetMap', maxZoom: 18,
   }).addTo(map)
+  fitHeight()
   render()
   map.on('zoomend', () => render(false)) // зазор у точек задан в пикселях — пересчитываем при зуме
+  window.addEventListener('resize', fitHeight)
 })
-onBeforeUnmount(() => { if (map) { map.remove(); map = null } })
+onBeforeUnmount(() => { window.removeEventListener('resize', fitHeight); if (map) { map.remove(); map = null } })
 watch(() => props.events, () => render(), { deep: true })
 </script>
 
 <template>
-  <div class="flex h-full flex-col">
+  <div ref="rootEl" class="flex flex-col">
     <div ref="mapEl" class="min-h-0 w-full flex-1 overflow-hidden"></div>
     <p v-if="!stops().length" class="py-3 text-center text-sm text-ink-700/50">
       В выбранном периоде нет событий с известным местом на карте.

@@ -34,13 +34,17 @@ function stops() {
     .sort((a, b) => (a.e.starts_on || '').localeCompare(b.e.starts_on || ''))
 }
 
-function numberIcon(label, color) {
-  const s = String(label)
-  const w = Math.max(26, 12 + s.length * 8) // расширяем «пилюлю», если в городе несколько событий (напр. «2, 7»)
+// маркер города: каждое событие — отдельная «монетка» своего цвета (= цвет его линии). Несколько
+// событий в одном городе видно наглядно и по цветам, а не одной слитной пилюлей.
+function numberIcon(items) {
+  const R = 26, ov = 9 // диаметр монетки и нахлёст
+  const w = R + (items.length - 1) * (R - ov)
+  const coins = items.map((it, i) =>
+    `<div style="width:${R}px;height:${R}px;margin-left:${i ? -ov : 0}px;border-radius:50%;background:${it.color};color:#fff;display:flex;align-items:center;justify-content:center;font:700 12px/1 system-ui;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.35)">${it.n}</div>`).join('')
   return L.divIcon({
     className: '',
-    html: `<div style="width:${w}px;height:26px;border-radius:13px;background:${color};color:#fff;display:flex;align-items:center;justify-content:center;font:600 12px/1 system-ui;box-shadow:0 1px 4px rgba(0,0,0,.35);border:2px solid #fff;white-space:nowrap;padding:0 5px">${s}</div>`,
-    iconSize: [w, 26], iconAnchor: [w / 2, 13],
+    html: `<div style="display:flex;align-items:center">${coins}</div>`,
+    iconSize: [w, R], iconAnchor: [w / 2, R / 2],
   })
 }
 // маркер «гуру сейчас здесь» — пульсирующее кольцо, ставится позади номера города
@@ -155,8 +159,8 @@ function render(fit = true) {
         .addTo(layer)
         .bindTooltip('Гуру сейчас здесь', { permanent: true, direction: 'top', offset: [0, -18], className: 'guru-tip' })
     }
-    const gColor = ROUTE_COLORS[(g.nums[0] - 1) % ROUTE_COLORS.length] // цвет = цвет исходящей линии этой точки
-    const marker = L.marker(g.c, { icon: numberIcon(g.nums.join(', '), gColor), zIndexOffset: 200 })
+    const items = g.nums.map((n) => ({ n, color: ROUTE_COLORS[(n - 1) % ROUTE_COLORS.length] })) // каждое событие — своим цветом
+    const marker = L.marker(g.c, { icon: numberIcon(items), zIndexOffset: 200 })
       .addTo(layer)
       .bindPopup(popupHtml(g))
     marker.on('popupopen', (ev) => {

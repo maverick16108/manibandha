@@ -70,7 +70,17 @@ function curve(a, b, lift = 1, seg = 26) {
   return out
 }
 
-function render() {
+// обрезаем концы дуги, чтобы линия НЕ заходила на кружки-точки (зазор R пикселей вокруг каждого узла)
+function trimEnds(path, R) {
+  if (!map || path.length < 2) return path
+  const px = path.map((p) => map.latLngToLayerPoint(L.latLng(p[0], p[1])))
+  const n = px.length
+  let s = 0; while (s < n - 1 && px[0].distanceTo(px[s]) < R) s++
+  let e = n - 1; while (e > 0 && px[n - 1].distanceTo(px[e]) < R) e--
+  return s >= e ? null : path.slice(s, e + 1)
+}
+
+function render(fit = true) {
   if (!map) return
   if (layer) { layer.remove(); layer = null }
   layer = L.layerGroup().addTo(map)
@@ -83,10 +93,12 @@ function render() {
   for (let i = 0; i < latlngs.length - 1; i++) {
     const a = latlngs[i], b = latlngs[i + 1]
     if (a[0] === b[0] && a[1] === b[1]) continue // подряд один город — нулевой сегмент не рисуем
-    const path = curve(a, b, 1 + 0.16 * (i % 4))
+    const path = trimEnds(curve(a, b, 1 + 0.16 * (i % 4)), 18) // 18px зазор — линия не заходит на кружки
+    if (!path) continue
     L.polyline(path, { color: '#c8742a', weight: 3.5, opacity: 0.7, dashArray: '10 9', lineCap: 'round', lineJoin: 'round' }).addTo(layer)
     const m = Math.floor(path.length / 2)
-    const deg = Math.atan2(-(path[m + 1][0] - path[m - 1][0]), path[m + 1][1] - path[m - 1][1]) * 180 / Math.PI
+    const p0 = path[Math.max(0, m - 1)], p1 = path[Math.min(path.length - 1, m + 1)]
+    const deg = Math.atan2(-(p1[0] - p0[0]), p1[1] - p0[1]) * 180 / Math.PI
     L.marker(path[m], { icon: arrowIcon(deg), interactive: false }).addTo(layer)
   }
 
@@ -123,7 +135,7 @@ function render() {
       })
     })
   }
-  map.fitBounds(L.latLngBounds(latlngs).pad(0.25))
+  if (fit) map.fitBounds(L.latLngBounds(latlngs).pad(0.25))
 }
 
 function todayStr() { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
@@ -147,6 +159,7 @@ onMounted(async () => {
     attribution: '© OpenStreetMap', maxZoom: 18,
   }).addTo(map)
   render()
+  map.on('zoomend', () => render(false)) // зазор у точек задан в пикселях — пересчитываем при зуме
 })
 onBeforeUnmount(() => { if (map) { map.remove(); map = null } })
 watch(() => props.events, () => render(), { deep: true })

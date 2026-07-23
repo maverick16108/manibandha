@@ -9,6 +9,7 @@ import AppIcon from '../components/AppIcon.vue'
 import { formatDate } from '../lib/format'
 import { usePageTitle } from '../composables/pageTitle'
 import { cachedGet, TTL } from '../composables/apiCache'
+import client from '../api/client'
 
 const route = useRoute()
 const auth = useAuthStore()
@@ -115,6 +116,31 @@ onMounted(async () => {
   await load()
   await nextTick(); flashReady.value = true // с этого момента подсвечиваем только реально новые элементы
 })
+
+// ── соглашение в разделе «Вопросы»: показ при первом входе + управление ──
+const agr = ref(null) // { enabled, text, acknowledged, can_manage, version }
+const agrChecked = ref(false)
+const agrManage = ref(null) // модалка редактирования { enabled, text }
+const agrSaving = ref(false)
+const showAgreement = computed(() => !isReport.value && agr.value && agr.value.enabled && !agr.value.acknowledged)
+async function loadAgreement() {
+  if (isReport.value) return
+  try { const { data } = await client.get('/questions/agreement'); agr.value = data } catch { /* ignore */ }
+}
+async function ackAgreement() {
+  try { await client.post('/questions/agreement/ack'); if (agr.value) agr.value.acknowledged = true } catch { /* ignore */ }
+}
+function openAgreementManage() { agrManage.value = { enabled: agr.value.enabled, text: agr.value.text } }
+async function saveAgreement() {
+  agrSaving.value = true
+  try {
+    const { data } = await client.put('/questions/agreement', { enabled: agrManage.value.enabled, text: agrManage.value.text })
+    agr.value = { ...agr.value, ...data, acknowledged: true }
+    agrManage.value = null
+  } catch { /* ignore */ } finally { agrSaving.value = false }
+}
+onMounted(loadAgreement)
+onActivated(loadAgreement)
 </script>
 
 <template>
@@ -123,9 +149,12 @@ onMounted(async () => {
       <div>
         <p class="text-ink-700/60">{{ isReport ? 'Ежемесячные отчёты учеников · доступ: ученик, куратор, гуру' : 'Личные вопросы · видит только гуру и сам ученик' }}</p>
       </div>
-      <RouterLink v-if="auth.user?.disciple_id" :to="{ name: isReport ? 'report-new' : 'question-new' }" class="btn-primary">
-        {{ isReport ? '+ Новый отчёт' : '+ Новый вопрос' }}
-      </RouterLink>
+      <div class="flex items-center gap-2">
+        <button v-if="!isReport && agr && agr.can_manage" class="btn-ghost p-2" title="Соглашение при входе" @click="openAgreementManage"><AppIcon name="settings" :size="18" /></button>
+        <RouterLink v-if="auth.user?.disciple_id" :to="{ name: isReport ? 'report-new' : 'question-new' }" class="btn-primary">
+          {{ isReport ? '+ Новый отчёт' : '+ Новый вопрос' }}
+        </RouterLink>
+      </div>
     </div>
 
     <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
@@ -165,6 +194,45 @@ onMounted(async () => {
     </TransitionGroup>
     <div v-if="!loading && !filtered.length" class="card p-8 text-center text-ink-700/50">
       {{ (search || filterPeriod) ? 'Ничего не найдено' : (isReport ? 'Отчётов пока нет' : 'Вопросов пока нет') }}
+    </div>
+
+    <!-- соглашение при первом входе в раздел «Вопросы» -->
+    <div v-if="showAgreement" class="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/55 p-4">
+      <div class="flex max-h-[88vh] w-full max-w-xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <div class="flex-1 overflow-y-auto px-6 py-6">
+          <div class="whitespace-pre-line text-[15px] leading-relaxed text-ink-800">{{ agr.text }}</div>
+        </div>
+        <div class="border-t border-parchment-200 p-5">
+          <label class="mb-4 flex cursor-pointer items-start gap-2.5 text-sm text-ink-800">
+            <input type="checkbox" v-model="agrChecked" class="mt-0.5" /> <span>Я прочитал(а) и понимаю</span>
+          </label>
+          <button class="btn-primary w-full" :disabled="!agrChecked" @click="ackAgreement">Продолжить</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- управление соглашением (для тех, у кого есть доступ) -->
+    <div v-if="agrManage" class="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/40 p-4" @click.self="agrManage = null">
+      <div class="w-full max-w-xl overflow-hidden rounded-2xl bg-white shadow-xl">
+        <header class="flex items-center justify-between border-b border-parchment-200 px-5 py-3.5">
+          <h3 class="font-medium text-ink-900">Соглашение при входе в «Вопросы»</h3>
+          <button class="rounded-lg p-1.5 text-ink-700/60 hover:bg-parchment-100" @click="agrManage = null"><AppIcon name="close" :size="22" /></button>
+        </header>
+        <div class="space-y-4 p-5">
+          <label class="flex items-center gap-2 text-sm text-ink-800">
+            <input type="checkbox" v-model="agrManage.enabled" /> Показывать соглашение при входе в раздел
+          </label>
+          <div>
+            <label class="label">Текст соглашения</label>
+            <textarea v-model="agrManage.text" rows="12" class="input resize-y text-sm leading-relaxed"></textarea>
+            <p class="mt-1 text-xs text-ink-700/50">При изменении текста соглашение снова покажется всем пользователям.</p>
+          </div>
+        </div>
+        <div class="flex justify-end gap-2 border-t border-parchment-200 px-5 py-3.5">
+          <button class="btn-ghost" @click="agrManage = null">Отмена</button>
+          <button class="btn-primary" :disabled="agrSaving || !agrManage.text.trim()" @click="saveAgreement">{{ agrSaving ? '…' : 'Сохранить' }}</button>
+        </div>
+      </div>
     </div>
   </div>
 </template>

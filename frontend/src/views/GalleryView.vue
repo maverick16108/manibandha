@@ -106,21 +106,21 @@ function lbPrev() { if (open.value?.photos?.length) lb.value = (lb.value - 1 + o
 </script>
 
 <template>
-  <div class="mx-auto max-w-6xl">
+  <div>
     <!-- ── СПИСОК АЛЬБОМОВ ── -->
     <template v-if="!open">
-      <div class="mb-6 flex flex-wrap items-center justify-between gap-3">
+      <div class="mx-auto mb-6 flex max-w-6xl flex-wrap items-center justify-between gap-3">
         <p class="text-ink-700/60">Альбомы с фотографиями</p>
         <button v-if="canManage" class="btn-primary" @click="newAlbum">+ Альбом</button>
       </div>
 
-      <div v-if="loading" class="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+      <div v-if="loading" class="grid gap-5 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
         <div v-for="i in 6" :key="i" class="card overflow-hidden"><AppSkeleton h="h-44" /><div class="p-4"><AppSkeleton w="w-40" /></div></div>
       </div>
 
-      <div v-else-if="!albums.length" class="card p-12 text-center text-ink-700/50">Альбомов пока нет</div>
+      <div v-else-if="!albums.length" class="card mx-auto max-w-6xl p-12 text-center text-ink-700/50">Альбомов пока нет</div>
 
-      <div v-else class="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+      <div v-else class="grid gap-5 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
         <button v-for="a in albums" :key="a.id" class="card group overflow-hidden text-left transition hover:shadow-md" @click="openAlbum(a)">
           <div class="relative aspect-[4/3] w-full overflow-hidden bg-parchment-100">
             <img v-if="a.cover" :src="thumbUrl(a.cover)" @error="imgFull($event, a.cover)" class="h-full w-full object-cover transition duration-300 group-hover:scale-105" />
@@ -137,7 +137,7 @@ function lbPrev() { if (open.value?.photos?.length) lb.value = (lb.value - 1 + o
 
     <!-- ── АЛЬБОМ ── -->
     <template v-else>
-      <div class="mb-5 flex flex-wrap items-center gap-3">
+      <div class="mx-auto mb-5 flex max-w-6xl flex-wrap items-center gap-3">
         <button class="btn-outline shrink-0" @click="open = null"><AppIcon name="chevron" :size="16" class="rotate-90" /> Альбомы</button>
         <div class="min-w-0 flex-1">
           <div class="flex items-center gap-2">
@@ -155,7 +155,7 @@ function lbPrev() { if (open.value?.photos?.length) lb.value = (lb.value - 1 + o
       </div>
 
       <!-- ч/б для главной -->
-      <label v-if="open.is_home && canManage" class="mb-4 flex items-center gap-2 text-sm text-ink-800">
+      <label v-if="open.is_home && canManage" class="mx-auto mb-4 flex max-w-6xl items-center gap-2 text-sm text-ink-800">
         <input type="checkbox" :checked="open.bw" @change="toggleBw" /> Показывать фото на главной чёрно-белыми
       </label>
 
@@ -169,7 +169,7 @@ function lbPrev() { if (open.value?.photos?.length) lb.value = (lb.value - 1 + o
         <div v-if="!open.photos.length" class="card p-12 text-center text-ink-700/50">
           {{ canManage ? 'Перетащите фотографии сюда или нажмите «Добавить фото»' : 'В альбоме пока нет фотографий' }}
         </div>
-        <div v-else class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+        <div v-else class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
           <div v-for="(p, i) in open.photos" :key="p.id" class="group relative aspect-square overflow-hidden rounded-xl bg-parchment-100">
             <img :src="thumbUrl(p.url)" @error="imgFull($event, p.url)" class="h-full w-full cursor-zoom-in object-cover transition duration-300 group-hover:scale-105" @click="lb = i" />
             <button v-if="canManage" class="absolute right-2 top-2 rounded-lg bg-black/45 p-1.5 text-white opacity-0 transition hover:bg-red-600 group-hover:opacity-100" title="Удалить" @click.stop="delPhoto(p)"><AppIcon name="trash" :size="16" /></button>

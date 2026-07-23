@@ -122,6 +122,14 @@ func (s *Server) tokenFor(u *models.User) (string, error) {
 	return s.JWT.Create(u.Email, u.Role, days*1440)
 }
 
+func (s *Server) getStrSetting(key, def string) string {
+	var st models.AppSetting
+	if err := s.DB.Where("key = ?", key).First(&st).Error; err != nil {
+		return def
+	}
+	return st.Value
+}
+
 func (s *Server) getIntSetting(key string, def int) int {
 	var st models.AppSetting
 	if err := s.DB.Where("key = ?", key).First(&st).Error; err != nil {

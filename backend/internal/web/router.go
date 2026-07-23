@@ -70,6 +70,9 @@ func (s *Server) Router() http.Handler {
 		pr.Patch("/threads/{id}/messages/{mid}", s.editThreadMessage)
 		pr.Delete("/threads/{id}/messages/{mid}", s.deleteThreadMessage)
 		pr.Post("/threads/{id}/messages/{mid}/react", s.reactThreadMessage)
+		// соглашение в «Вопросах»: чтение и подтверждение — любому в разделе
+		pr.Get("/questions/agreement", s.getQuestionAgreement)
+		pr.Post("/questions/agreement/ack", s.ackQuestionAgreement)
 		// события (чтение), черновики, настройки (чтение)
 		pr.Get("/events", s.listEvents)
 		pr.Get("/events/{id}", s.getEvent)
@@ -99,6 +102,12 @@ func (s *Server) Router() http.Handler {
 	api.Group(func(pr chi.Router) {
 		pr.Use(s.auth, s.requireCap("settings.manage"))
 		pr.Put("/settings", s.updateSettings)
+	})
+
+	// соглашение в «Вопросах»: изменение — право questions.agreement_manage
+	api.Group(func(pr chi.Router) {
+		pr.Use(s.auth, s.requireCap("questions.agreement_manage"))
+		pr.Put("/questions/agreement", s.updateQuestionAgreement)
 	})
 
 	// галерея: просмотр — право gallery.view

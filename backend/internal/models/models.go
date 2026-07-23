@@ -485,6 +485,14 @@ type GalleryPhoto struct {
 
 func (GalleryPhoto) TableName() string { return "gallery_photos" }
 
+// QuestionAgreementAck — подтверждение пользователем соглашения в «Вопросах» (по версии текста).
+type QuestionAgreementAck struct {
+	UserID  int `gorm:"column:user_id;primaryKey" json:"user_id"`
+	Version int `gorm:"column:version" json:"version"`
+}
+
+func (QuestionAgreementAck) TableName() string { return "question_agreement_acks" }
+
 func (ConferenceRecording) TableName() string { return "conference_recordings" }
 
 // Event — событие календаря.

@@ -94,7 +94,7 @@ const service = [
     <section class="relative min-h-[100svh] overflow-hidden">
       <!-- моб.: кадр чуть левее по X, чтобы голова целиком; большие мониторы: показываем больше неба сверху,
            чтобы голова опустилась и лого её не перекрывало -->
-      <img :src="hero" alt="Манибандха Прабху" :class="galleryBw && 'grayscale'" class="photo-bw absolute inset-0 h-full w-full object-cover object-[40%_15%] sm:object-[52%_14%] min-[2000px]:object-[52%_4%]" />
+      <img :src="hero" alt="Манибандха Прабху" :class="galleryBw && 'grayscale'" class="photo-bw absolute inset-0 h-full w-full object-cover object-[40%_15%] sm:object-[52%_14%] min-[2000px]:object-[52%_10%]" />
       <!-- bottom gradient (mobile legibility) + left gradient (desktop, text sits right) -->
       <div class="absolute inset-0 bg-gradient-to-t from-ink-900 via-ink-900/65 to-ink-900/40 lg:via-ink-900/40 lg:to-ink-900/30"></div>
       <div class="absolute inset-0 hidden md:block bg-gradient-to-l from-ink-900/85 via-ink-900/25 to-transparent"></div>

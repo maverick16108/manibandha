@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 defineOptions({ name: 'GalleryView' })
 import client from '../api/client'
 import { useAuthStore } from '../stores/auth'
@@ -101,8 +101,19 @@ async function toggleBw() {
   try { await client.patch(`/gallery/albums/${open.value.id}`, { bw: open.value.bw }) } catch { showToast('Не удалось сохранить') }
 }
 
+const lbRot = ref(0)
+function lbRotate() { lbRot.value = (lbRot.value + 90) % 360 }
 function lbNext() { if (open.value?.photos?.length) lb.value = (lb.value + 1) % open.value.photos.length }
 function lbPrev() { if (open.value?.photos?.length) lb.value = (lb.value - 1 + open.value.photos.length) % open.value.photos.length }
+watch(lb, () => { lbRot.value = 0 }) // сброс поворота при смене фото
+function onLbKey(e) {
+  if (lb.value < 0) return
+  if (e.key === 'ArrowLeft') lbPrev()
+  else if (e.key === 'ArrowRight') lbNext()
+  else if (e.key === 'r' || e.key === 'R' || e.key === 'к' || e.key === 'К') lbRotate()
+}
+onMounted(() => document.addEventListener('keydown', onLbKey))
+onBeforeUnmount(() => document.removeEventListener('keydown', onLbKey))
 </script>
 
 <template>
@@ -204,10 +215,13 @@ function lbPrev() { if (open.value?.photos?.length) lb.value = (lb.value - 1 + o
 
     <!-- лайтбокс -->
     <div v-if="lb >= 0 && open" class="fixed inset-0 z-[60] flex items-center justify-center bg-ink-900/90 p-4" @click.self="lb = -1">
-      <button class="absolute right-4 top-4 rounded-lg p-2 text-white/80 hover:bg-white/10" @click="lb = -1"><AppIcon name="close" :size="28" /></button>
-      <button v-if="open.photos.length > 1" class="absolute left-3 rounded-full p-3 text-white/80 hover:bg-white/10" @click.stop="lbPrev"><AppIcon name="chevron" :size="28" class="rotate-90" /></button>
-      <img :src="open.photos[lb].url" class="max-h-[90vh] max-w-full rounded-lg object-contain" />
-      <button v-if="open.photos.length > 1" class="absolute right-3 rounded-full p-3 text-white/80 hover:bg-white/10" @click.stop="lbNext"><AppIcon name="chevron" :size="28" class="-rotate-90" /></button>
+      <div class="absolute right-4 top-4 flex items-center gap-1">
+        <button class="rounded-lg p-2 text-white/80 hover:bg-white/10" title="Повернуть (R)" @click.stop="lbRotate"><AppIcon name="rotate" :size="24" /></button>
+        <button class="rounded-lg p-2 text-white/80 hover:bg-white/10" title="Закрыть" @click="lb = -1"><AppIcon name="close" :size="28" /></button>
+      </div>
+      <button v-if="open.photos.length > 1" class="absolute left-3 rounded-full p-3 text-white/80 hover:bg-white/10" title="Назад (←)" @click.stop="lbPrev"><AppIcon name="chevron" :size="28" class="rotate-90" /></button>
+      <img :src="open.photos[lb].url" :style="{ transform: `rotate(${lbRot}deg)` }" class="max-h-[90vh] max-w-full rounded-lg object-contain transition-transform duration-200" :class="lbRot % 180 && 'max-h-[92vw] max-w-[92vh]'" />
+      <button v-if="open.photos.length > 1" class="absolute right-3 rounded-full p-3 text-white/80 hover:bg-white/10" title="Вперёд (→)" @click.stop="lbNext"><AppIcon name="chevron" :size="28" class="-rotate-90" /></button>
     </div>
   </div>
 </template>

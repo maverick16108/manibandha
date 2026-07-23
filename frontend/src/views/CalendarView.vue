@@ -219,7 +219,10 @@ onActivated(() => { if (firstActivate) { firstActivate = false; return } load() 
         </div>
         <p class="ml-auto text-sm text-ink-700/60">Маршрут гуру · событий: <b class="text-ink-900">{{ mapEvents.length }}</b></p>
       </div>
-      <EventsMap :events="mapEvents" @open="selected = $event" />
+      <!-- карта во всю ширину и до низа экрана (отрицательные поля гасят паддинги main) -->
+      <div class="-mx-4 -mb-4 h-[calc(100dvh-15rem)] sm:-mx-6 sm:-mb-6 lg:-mx-8 lg:-mb-8">
+        <EventsMap :events="mapEvents" @open="selected = $event" />
+      </div>
     </div>
 
     <!-- event modal (from calendar) -->

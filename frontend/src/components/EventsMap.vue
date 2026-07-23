@@ -41,6 +41,20 @@ function arrowIcon(deg) {
   })
 }
 
+// плавная дуга между двумя точками (квадратичный Безье со смещением контрольной точки
+// перпендикулярно сегменту) — маршрут выглядит мягкими кривыми, а не ломаной
+function curve(a, b, seg = 22, bend = 0.13) {
+  const mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2
+  const dx = b[0] - a[0], dy = b[1] - a[1]
+  const cx = mx - dy * bend, cy = my + dx * bend
+  const out = []
+  for (let i = 0; i <= seg; i++) {
+    const t = i / seg, u = 1 - t
+    out.push([u * u * a[0] + 2 * u * t * cx + t * t * b[0], u * u * a[1] + 2 * u * t * cy + t * t * b[1]])
+  }
+  return out
+}
+
 function render() {
   if (!map) return
   if (layer) { layer.remove(); layer = null }
@@ -50,15 +64,16 @@ function render() {
   if (!pts.length) return
 
   const latlngs = pts.map((p) => p.c)
-  // маршрут (пунктир)
+  // маршрут — плавные жирные кривые (пунктир, скруглённые концы)
   if (latlngs.length > 1) {
-    L.polyline(latlngs, { color: '#c8742a', weight: 2, opacity: 0.55, dashArray: '6 6' }).addTo(layer)
-    // стрелки направления в серединах сегментов
     for (let i = 0; i < latlngs.length - 1; i++) {
-      const [a, b] = [latlngs[i], latlngs[i + 1]]
-      const mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]
-      const deg = Math.atan2(-(b[0] - a[0]), b[1] - a[1]) * 180 / Math.PI
-      L.marker(mid, { icon: arrowIcon(deg), interactive: false }).addTo(layer)
+      const path = curve(latlngs[i], latlngs[i + 1])
+      L.polyline(path, { color: '#c8742a', weight: 3.5, opacity: 0.7, dashArray: '10 9', lineCap: 'round', lineJoin: 'round' }).addTo(layer)
+      // стрелка направления на середине дуги (по касательной)
+      const m = Math.floor(path.length / 2)
+      const p0 = path[Math.max(0, m - 1)], p1 = path[Math.min(path.length - 1, m + 1)]
+      const deg = Math.atan2(-(p1[0] - p0[0]), p1[1] - p0[1]) * 180 / Math.PI
+      L.marker(path[m], { icon: arrowIcon(deg), interactive: false }).addTo(layer)
     }
   }
   // точки

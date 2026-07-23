@@ -111,22 +111,23 @@ onMounted(async () => {
       <span class="text-ink-700/30">/</span>
       <span class="text-ink-800">{{ mode === 'map' ? 'Карта' : mode === 'list' ? 'Список' : 'Календарь' }}</span>
     </nav>
-    <h1 class="mb-6 font-display text-3xl font-semibold text-ink-900 sm:text-4xl">Календарь событий</h1>
-
-    <!-- переключатель вида -->
-    <div class="mb-6 flex rounded-lg border border-parchment-300 p-0.5 sm:w-max">
-      <button class="flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm transition sm:flex-none"
-              :class="mode === 'list' ? 'bg-saffron-500 text-white' : 'text-ink-700 hover:bg-parchment-100'" @click="mode = 'list'">
-        <AppIcon name="reports" :size="15" /> Список
-      </button>
-      <button class="flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm transition sm:flex-none"
-              :class="mode === 'calendar' ? 'bg-saffron-500 text-white' : 'text-ink-700 hover:bg-parchment-100'" @click="mode = 'calendar'">
-        <AppIcon name="calendar" :size="15" /> Календарь
-      </button>
-      <button class="flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm transition sm:flex-none"
-              :class="mode === 'map' ? 'bg-saffron-500 text-white' : 'text-ink-700 hover:bg-parchment-100'" @click="mode = 'map'">
-        <AppIcon name="pin" :size="15" /> Карта
-      </button>
+    <!-- заголовок слева, переключатель вида справа (как в кабинете) -->
+    <div class="mb-6 flex flex-wrap items-center justify-between gap-3">
+      <h1 class="font-display text-3xl font-semibold text-ink-900 sm:text-4xl">Календарь событий</h1>
+      <div class="flex rounded-lg border border-parchment-300 p-0.5">
+        <button class="flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm transition"
+                :class="mode === 'list' ? 'bg-saffron-500 text-white' : 'text-ink-700 hover:bg-parchment-100'" @click="mode = 'list'">
+          <AppIcon name="reports" :size="15" /> Список
+        </button>
+        <button class="flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm transition"
+                :class="mode === 'calendar' ? 'bg-saffron-500 text-white' : 'text-ink-700 hover:bg-parchment-100'" @click="mode = 'calendar'">
+          <AppIcon name="calendar" :size="15" /> Календарь
+        </button>
+        <button class="flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm transition"
+                :class="mode === 'map' ? 'bg-saffron-500 text-white' : 'text-ink-700 hover:bg-parchment-100'" @click="mode = 'map'">
+          <AppIcon name="pin" :size="15" /> Карта
+        </button>
+      </div>
     </div>
 
     <!-- ЛЕНТА событий с навигатором по месяцам -->
@@ -219,7 +220,10 @@ onMounted(async () => {
         </div>
         <p class="ml-auto text-sm text-ink-700/60">Маршрут гуру · событий: <b class="text-ink-900">{{ mapEvents.length }}</b></p>
       </div>
-      <EventsMap :events="mapEvents" @open="openEvent($event.id, 'map')" />
+      <!-- карта во всю ширину экрана и до низа (высоту EventsMap задаёт сам) -->
+      <div class="relative left-1/2 w-screen -translate-x-1/2 -mb-8 sm:-mb-12">
+        <EventsMap :events="mapEvents" @open="openEvent($event.id, 'map')" />
+      </div>
     </template>
   </PublicShell>
 </template>

@@ -92,7 +92,9 @@ const service = [
 
     <!-- Hero -->
     <section class="relative min-h-[100svh] overflow-hidden">
-      <img :src="hero" alt="Манибандха Прабху" :class="galleryBw && 'grayscale'" class="photo-bw absolute inset-0 h-full w-full object-cover object-[52%_14%]" />
+      <!-- моб.: кадр чуть левее по X, чтобы голова целиком; большие мониторы: показываем больше неба сверху,
+           чтобы голова опустилась и лого её не перекрывало -->
+      <img :src="hero" alt="Манибандха Прабху" :class="galleryBw && 'grayscale'" class="photo-bw absolute inset-0 h-full w-full object-cover object-[40%_15%] sm:object-[52%_14%] min-[2000px]:object-[52%_4%]" />
       <!-- bottom gradient (mobile legibility) + left gradient (desktop, text sits right) -->
       <div class="absolute inset-0 bg-gradient-to-t from-ink-900 via-ink-900/65 to-ink-900/40 lg:via-ink-900/40 lg:to-ink-900/30"></div>
       <div class="absolute inset-0 hidden md:block bg-gradient-to-l from-ink-900/85 via-ink-900/25 to-transparent"></div>
@@ -166,6 +168,7 @@ const service = [
       <div class="mx-auto max-w-4xl px-6 py-20">
         <p class="mb-3 text-center text-sm uppercase tracking-[0.25em] text-saffron-600">Расписание</p>
         <h2 class="text-center font-home text-4xl font-semibold text-ink-900">Где сейчас Гуру</h2>
+        <p class="mt-3 text-center font-serif text-lg text-ink-700/70">Где находится гуру и что происходит</p>
         <div class="mt-8 flex flex-wrap justify-center gap-3">
           <RouterLink to="/calendar?view=list" class="btn-outline">
             <AppIcon name="reports" :size="16" /> События

@@ -57,6 +57,29 @@ async function submitCreate() {
   }
 }
 
+// ── управление участниками (модератор) ───────────────────────────────────────
+const manageSp = ref(null)
+const members = ref([])
+const membersLoading = ref(false)
+const memBusy = ref(new Set())
+const pending = computed(() => members.value.filter((m) => m.status === 'pending'))
+const active = computed(() => members.value.filter((m) => m.status === 'active'))
+async function openManage(sp) {
+  manageSp.value = sp
+  membersLoading.value = true
+  members.value = []
+  try { members.value = await spaces.members(sp.id) } finally { membersLoading.value = false }
+}
+async function memberAction(m, fn) {
+  if (memBusy.value.has(m.user_id)) return
+  memBusy.value = new Set(memBusy.value).add(m.user_id)
+  try { await fn(); members.value = await spaces.members(manageSp.value.id); await spaces.load(true) }
+  finally { const s = new Set(memBusy.value); s.delete(m.user_id); memBusy.value = s }
+}
+const approve = (m) => memberAction(m, () => spaces.setMemberStatus(manageSp.value.id, m.user_id, 'active'))
+const reject = (m) => memberAction(m, () => spaces.setMemberStatus(manageSp.value.id, m.user_id, 'rejected'))
+const remove = (m) => memberAction(m, () => spaces.removeMember(manageSp.value.id, m.user_id))
+
 const busy = ref(new Set())
 async function join(sp) {
   if (busy.value.has(sp.id)) return
@@ -91,7 +114,7 @@ async function leave(sp) {
           <span class="inline-flex items-center gap-1"><AppIcon name="users" :size="13" /> {{ sp.member_count }}</span>
           <span>/s/{{ sp.slug }}</span>
           <span v-if="sp.custom_domain" class="text-saffron-600">{{ sp.custom_domain }}</span>
-          <span v-if="sp.is_owner" class="inline-flex items-center gap-1 font-medium text-ink-700/70"><AppIcon name="key" :size="12" /> Модератор</span>
+          <button v-if="sp.is_owner" class="inline-flex items-center gap-1 font-medium text-saffron-700 hover:underline" @click="openManage(sp)"><AppIcon name="key" :size="12" /> Участники</button>
         </div>
         <div class="mt-auto">
           <div v-if="spaces.activeId === sp.id" class="flex items-center gap-2">
@@ -132,6 +155,46 @@ async function leave(sp) {
         <div class="flex justify-end gap-2">
           <button class="btn-ghost" @click="showCreate = false">Отмена</button>
           <button class="btn-primary" :disabled="creating" @click="submitCreate">{{ creating ? 'Создание…' : 'Создать' }}</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Управление участниками -->
+    <div v-if="manageSp" class="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/40 p-4" @click.self="manageSp = null">
+      <div class="flex max-h-[85vh] w-full max-w-md flex-col rounded-2xl bg-white p-6 shadow-xl">
+        <div class="mb-4 flex items-start justify-between gap-2">
+          <div>
+            <h2 class="font-display text-xl font-semibold text-ink-900">Участники</h2>
+            <p class="text-sm text-ink-700/50">{{ manageSp.name }}</p>
+          </div>
+          <button class="text-ink-700/40 hover:text-ink-900" @click="manageSp = null"><AppIcon name="close" :size="20" /></button>
+        </div>
+
+        <div v-if="membersLoading" class="py-8 text-center text-sm text-ink-700/50">Загрузка…</div>
+        <div v-else class="min-h-0 flex-1 overflow-y-auto">
+          <template v-if="pending.length">
+            <div class="mb-1 text-xs font-medium uppercase tracking-wide text-ink-700/40">Заявки ({{ pending.length }})</div>
+            <div class="mb-4 divide-y divide-parchment-100 overflow-hidden rounded-xl ring-1 ring-parchment-200">
+              <div v-for="m in pending" :key="m.user_id" class="flex items-center gap-2 px-3 py-2.5">
+                <div class="min-w-0 flex-1">
+                  <div class="truncate text-[15px] text-ink-900">{{ m.name || m.email || ('#' + m.user_id) }}</div>
+                </div>
+                <button class="rounded-lg bg-green-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-50" :disabled="memBusy.has(m.user_id)" @click="approve(m)">Принять</button>
+                <button class="rounded-lg px-2.5 py-1 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50" :disabled="memBusy.has(m.user_id)" @click="reject(m)">Отклонить</button>
+              </div>
+            </div>
+          </template>
+
+          <div class="mb-1 text-xs font-medium uppercase tracking-wide text-ink-700/40">Участники ({{ active.length }})</div>
+          <div class="divide-y divide-parchment-100 overflow-hidden rounded-xl ring-1 ring-parchment-200">
+            <div v-for="m in active" :key="m.user_id" class="flex items-center gap-2 px-3 py-2.5">
+              <div class="min-w-0 flex-1">
+                <div class="truncate text-[15px] text-ink-900">{{ m.name || m.email || ('#' + m.user_id) }}</div>
+              </div>
+              <span v-if="m.user_id === manageSp.owner_user_id" class="text-xs text-ink-700/40">владелец</span>
+              <button v-else class="rounded-lg px-2.5 py-1 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50" :disabled="memBusy.has(m.user_id)" @click="remove(m)">Удалить</button>
+            </div>
+          </div>
         </div>
       </div>
     </div>

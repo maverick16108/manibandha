@@ -7,7 +7,9 @@ import AppIcon from '../components/AppIcon.vue'
 import PhoneInput from '../components/PhoneInput.vue'
 import OtpInput from '../components/OtpInput.vue'
 import { formatPhone } from '../lib/format'
+import { isPlatformHost } from '../utils/platform'
 
+const platform = isPlatformHost()
 const portrait = '/guru/1.jpg'
 const auth = useAuthStore()
 const router = useRouter()
@@ -144,13 +146,20 @@ function closeAdmin() {
 
 <template>
   <div class="flex min-h-screen">
-    <!-- Left: B&W portrait -->
-    <div class="relative hidden w-1/2 lg:block">
+    <!-- Left: B&W portrait (только для Манибандхи; на платформе — нейтральная панель) -->
+    <div v-if="!platform" class="relative hidden w-1/2 lg:block">
       <img :src="portrait" alt="Манибандха Прабху" class="photo-bw h-full w-full object-cover object-center" />
       <div class="absolute inset-0 bg-gradient-to-t from-ink-900/80 via-ink-900/30 to-transparent"></div>
       <div class="absolute bottom-0 p-12 text-white">
         <h2 class="font-display text-4xl font-semibold">Манибандха Прабху</h2>
         <p class="mt-2 font-serif text-lg italic text-parchment-100/90">Кабинет учеников и служения</p>
+      </div>
+    </div>
+    <div v-else class="relative hidden w-1/2 items-center justify-center bg-ink-900 lg:flex">
+      <div class="p-12 text-center text-white">
+        <div class="text-6xl">🐦</div>
+        <h2 class="mt-4 font-display text-4xl font-semibold">свисток</h2>
+        <p class="mt-2 text-lg text-parchment-100/70">Пространства сообществ с общими чатами</p>
       </div>
     </div>
 
@@ -161,9 +170,10 @@ function closeAdmin() {
       </RouterLink>
       <div class="w-full max-w-sm">
         <div class="mb-8 text-center">
-          <img src="/lotus-mark.png" alt="" class="mx-auto mb-3 h-11 w-auto" />
-          <h1 class="font-display text-3xl font-semibold text-ink-900">Вход в кабинет</h1>
-          <p class="mt-2 text-sm text-ink-700/70">для учеников Манибандхи Прабху</p>
+          <img v-if="!platform" src="/lotus-mark.png" alt="" class="mx-auto mb-3 h-11 w-auto" />
+          <div v-else class="mb-3 text-4xl">🐦</div>
+          <h1 class="font-display text-3xl font-semibold text-ink-900">{{ platform ? 'Вход в Свисток' : 'Вход в кабинет' }}</h1>
+          <p class="mt-2 text-sm text-ink-700/70">{{ platform ? 'войдите или зарегистрируйтесь по номеру телефона' : 'для учеников Манибандхи Прабху' }}</p>
         </div>
 
         <!-- Admin email form (hidden entrance) -->

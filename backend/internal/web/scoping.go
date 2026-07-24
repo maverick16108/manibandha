@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"net/http"
+	"strings"
 
 	"gorm.io/gorm"
 )
@@ -25,6 +26,21 @@ var scopedTables = map[string]bool{
 // db — хэндл БД, несущий контекст запроса (активное пространство). Использовать в обработчиках,
 // работающих со скоуп-таблицами, вместо s.DB напрямую.
 func (s *Server) db(r *http.Request) *gorm.DB { return s.DB.WithContext(r.Context()) }
+
+// platformHosts — домены самой платформы (не привязаны к конкретному пространству). Регистрация здесь
+// создаёт «просто пользователя» (без анкеты ученика Манибандхи), который попадает в чаты.
+var platformHosts = map[string]bool{"svistok.io": true, "www.svistok.io": true}
+
+func requestHost(r *http.Request) string {
+	host := r.Host
+	if i := strings.IndexByte(host, ':'); i >= 0 {
+		host = host[:i]
+	}
+	return host
+}
+
+// isPlatformHost — запрос пришёл на домен платформы (svistok.io), а не на домен пространства.
+func (s *Server) isPlatformHost(r *http.Request) bool { return platformHosts[requestHost(r)] }
 
 func spaceFromCtx(ctx context.Context) (int, bool) {
 	if ctx == nil {

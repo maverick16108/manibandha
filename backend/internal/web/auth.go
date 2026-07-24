@@ -131,8 +131,9 @@ func (s *Server) phoneVerify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// регистрация: анкета + пользователь + approval-ветка (одной транзакцией).
-	newUser, err := s.registerByPhone(ph)
+	// регистрация: на домене платформы — «просто пользователь» (в чаты); на домене пространства
+	// (Манибандха) — анкета ученика + approval-ветка + участие в пространстве.
+	newUser, err := s.registerByPhone(r, ph)
 	if err != nil {
 		httpErr(w, http.StatusInternalServerError, "Не удалось зарегистрировать")
 		return
@@ -140,11 +141,31 @@ func (s *Server) phoneVerify(w http.ResponseWriter, r *http.Request) {
 	s.issueToken(w, newUser)
 }
 
-func (s *Server) registerByPhone(ph string) (*models.User, error) {
+func (s *Server) registerByPhone(r *http.Request, ph string) (*models.User, error) {
+	// Платформенная регистрация (svistok.io): создаём только пользователя, без анкеты Манибандхи.
+	// Такой пользователь попадает в чаты и может сам выбирать/создавать пространства.
+	if s.isPlatformHost(r) {
+		u := models.User{
+			Email:          ph + "@phone.local",
+			Phone:          &ph,
+			HashedPassword: security.HashPassword(security.RandToken(16)),
+			FullName:       "+" + ph,
+			Role:           "student",
+			IsActive:       true,
+		}
+		if err := s.DB.Create(&u).Error; err != nil {
+			return nil, err
+		}
+		return &u, nil
+	}
+
+	// Регистрация на домене пространства: анкета + пользователь + approval-ветка + участник (транзакцией).
+	spaceID := activeSpaceID(r)
 	var out models.User
 	err := s.DB.Transaction(func(tx *gorm.DB) error {
 		phonePlus := "+" + ph
 		d := models.Disciple{
+			SpaceID:          spaceID,
 			MaterialName:     "",
 			Phone:            &phonePlus,
 			InitiationStatus: "recommended",
@@ -165,7 +186,10 @@ func (s *Server) registerByPhone(ph string) (*models.User, error) {
 		if err := tx.Create(&u).Error; err != nil {
 			return err
 		}
-		if err := tx.Create(&models.Thread{Kind: "approval", DiscipleID: d.ID}).Error; err != nil {
+		if err := tx.Create(&models.Thread{SpaceID: spaceID, Kind: "approval", DiscipleID: d.ID}).Error; err != nil {
+			return err
+		}
+		if err := tx.Create(&models.SpaceMember{SpaceID: spaceID, UserID: u.ID, Status: "active"}).Error; err != nil {
 			return err
 		}
 		out = u

@@ -1,8 +1,11 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
+import { isPlatformHost } from '../utils/platform'
 
 const routes = [
-  { path: '/', name: 'home', component: () => import('../views/HomeView.vue'), meta: { public: true } },
+  { path: '/', name: 'home', meta: { public: true },
+    // на домене платформы (svistok.io) — лендинг платформы, на домене пространства — главная Манибандхи
+    component: () => isPlatformHost() ? import('../views/PlatformHomeView.vue') : import('../views/HomeView.vue') },
   { path: '/login', name: 'login', component: () => import('../views/LoginView.vue'), meta: { public: true } },
   { path: '/calendar', name: 'public-calendar', component: () => import('../views/PublicCalendarView.vue'), meta: { public: true } },
   { path: '/events/:id', name: 'public-event', component: () => import('../views/PublicEventView.vue'), meta: { public: true } },
@@ -136,7 +139,8 @@ router.beforeEach(async (to, from) => {
 
   // Гейтинг по правам-действиям
   const has = (caps) => (caps || []).some((c) => auth.can(c))
-  const landing = () => LANDING_ORDER.find((n) => has(ROUTE_CAPS[n])) || 'profile'
+  // без прав ни на один раздел (напр. новый пользователь платформы) — попадает в чаты
+  const landing = () => LANDING_ORDER.find((n) => has(ROUTE_CAPS[n])) || 'chat-home'
   const need = ROUTE_CAPS[to.name]
   if (need && !has(need)) {
     return { name: landing() }

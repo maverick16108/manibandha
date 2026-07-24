@@ -43,6 +43,7 @@ func (s *Server) spaceOut(sp models.Space, userID int, myStatus string, memberCo
 		"type":          sp.Type,
 		"join_mode":     sp.JoinMode,
 		"custom_domain": sp.CustomDomain,
+		"owner_user_id": sp.OwnerUserID,
 		"is_owner":      sp.OwnerUserID != nil && *sp.OwnerUserID == userID,
 		"my_status":     myStatus, // "" | active | pending | rejected
 		"member_count":  memberCount,

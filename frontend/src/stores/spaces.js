@@ -43,6 +43,17 @@ export const useSpacesStore = defineStore('spaces', {
       await client.delete(`/spaces/${id}/join`)
       await this.load(true)
     },
+    // — управление участниками (модератор) —
+    async members(id) {
+      const { data } = await client.get(`/spaces/${id}/members`)
+      return data || []
+    },
+    async setMemberStatus(id, uid, status) {
+      await client.put(`/spaces/${id}/members/${uid}`, { status })
+    },
+    async removeMember(id, uid) {
+      await client.delete(`/spaces/${id}/members/${uid}`)
+    },
     // Вход в пространство: меняем активное и полностью перезагружаем приложение —
     // права, модули, кэши разделов и keep-alive нужно пересобрать под новый контекст.
     enter(id) {

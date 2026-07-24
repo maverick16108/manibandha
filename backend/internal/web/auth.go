@@ -222,11 +222,13 @@ func (s *Server) myCapabilities(w http.ResponseWriter, r *http.Request) {
 			pending = !d.IsApproved
 		}
 	}
+	spaceID := activeSpaceID(r)
 	writeJSON(w, http.StatusOK, map[string]any{
-		"capabilities":  caps.UserCapabilities(s.DB, u.ID),
+		"capabilities":  caps.UserCapabilitiesIn(s.DB, u.ID, spaceID),
 		"roles":         caps.RoleKeys(s.DB, u.ID),
-		"features":      feat.EnabledList(s.DB, caps.HomeSpaceID),
-		"is_moderator":  caps.IsModerator(s.DB, u.ID, caps.HomeSpaceID),
+		"features":      feat.EnabledList(s.DB, spaceID),
+		"space_id":      spaceID,
+		"is_moderator":  caps.IsModerator(s.DB, u.ID, spaceID),
 		"is_superadmin": caps.IsSuperadmin(s.DB, u.ID),
 		"pending":       pending,
 		"disciple_id":   u.DiscipleID,

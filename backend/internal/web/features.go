@@ -11,7 +11,8 @@ import (
 
 // GET /space/features — каталог модулей пространства с эффективным состоянием (для управления).
 func (s *Server) listSpaceFeatures(w http.ResponseWriter, r *http.Request) {
-	eff := feat.EnabledFeatures(s.DB, caps.HomeSpaceID)
+	spaceID := activeSpaceID(r)
+	eff := feat.EnabledFeatures(s.DB, spaceID)
 	items := make([]map[string]any, 0, len(feat.Catalog))
 	for _, f := range feat.Catalog {
 		items = append(items, map[string]any{"key": f.Key, "label": f.Label, "enabled": eff[f.Key]})
@@ -19,7 +20,7 @@ func (s *Server) listSpaceFeatures(w http.ResponseWriter, r *http.Request) {
 	u := currentUser(r)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"items":      items,
-		"can_manage": u != nil && caps.IsModerator(s.DB, u.ID, caps.HomeSpaceID),
+		"can_manage": u != nil && caps.IsModerator(s.DB, u.ID, spaceID),
 	})
 }
 
@@ -37,7 +38,7 @@ func (s *Server) setSpaceFeature(w http.ResponseWriter, r *http.Request) {
 		httpErr(w, http.StatusBadRequest, "Некорректный запрос")
 		return
 	}
-	if err := feat.Set(s.DB, caps.HomeSpaceID, key, p.Enabled); err != nil {
+	if err := feat.Set(s.DB, activeSpaceID(r), key, p.Enabled); err != nil {
 		httpErr(w, http.StatusInternalServerError, "Не удалось сохранить")
 		return
 	}

@@ -24,6 +24,9 @@ func (s *Server) Router() http.Handler {
 
 	api := chi.NewRouter()
 
+	// активное пространство запроса (по домену/заголовку) — доступно во всех обработчиках
+	api.Use(s.spaceCtx)
+
 	api.Get("/health", s.health)
 
 	// публичные (без токена): расписание для лендинга
@@ -45,6 +48,12 @@ func (s *Server) Router() http.Handler {
 		pr.Patch("/auth/me", s.patchMe)
 		pr.Get("/me/capabilities", s.myCapabilities)
 		pr.Get("/space/features", s.listSpaceFeatures)
+		// пространства (svistok.io-платформа): каталог, создание, вступление/выход
+		pr.Get("/spaces", s.listSpaces)
+		pr.Post("/spaces", s.createSpace)
+		pr.Get("/spaces/slug/{slug}", s.getSpace)
+		pr.Post("/spaces/{id}/join", s.joinSpace)
+		pr.Delete("/spaces/{id}/join", s.leaveSpace)
 		pr.Get("/users/mentors", s.listMentors)
 		pr.Get("/users/{id}/card", s.userCardHandler)
 		// справочники: чтение — любому авторизованному
@@ -109,6 +118,14 @@ func (s *Server) Router() http.Handler {
 	api.Group(func(pr chi.Router) {
 		pr.Use(s.auth, s.requireModerator)
 		pr.Put("/space/features/{key}", s.setSpaceFeature)
+	})
+
+	// участники пространства: заявки/права — только модератор этого пространства (из URL {id})
+	api.Group(func(pr chi.Router) {
+		pr.Use(s.auth, s.requireSpaceModerator)
+		pr.Get("/spaces/{id}/members", s.listSpaceMembers)
+		pr.Put("/spaces/{id}/members/{uid}", s.setSpaceMemberStatus)
+		pr.Delete("/spaces/{id}/members/{uid}", s.removeSpaceMember)
 	})
 
 	// соглашение в «Вопросах»: изменение — право questions.agreement_manage

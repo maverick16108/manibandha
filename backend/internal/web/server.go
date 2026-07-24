@@ -27,7 +27,10 @@ type Server struct {
 
 type ctxKey int
 
-const userKey ctxKey = 0
+const (
+	userKey  ctxKey = 0
+	spaceKey ctxKey = 1
+)
 
 // ── ответы в стиле FastAPI ──────────────────────────────────────────────────
 
@@ -115,11 +118,46 @@ func (s *Server) requireCap(cap string) func(http.Handler) http.Handler {
 	}
 }
 
+// spaceCtx — определяет активное пространство запроса: заголовок X-Space-Id (если задан фронтом),
+// иначе кастомный домен из Host, иначе домашнее пространство (Манибандха). Не требует авторизации.
+func (s *Server) spaceCtx(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id := caps.HomeSpaceID
+		if h := strings.TrimSpace(r.Header.Get("X-Space-Id")); h != "" {
+			if n, err := strconv.Atoi(h); err == nil && n > 0 {
+				id = n
+			}
+		} else {
+			host := r.Host
+			if i := strings.IndexByte(host, ':'); i >= 0 {
+				host = host[:i]
+			}
+			host = strings.TrimPrefix(host, "www.")
+			if host != "" {
+				var sp models.Space
+				if err := s.DB.Select("id").Where("custom_domain = ?", host).First(&sp).Error; err == nil {
+					id = sp.ID
+				}
+			}
+		}
+		ctx := context.WithValue(r.Context(), spaceKey, id)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+// activeSpaceID — активное пространство запроса (по умолчанию домашнее).
+func activeSpaceID(r *http.Request) int {
+	if v, ok := r.Context().Value(spaceKey).(int); ok && v > 0 {
+		return v
+	}
+	return caps.HomeSpaceID
+}
+
 // requireModerator — гейт для модератора активного пространства (владелец или супер-админ).
 func (s *Server) requireModerator(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		u := currentUser(r)
-		if u == nil || !caps.IsModerator(s.DB, u.ID, caps.HomeSpaceID) {
+		if u == nil || !caps.IsModerator(s.DB, u.ID, activeSpaceID(r)) {
 			httpErr(w, http.StatusForbidden, "Только модератор пространства")
 			return
 		}

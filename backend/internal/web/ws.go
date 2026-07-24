@@ -228,7 +228,7 @@ func (s *Server) wsThread(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	tid, _ := strconv.Atoi(chi.URLParam(r, "id"))
-	if _, ok := s.accessibleThread(u, tid); !ok {
+	if _, ok := s.accessibleThread(r, u, tid); !ok {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
@@ -256,7 +256,7 @@ func (s *Server) wsThread(w http.ResponseWriter, r *http.Request) {
 			if body == "" {
 				continue
 			}
-			if _, ok := s.accessibleThread(u, tid); !ok {
+			if _, ok := s.accessibleThread(r, u, tid); !ok {
 				continue
 			}
 			var replyTo *int
@@ -270,7 +270,7 @@ func (s *Server) wsThread(w http.ResponseWriter, r *http.Request) {
 			s.DB.Create(&msg)
 			t := &models.Thread{ID: tid, Kind: threadKind(s, tid)}
 			s.DB.Model(&models.Thread{}).Where("id = ?", tid).Update("updated_at", gorm.Expr("now()"))
-			s.markStaffSeen(u, t)
+			s.markStaffSeen(r, u, t)
 			s.markRead(u.ID, tid)
 			var full models.ThreadMessage
 			s.DB.Preload("ReplyTo").Preload("ReplyTo.Author").First(&full, msg.ID)

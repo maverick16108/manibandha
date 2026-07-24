@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { RouterLink, RouterView, useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
+import { useSpacesStore } from '../stores/spaces'
 import { ROLE_LABELS } from '../lib/format'
 import { pageTitle } from '../composables/pageTitle'
 import { onEscape } from '../composables/useEscape'
@@ -26,6 +27,7 @@ function viewKey(r) {
 }
 
 const auth = useAuthStore()
+const spaces = useSpacesStore()
 const router = useRouter()
 const route = useRoute()
 const sidebarOpen = ref(false)
@@ -117,6 +119,7 @@ function badgeFor(name) {
 let countsTimer = null
 onMounted(() => {
   refreshNavCounts(); countsTimer = setInterval(refreshNavCounts, 15000)
+  if (!spaces.isHome) spaces.load() // чтобы показать имя активного пространства в шапке
   window.addEventListener('resize', onWinResize)
   // мессенджер работает в фоне на всём кабинете (доставка + бейдж непрочитанного)
   if (!auth.isPending && auth.user) {
@@ -160,6 +163,15 @@ function logout() {
         <button class="hidden rounded-lg p-1.5 text-ink-700/60 hover:bg-parchment-100" :class="collapsed ? 'lg:block' : 'lg:hidden'" title="Развернуть меню" @click="collapsed = false">
           <AppIcon name="sidebar" :size="20" />
         </button>
+      </div>
+
+      <!-- активное пространство (если не домашнее): показать и дать выйти в Манибандху -->
+      <div v-if="!spaces.isHome && !collapsed" class="mx-3 mb-1 mt-2 rounded-xl bg-saffron-50 px-3 py-2 ring-1 ring-saffron-500/20">
+        <div class="text-[11px] uppercase tracking-wide text-saffron-700/60">Пространство</div>
+        <div class="flex items-center justify-between gap-2">
+          <span class="min-w-0 flex-1 truncate text-sm font-semibold text-ink-900">{{ spaces.active?.name || 'Пространство' }}</span>
+          <button class="shrink-0 text-xs font-medium text-saffron-700 hover:underline" title="Вернуться в Манибандху" @click="spaces.exitToHome()">Выйти</button>
+        </div>
       </div>
 
       <nav class="flex-1 overflow-y-auto p-3">

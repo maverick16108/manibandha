@@ -29,7 +29,7 @@ func eventBrief(e *models.Event) map[string]any {
 
 func (s *Server) listEvents(w http.ResponseWriter, r *http.Request) {
 	var rows []models.Event
-	s.DB.Order("starts_on DESC").Find(&rows)
+	s.db(r).Order("starts_on DESC").Find(&rows)
 	out := make([]map[string]any, 0, len(rows))
 	for i := range rows {
 		out = append(out, eventOut(&rows[i]))
@@ -40,7 +40,7 @@ func (s *Server) listEvents(w http.ResponseWriter, r *http.Request) {
 func (s *Server) publicUpcoming(w http.ResponseWriter, r *http.Request) {
 	today := time.Now().Format("2006-01-02")
 	var rows []models.Event
-	s.DB.Where("ends_on >= ? OR (ends_on IS NULL AND starts_on >= ?)", today, today).
+	s.db(r).Where("ends_on >= ? OR (ends_on IS NULL AND starts_on >= ?)", today, today).
 		Order("starts_on ASC").Limit(8).Find(&rows)
 	out := make([]map[string]any, 0, len(rows))
 	for i := range rows {
@@ -51,7 +51,7 @@ func (s *Server) publicUpcoming(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) publicList(w http.ResponseWriter, r *http.Request) {
 	var rows []models.Event
-	s.DB.Order("starts_on DESC").Find(&rows)
+	s.db(r).Order("starts_on DESC").Find(&rows)
 	out := make([]map[string]any, 0, len(rows))
 	for i := range rows {
 		out = append(out, eventBrief(&rows[i]))
@@ -62,7 +62,7 @@ func (s *Server) publicList(w http.ResponseWriter, r *http.Request) {
 func (s *Server) publicDetail(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.Atoi(chi.URLParam(r, "id"))
 	var e models.Event
-	if err := s.DB.First(&e, id).Error; err != nil {
+	if err := s.db(r).First(&e, id).Error; err != nil {
 		httpErr(w, http.StatusNotFound, "Событие не найдено")
 		return
 	}
@@ -72,7 +72,7 @@ func (s *Server) publicDetail(w http.ResponseWriter, r *http.Request) {
 func (s *Server) getEvent(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.Atoi(chi.URLParam(r, "id"))
 	var e models.Event
-	if err := s.DB.First(&e, id).Error; err != nil {
+	if err := s.db(r).First(&e, id).Error; err != nil {
 		httpErr(w, http.StatusNotFound, "Событие не найдено")
 		return
 	}
@@ -105,7 +105,7 @@ func (s *Server) createEvent(w http.ResponseWriter, r *http.Request) {
 	if in.EndsOn != nil {
 		e.EndsOn = in.EndsOn.t
 	}
-	if err := s.DB.Create(&e).Error; err != nil {
+	if err := s.db(r).Create(&e).Error; err != nil {
 		httpErr(w, http.StatusBadRequest, "Не удалось создать событие")
 		return
 	}
@@ -115,7 +115,7 @@ func (s *Server) createEvent(w http.ResponseWriter, r *http.Request) {
 func (s *Server) updateEvent(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.Atoi(chi.URLParam(r, "id"))
 	var e models.Event
-	if err := s.DB.First(&e, id).Error; err != nil {
+	if err := s.db(r).First(&e, id).Error; err != nil {
 		httpErr(w, http.StatusNotFound, "Событие не найдено")
 		return
 	}
@@ -141,8 +141,8 @@ func (s *Server) updateEvent(w http.ResponseWriter, r *http.Request) {
 		upd["ends_on"] = in.EndsOn.t
 	}
 	if len(upd) > 0 {
-		s.DB.Model(&models.Event{}).Where("id = ?", id).Updates(upd)
-		s.DB.First(&e, id)
+		s.db(r).Model(&models.Event{}).Where("id = ?", id).Updates(upd)
+		s.db(r).First(&e, id)
 	}
 	writeJSON(w, http.StatusOK, eventOut(&e))
 }
@@ -150,11 +150,11 @@ func (s *Server) updateEvent(w http.ResponseWriter, r *http.Request) {
 func (s *Server) deleteEvent(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.Atoi(chi.URLParam(r, "id"))
 	var e models.Event
-	if err := s.DB.First(&e, id).Error; err != nil {
+	if err := s.db(r).First(&e, id).Error; err != nil {
 		httpErr(w, http.StatusNotFound, "Событие не найдено")
 		return
 	}
-	s.DB.Delete(&models.Event{}, id)
+	s.db(r).Delete(&models.Event{}, id)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -165,7 +165,7 @@ func (s *Server) getDraft(w http.ResponseWriter, r *http.Request) {
 	u := currentUser(r)
 	var d models.Draft
 	body := ""
-	if err := s.DB.Where("user_id = ? AND scope = ?", u.ID, scope).First(&d).Error; err == nil {
+	if err := s.db(r).Where("user_id = ? AND scope = ?", u.ID, scope).First(&d).Error; err == nil {
 		body = d.Body
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"body": body})
@@ -179,10 +179,10 @@ func (s *Server) saveDraft(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = decodeJSON(r, &p)
 	var d models.Draft
-	if err := s.DB.Where("user_id = ? AND scope = ?", u.ID, scope).First(&d).Error; err == nil {
-		s.DB.Model(&models.Draft{}).Where("id = ?", d.ID).Update("body", p.Body)
+	if err := s.db(r).Where("user_id = ? AND scope = ?", u.ID, scope).First(&d).Error; err == nil {
+		s.db(r).Model(&models.Draft{}).Where("id = ?", d.ID).Update("body", p.Body)
 	} else {
-		s.DB.Create(&models.Draft{UserID: u.ID, Scope: scope, Body: p.Body})
+		s.db(r).Create(&models.Draft{UserID: u.ID, Scope: scope, Body: p.Body})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"body": p.Body})
 }
@@ -190,7 +190,7 @@ func (s *Server) saveDraft(w http.ResponseWriter, r *http.Request) {
 func (s *Server) deleteDraft(w http.ResponseWriter, r *http.Request) {
 	scope := chi.URLParam(r, "scope")
 	u := currentUser(r)
-	s.DB.Where("user_id = ? AND scope = ?", u.ID, scope).Delete(&models.Draft{})
+	s.db(r).Where("user_id = ? AND scope = ?", u.ID, scope).Delete(&models.Draft{})
 	w.WriteHeader(http.StatusNoContent)
 }
 

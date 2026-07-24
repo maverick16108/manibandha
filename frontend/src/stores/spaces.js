@@ -8,10 +8,13 @@ export const useSpacesStore = defineStore('spaces', {
     list: [],
     loading: false,
     loaded: false,
+    activeId: Number(localStorage.getItem('activeSpaceId')) || 1, // 1 = домашнее (Манибандха)
   }),
   getters: {
     mine: (s) => s.list.filter((x) => x.my_status === 'active'),
     joinable: (s) => s.list.filter((x) => x.my_status !== 'active'),
+    isHome: (s) => s.activeId === 1,
+    active: (s) => s.list.find((x) => x.id === s.activeId) || null,
   },
   actions: {
     async load(force = false) {
@@ -40,5 +43,14 @@ export const useSpacesStore = defineStore('spaces', {
       await client.delete(`/spaces/${id}/join`)
       await this.load(true)
     },
+    // Вход в пространство: меняем активное и полностью перезагружаем приложение —
+    // права, модули, кэши разделов и keep-alive нужно пересобрать под новый контекст.
+    enter(id) {
+      if (id === 1) localStorage.removeItem('activeSpaceId')
+      else localStorage.setItem('activeSpaceId', String(id))
+      this.activeId = id
+      window.location.assign('/app')
+    },
+    exitToHome() { this.enter(1) },
   },
 })

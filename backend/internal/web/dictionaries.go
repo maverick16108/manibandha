@@ -14,7 +14,7 @@ import (
 
 func (s *Server) listCities(w http.ResponseWriter, r *http.Request) {
 	var v []models.City
-	s.DB.Order("name").Find(&v)
+	s.db(r).Order("name").Find(&v)
 	writeJSON(w, http.StatusOK, v)
 }
 
@@ -85,7 +85,7 @@ func (s *Server) deleteCity(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) listRegions(w http.ResponseWriter, r *http.Request) {
 	var v []models.Region
-	s.DB.Order("name").Find(&v)
+	s.db(r).Order("name").Find(&v)
 	writeJSON(w, http.StatusOK, v)
 }
 
@@ -136,7 +136,7 @@ func (s *Server) deleteRegion(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) listCountries(w http.ResponseWriter, r *http.Request) {
 	var v []models.Country
-	s.DB.Order("name").Find(&v)
+	s.db(r).Order("name").Find(&v)
 	writeJSON(w, http.StatusOK, v)
 }
 
@@ -189,7 +189,7 @@ func (s *Server) deleteCountry(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) listTemples(w http.ResponseWriter, r *http.Request) {
 	var v []models.Temple
-	s.DB.Order("name").Find(&v)
+	s.db(r).Order("name").Find(&v)
 	writeJSON(w, http.StatusOK, v)
 }
 
@@ -200,14 +200,14 @@ func (s *Server) createTemple(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	t.ID = 0
-	s.DB.Create(&t)
+	s.db(r).Create(&t)
 	writeJSON(w, http.StatusCreated, t)
 }
 
 func (s *Server) updateTemple(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.Atoi(chi.URLParam(r, "id"))
 	var t models.Temple
-	if err := s.DB.First(&t, id).Error; err != nil {
+	if err := s.db(r).First(&t, id).Error; err != nil {
 		httpErr(w, http.StatusNotFound, "Храм не найден")
 		return
 	}
@@ -220,8 +220,8 @@ func (s *Server) updateTemple(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if len(upd) > 0 {
-		s.DB.Model(&models.Temple{}).Where("id = ?", t.ID).Updates(upd)
-		s.DB.First(&t, t.ID)
+		s.db(r).Model(&models.Temple{}).Where("id = ?", t.ID).Updates(upd)
+		s.db(r).First(&t, t.ID)
 	}
 	writeJSON(w, http.StatusOK, t)
 }
@@ -229,11 +229,11 @@ func (s *Server) updateTemple(w http.ResponseWriter, r *http.Request) {
 func (s *Server) deleteTemple(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.Atoi(chi.URLParam(r, "id"))
 	var t models.Temple
-	if err := s.DB.First(&t, id).Error; err != nil {
+	if err := s.db(r).First(&t, id).Error; err != nil {
 		httpErr(w, http.StatusNotFound, "Храм не найден")
 		return
 	}
-	s.DB.Delete(&models.Temple{}, t.ID)
+	s.db(r).Delete(&models.Temple{}, t.ID)
 	w.WriteHeader(http.StatusNoContent)
 }
 

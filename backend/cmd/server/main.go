@@ -24,6 +24,9 @@ func main() {
 		log.Fatalf("db connect: %v", err)
 	}
 
+	// мультиарендность: колбэки изоляции контента по пространствам (no-op для домашнего пространства)
+	web.RegisterSpaceScoping(db)
+
 	srv := &web.Server{
 		DB:  db,
 		Cfg: cfg,

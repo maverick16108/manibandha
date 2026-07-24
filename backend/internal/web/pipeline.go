@@ -16,9 +16,9 @@ func checklistItemOut(c *models.ChecklistItem) map[string]any {
 	}
 }
 
-func (s *Server) discipleAccessible(u *models.User, id int) bool {
+func (s *Server) discipleAccessible(r *http.Request, u *models.User, id int) bool {
 	var d models.Disciple
-	return scopeDisciples(s.DB.Model(&models.Disciple{}), u).Where("id = ?", id).Select("id").First(&d).Error == nil
+	return scopeDisciples(s.db(r).Model(&models.Disciple{}), u).Where("id = ?", id).Select("id").First(&d).Error == nil
 }
 
 func canEditChecklist(u *models.User) bool {
@@ -28,7 +28,7 @@ func canEditChecklist(u *models.User) bool {
 // GET /disciples/{id}/checklist
 func (s *Server) listChecklist(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.Atoi(chi.URLParam(r, "id"))
-	if !s.discipleAccessible(currentUser(r), id) {
+	if !s.discipleAccessible(r, currentUser(r), id) {
 		httpErr(w, http.StatusNotFound, "Ученик не найден")
 		return
 	}
@@ -49,7 +49,7 @@ func (s *Server) addChecklist(w http.ResponseWriter, r *http.Request) {
 		httpErr(w, http.StatusForbidden, "Недостаточно прав")
 		return
 	}
-	if !s.discipleAccessible(u, id) {
+	if !s.discipleAccessible(r, u, id) {
 		httpErr(w, http.StatusNotFound, "Ученик не найден")
 		return
 	}
@@ -83,7 +83,7 @@ func (s *Server) updateChecklist(w http.ResponseWriter, r *http.Request) {
 		httpErr(w, http.StatusForbidden, "Недостаточно прав")
 		return
 	}
-	if !s.discipleAccessible(u, id) {
+	if !s.discipleAccessible(r, u, id) {
 		httpErr(w, http.StatusNotFound, "Ученик не найден")
 		return
 	}

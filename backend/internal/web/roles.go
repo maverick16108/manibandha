@@ -37,7 +37,7 @@ func filterCaps(in []string) models.StringList {
 // GET /roles
 func (s *Server) listRoles(w http.ResponseWriter, r *http.Request) {
 	var roles []models.Role
-	s.DB.Order("is_system DESC, id").Find(&roles)
+	s.db(r).Order("is_system DESC, id").Find(&roles)
 	out := make([]map[string]any, 0, len(roles))
 	for i := range roles {
 		out = append(out, roleOut(&roles[i]))
@@ -67,7 +67,7 @@ func (s *Server) createRole(w http.ResponseWriter, r *http.Request) {
 		key = strings.ReplaceAll(strings.ToLower(name), " ", "_")
 	}
 	var cnt int64
-	s.DB.Model(&models.Role{}).Where("key = ?", key).Count(&cnt)
+	s.db(r).Model(&models.Role{}).Where("key = ?", key).Count(&cnt)
 	if cnt > 0 {
 		httpErr(w, http.StatusBadRequest, "Роль с таким ключом уже существует")
 		return
@@ -77,9 +77,9 @@ func (s *Server) createRole(w http.ResponseWriter, r *http.Request) {
 		IsDefault: p.IsDefault, Capabilities: filterCaps(p.Capabilities),
 	}
 	if role.IsDefault {
-		s.DB.Model(&models.Role{}).Where("1 = 1").Update("is_default", false)
+		s.db(r).Model(&models.Role{}).Where("1 = 1").Update("is_default", false)
 	}
-	s.DB.Create(&role)
+	s.db(r).Create(&role)
 	writeJSON(w, http.StatusCreated, roleOut(&role))
 }
 
@@ -87,7 +87,7 @@ func (s *Server) createRole(w http.ResponseWriter, r *http.Request) {
 func (s *Server) updateRole(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.Atoi(chi.URLParam(r, "id"))
 	var role models.Role
-	if err := s.DB.First(&role, id).Error; err != nil {
+	if err := s.db(r).First(&role, id).Error; err != nil {
 		httpErr(w, http.StatusNotFound, "Роль не найдена")
 		return
 	}
@@ -117,12 +117,12 @@ func (s *Server) updateRole(w http.ResponseWriter, r *http.Request) {
 		def, _ := v.(bool)
 		upd["is_default"] = def
 		if def {
-			s.DB.Model(&models.Role{}).Where("id <> ?", role.ID).Update("is_default", false)
+			s.db(r).Model(&models.Role{}).Where("id <> ?", role.ID).Update("is_default", false)
 		}
 	}
 	if len(upd) > 0 {
-		s.DB.Model(&models.Role{}).Where("id = ?", role.ID).Updates(upd)
-		s.DB.First(&role, role.ID)
+		s.db(r).Model(&models.Role{}).Where("id = ?", role.ID).Updates(upd)
+		s.db(r).First(&role, role.ID)
 	}
 	writeJSON(w, http.StatusOK, roleOut(&role))
 }
@@ -131,7 +131,7 @@ func (s *Server) updateRole(w http.ResponseWriter, r *http.Request) {
 func (s *Server) deleteRole(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.Atoi(chi.URLParam(r, "id"))
 	var role models.Role
-	if err := s.DB.First(&role, id).Error; err != nil {
+	if err := s.db(r).First(&role, id).Error; err != nil {
 		httpErr(w, http.StatusNotFound, "Роль не найдена")
 		return
 	}
@@ -140,7 +140,7 @@ func (s *Server) deleteRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.DB.Where("role_id = ?", role.ID).Delete(&models.UserRole{})
-	s.DB.Delete(&models.Role{}, role.ID)
+	s.db(r).Delete(&models.Role{}, role.ID)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -174,7 +174,7 @@ func (s *Server) setUserRoles(w http.ResponseWriter, r *http.Request) {
 	valid := []int{}
 	if len(p.RoleIDs) > 0 {
 		var roles []models.Role
-		s.DB.Where("id IN ?", p.RoleIDs).Find(&roles)
+		s.db(r).Where("id IN ?", p.RoleIDs).Find(&roles)
 		for _, r := range roles {
 			valid = append(valid, r.ID)
 		}

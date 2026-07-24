@@ -50,17 +50,17 @@ func truncRunes(s string, n int) string {
 	return string(r[:n])
 }
 
-func (s *Server) capSet(userID int) map[string]bool {
+func (s *Server) capSet(r *http.Request, userID int) map[string]bool {
 	m := map[string]bool{}
-	for _, c := range caps.UserCapabilities(s.DB, userID) {
+	for _, c := range caps.UserCapabilitiesIn(s.DB, userID, activeSpaceID(r)) {
 		m[c] = true
 	}
 	return m
 }
 
 // accessibleThreads — ветки, видимые пользователю (OR по правам).
-func (s *Server) accessibleThreads(u *models.User) *gorm.DB {
-	cs := s.capSet(u.ID)
+func (s *Server) accessibleThreads(r *http.Request, u *models.User) *gorm.DB {
+	cs := s.capSet(r, u.ID)
 	own := -1
 	if u.DiscipleID != nil {
 		own = *u.DiscipleID
@@ -79,7 +79,7 @@ func (s *Server) accessibleThreads(u *models.User) *gorm.DB {
 	if cs["disciples.approve"] {
 		conds = conds.Or("threads.kind = ?", "approval")
 	}
-	return s.DB.Model(&models.Thread{}).
+	return s.db(r).Model(&models.Thread{}).
 		Joins("JOIN disciples ON disciples.id = threads.disciple_id").
 		Where(conds)
 }
@@ -105,8 +105,8 @@ func (s *Server) markRead(userID, threadID int) {
 	}
 }
 
-func (s *Server) markStaffSeen(u *models.User, t *models.Thread) {
-	if isRecipient(s.capSet(u.ID), t.Kind) {
+func (s *Server) markStaffSeen(r *http.Request, u *models.User, t *models.Thread) {
+	if isRecipient(s.capSet(r, u.ID), t.Kind) {
 		// В Python updated_at имеет onupdate=now(), поэтому запись staff_seen_at
 		// заодно поднимает updated_at — воспроизводим это поведение точно.
 		s.DB.Model(&models.Thread{}).Where("id = ?", t.ID).Updates(map[string]any{
@@ -180,7 +180,7 @@ func (s *Server) msgOut(m *models.ThreadMessage, userID int) map[string]any {
 func (s *Server) listThreads(w http.ResponseWriter, r *http.Request) {
 	u := currentUser(r)
 	qp := r.URL.Query()
-	q := s.accessibleThreads(u).
+	q := s.accessibleThreads(r, u).
 		Preload("Disciple").
 		Preload("Messages", func(d *gorm.DB) *gorm.DB { return d.Order("created_at") })
 	if v := qp.Get("kind"); v != "" {
@@ -231,13 +231,13 @@ func (s *Server) readMap(userID int) map[int]time.Time {
 // GET /threads/nav-counts
 func (s *Server) navCounts(w http.ResponseWriter, r *http.Request) {
 	u := currentUser(r)
-	cs := s.capSet(u.ID)
+	cs := s.capSet(r, u.ID)
 	seen := s.readMap(u.ID)
 
 	countUnread := func(kind string) int {
 		recipient := isRecipient(cs, kind)
 		var threads []models.Thread
-		s.accessibleThreads(u).Where("threads.kind = ?", kind).Find(&threads)
+		s.accessibleThreads(r, u).Where("threads.kind = ?", kind).Find(&threads)
 		c := 0
 		for i := range threads {
 			t := &threads[i]
@@ -262,7 +262,7 @@ func (s *Server) navCounts(w http.ResponseWriter, r *http.Request) {
 	}
 	if cs["disciples.approve"] {
 		var n int64
-		s.DB.Model(&models.Disciple{}).Where("is_approved = ?", false).Count(&n)
+		s.db(r).Model(&models.Disciple{}).Where("is_approved = ?", false).Count(&n)
 		res["approvals"] = int(n)
 	}
 	res["forum"] = 0
@@ -274,7 +274,7 @@ func (s *Server) navCounts(w http.ResponseWriter, r *http.Request) {
 			freads[x.TopicID] = x.LastSeenAt
 		}
 		var topics []models.ForumTopic
-		s.DB.Find(&topics)
+		s.db(r).Find(&topics)
 		fc := 0
 		for _, t := range topics {
 			ls, ok := freads[t.ID]
@@ -287,7 +287,7 @@ func (s *Server) navCounts(w http.ResponseWriter, r *http.Request) {
 	res["conference"] = 0
 	if cs["conference.view"] {
 		var n int64
-		s.DB.Model(&models.Conference{}).Where("status IN ?", []string{"live", "scheduled"}).Count(&n)
+		s.db(r).Model(&models.Conference{}).Where("status IN ?", []string{"live", "scheduled"}).Count(&n)
 		res["conference"] = int(n)
 	}
 	writeJSON(w, http.StatusOK, res)
@@ -297,8 +297,8 @@ func (s *Server) navCounts(w http.ResponseWriter, r *http.Request) {
 func (s *Server) threadStats(w http.ResponseWriter, r *http.Request) {
 	did, _ := strconv.Atoi(r.URL.Query().Get("disciple_id"))
 	var questions, reports int64
-	s.DB.Model(&models.Thread{}).Where("disciple_id = ? AND kind = ?", did, "question").Count(&questions)
-	s.DB.Model(&models.Thread{}).Where("disciple_id = ? AND kind = ?", did, "report").Count(&reports)
+	s.db(r).Model(&models.Thread{}).Where("disciple_id = ? AND kind = ?", did, "question").Count(&questions)
+	s.db(r).Model(&models.Thread{}).Where("disciple_id = ? AND kind = ?", did, "report").Count(&reports)
 	var messages int64
 	var student models.User
 	if err := s.DB.Where("disciple_id = ?", did).First(&student).Error; err == nil {
@@ -313,7 +313,7 @@ func (s *Server) threadStats(w http.ResponseWriter, r *http.Request) {
 // GET /threads/{id}
 func (s *Server) getThread(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.Atoi(chi.URLParam(r, "id"))
-	out, code := s.buildThreadOut(currentUser(r), id)
+	out, code := s.buildThreadOut(r, currentUser(r), id)
 	if code != http.StatusOK {
 		httpErr(w, code, "Ветка не найдена")
 		return
@@ -321,9 +321,9 @@ func (s *Server) getThread(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
-func (s *Server) buildThreadOut(u *models.User, threadID int) (map[string]any, int) {
+func (s *Server) buildThreadOut(r *http.Request, u *models.User, threadID int) (map[string]any, int) {
 	var t models.Thread
-	if err := s.accessibleThreads(u).
+	if err := s.accessibleThreads(r, u).
 		Preload("Disciple").
 		Preload("Messages", func(d *gorm.DB) *gorm.DB { return d.Order("created_at") }).
 		Preload("Messages.Author").Preload("Messages.Likes").
@@ -336,7 +336,7 @@ func (s *Server) buildThreadOut(u *models.User, threadID int) (map[string]any, i
 	if err := s.DB.Where("thread_id = ? AND user_id = ?", t.ID, u.ID).First(&prev).Error; err == nil {
 		lastRead = tsUTC(prev.LastSeenAt)
 	}
-	s.markStaffSeen(u, &t)
+	s.markStaffSeen(r, u, &t)
 	s.markRead(u.ID, t.ID)
 	// updated_at мог измениться из-за markStaffSeen — перечитываем (как Python после commit)
 	var reload models.Thread
@@ -382,7 +382,7 @@ func (s *Server) createThread(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var cnt int64
-	s.DB.Model(&models.Disciple{}).Where("id = ?", discipleID).Count(&cnt)
+	s.db(r).Model(&models.Disciple{}).Where("id = ?", discipleID).Count(&cnt)
 	if cnt == 0 {
 		httpErr(w, http.StatusNotFound, "Ученик не найден")
 		return
@@ -395,17 +395,17 @@ func (s *Server) createThread(w http.ResponseWriter, r *http.Request) {
 	var thread models.Thread
 	found := false
 	if p.Kind == "report" {
-		if err := s.DB.Where("kind = ? AND disciple_id = ? AND period = ?", "report", discipleID, p.Period).First(&thread).Error; err == nil {
+		if err := s.db(r).Where("kind = ? AND disciple_id = ? AND period = ?", "report", discipleID, p.Period).First(&thread).Error; err == nil {
 			found = true
 		}
 	}
 	if !found {
 		thread = models.Thread{Kind: p.Kind, DiscipleID: discipleID, Subject: p.Subject, Period: p.Period}
-		s.DB.Create(&thread)
+		s.db(r).Create(&thread)
 	}
 	s.DB.Create(&models.ThreadMessage{ThreadID: thread.ID, AuthorID: &u.ID, Body: p.Body})
 
-	out, code := s.buildThreadOut(u, thread.ID)
+	out, code := s.buildThreadOut(r, u, thread.ID)
 	if code != http.StatusOK {
 		httpErr(w, code, "Ветка не найдена")
 		return
@@ -417,7 +417,7 @@ func (s *Server) createThread(w http.ResponseWriter, r *http.Request) {
 func (s *Server) addThreadMessage(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.Atoi(chi.URLParam(r, "id"))
 	u := currentUser(r)
-	t, ok := s.accessibleThread(u, id)
+	t, ok := s.accessibleThread(r, u, id)
 	if !ok {
 		httpErr(w, http.StatusNotFound, "Ветка не найдена")
 		return
@@ -444,8 +444,8 @@ func (s *Server) addThreadMessage(w http.ResponseWriter, r *http.Request) {
 	}
 	msg := models.ThreadMessage{ThreadID: t.ID, AuthorID: &u.ID, Body: body, ReplyToID: replyTo}
 	s.DB.Create(&msg)
-	s.DB.Model(&models.Thread{}).Where("id = ?", t.ID).Update("updated_at", gorm.Expr("now()"))
-	s.markStaffSeen(u, t)
+	s.db(r).Model(&models.Thread{}).Where("id = ?", t.ID).Update("updated_at", gorm.Expr("now()"))
+	s.markStaffSeen(r, u, t)
 	s.markRead(u.ID, t.ID)
 
 	var full models.ThreadMessage
@@ -453,16 +453,16 @@ func (s *Server) addThreadMessage(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, s.msgOut(&full, u.ID))
 }
 
-func (s *Server) accessibleThread(u *models.User, id int) (*models.Thread, bool) {
+func (s *Server) accessibleThread(r *http.Request, u *models.User, id int) (*models.Thread, bool) {
 	var t models.Thread
-	if err := s.accessibleThreads(u).Where("threads.id = ?", id).First(&t).Error; err != nil {
+	if err := s.accessibleThreads(r, u).Where("threads.id = ?", id).First(&t).Error; err != nil {
 		return nil, false
 	}
 	return &t, true
 }
 
-func (s *Server) ownEditable(u *models.User, threadID, messageID int) (*models.ThreadMessage, int, string) {
-	if _, ok := s.accessibleThread(u, threadID); !ok {
+func (s *Server) ownEditable(r *http.Request, u *models.User, threadID, messageID int) (*models.ThreadMessage, int, string) {
+	if _, ok := s.accessibleThread(r, u, threadID); !ok {
 		return nil, http.StatusNotFound, "Ветка не найдена"
 	}
 	var msg models.ThreadMessage
@@ -483,7 +483,7 @@ func (s *Server) editThreadMessage(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.Atoi(chi.URLParam(r, "id"))
 	mid, _ := strconv.Atoi(chi.URLParam(r, "mid"))
 	u := currentUser(r)
-	msg, code, msgErr := s.ownEditable(u, id, mid)
+	msg, code, msgErr := s.ownEditable(r, u, id, mid)
 	if code != http.StatusOK {
 		httpErr(w, code, msgErr)
 		return
@@ -511,7 +511,7 @@ func (s *Server) deleteThreadMessage(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.Atoi(chi.URLParam(r, "id"))
 	mid, _ := strconv.Atoi(chi.URLParam(r, "mid"))
 	u := currentUser(r)
-	msg, code, msgErr := s.ownEditable(u, id, mid)
+	msg, code, msgErr := s.ownEditable(r, u, id, mid)
 	if code != http.StatusOK {
 		httpErr(w, code, msgErr)
 		return
@@ -534,7 +534,7 @@ func (s *Server) reactThreadMessage(w http.ResponseWriter, r *http.Request) {
 		httpErr(w, http.StatusBadRequest, "Недопустимая реакция")
 		return
 	}
-	if _, ok := s.accessibleThread(u, id); !ok {
+	if _, ok := s.accessibleThread(r, u, id); !ok {
 		httpErr(w, http.StatusNotFound, "Ветка не найдена")
 		return
 	}

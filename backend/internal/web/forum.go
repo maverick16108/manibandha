@@ -14,7 +14,9 @@ import (
 	"manibandha/internal/models"
 )
 
-func (s *Server) isMod(userID int) bool { return caps.HasCap(s.DB, userID, "forum.moderate") }
+func (s *Server) isMod(r *http.Request, userID int) bool {
+	return caps.HasCapIn(s.DB, userID, "forum.moderate", activeSpaceID(r))
+}
 
 func (s *Server) withinForumEdit(p *models.ForumPost) bool {
 	mins := s.getIntSetting("forum_edit_window_minutes", 60)
@@ -183,9 +185,9 @@ func (s *Server) forumUserCard(w http.ResponseWriter, r *http.Request) {
 // GET /forum/sections
 func (s *Server) listSections(w http.ResponseWriter, r *http.Request) {
 	u := currentUser(r)
-	isMod := s.isMod(u.ID)
+	isMod := s.isMod(r, u.ID)
 	var sections []models.ForumSection
-	s.DB.Preload("Author").Preload("Topics").Order("title ASC").Find(&sections)
+	s.db(r).Preload("Author").Preload("Topics").Order("title ASC").Find(&sections)
 	out := make([]map[string]any, 0, len(sections))
 	for i := range sections {
 		out = append(out, sectionOut(&sections[i], u.ID, isMod, len(sections[i].Topics)))
@@ -228,13 +230,13 @@ func (s *Server) createSection(w http.ResponseWriter, r *http.Request) {
 	if p.CoverURL != nil && *p.CoverURL != "" {
 		sec.CoverURL = p.CoverURL
 	}
-	s.DB.Create(&sec)
-	s.DB.Preload("Author").First(&sec, sec.ID)
+	s.db(r).Create(&sec)
+	s.db(r).Preload("Author").First(&sec, sec.ID)
 	writeJSON(w, http.StatusCreated, sectionOut(&sec, u.ID, true, 0))
 }
 
-func (s *Server) sectionEditable(u *models.User, sec *models.ForumSection) bool {
-	return (sec.AuthorID != nil && *sec.AuthorID == u.ID) || s.isMod(u.ID)
+func (s *Server) sectionEditable(r *http.Request, u *models.User, sec *models.ForumSection) bool {
+	return (sec.AuthorID != nil && *sec.AuthorID == u.ID) || s.isMod(r, u.ID)
 }
 
 // PATCH /forum/sections/{id}
@@ -242,11 +244,11 @@ func (s *Server) updateSection(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.Atoi(chi.URLParam(r, "id"))
 	u := currentUser(r)
 	var sec models.ForumSection
-	if err := s.DB.Preload("Author").First(&sec, id).Error; err != nil {
+	if err := s.db(r).Preload("Author").First(&sec, id).Error; err != nil {
 		httpErr(w, http.StatusNotFound, "Раздел не найден")
 		return
 	}
-	if !s.sectionEditable(u, &sec) {
+	if !s.sectionEditable(r, u, &sec) {
 		httpErr(w, http.StatusForbidden, "Менять раздел может создатель или модератор")
 		return
 	}
@@ -290,12 +292,12 @@ func (s *Server) updateSection(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if len(upd) > 0 {
-		s.DB.Model(&models.ForumSection{}).Where("id = ?", id).Updates(upd)
-		s.DB.Preload("Author").First(&sec, id)
+		s.db(r).Model(&models.ForumSection{}).Where("id = ?", id).Updates(upd)
+		s.db(r).Preload("Author").First(&sec, id)
 	}
 	var n int64
-	s.DB.Model(&models.ForumTopic{}).Where("section_id = ?", id).Count(&n)
-	writeJSON(w, http.StatusOK, sectionOut(&sec, u.ID, s.isMod(u.ID), int(n)))
+	s.db(r).Model(&models.ForumTopic{}).Where("section_id = ?", id).Count(&n)
+	writeJSON(w, http.StatusOK, sectionOut(&sec, u.ID, s.isMod(r, u.ID), int(n)))
 }
 
 // DELETE /forum/sections/{id}
@@ -303,22 +305,22 @@ func (s *Server) deleteSection(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.Atoi(chi.URLParam(r, "id"))
 	u := currentUser(r)
 	var sec models.ForumSection
-	if err := s.DB.First(&sec, id).Error; err != nil {
+	if err := s.db(r).First(&sec, id).Error; err != nil {
 		httpErr(w, http.StatusNotFound, "Раздел не найден")
 		return
 	}
-	if !s.sectionEditable(u, &sec) {
+	if !s.sectionEditable(r, u, &sec) {
 		httpErr(w, http.StatusForbidden, "Менять раздел может создатель или модератор")
 		return
 	}
-	s.DB.Delete(&models.ForumSection{}, id)
+	s.db(r).Delete(&models.ForumSection{}, id)
 	w.WriteHeader(http.StatusNoContent)
 }
 
 // GET /forum/topics
 func (s *Server) listTopics(w http.ResponseWriter, r *http.Request) {
 	u := currentUser(r)
-	q := s.DB.Preload("Posts", func(d *gorm.DB) *gorm.DB { return d.Order("created_at") }).
+	q := s.db(r).Preload("Posts", func(d *gorm.DB) *gorm.DB { return d.Order("created_at") }).
 		Preload("Posts.Author").Preload("Section").Preload("Author")
 	if v := r.URL.Query().Get("section_id"); v != "" {
 		q = q.Where("section_id = ?", v)
@@ -363,21 +365,21 @@ func (s *Server) createTopic(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var cnt int64
-	s.DB.Model(&models.ForumSection{}).Where("id = ?", p.SectionID).Count(&cnt)
+	s.db(r).Model(&models.ForumSection{}).Where("id = ?", p.SectionID).Count(&cnt)
 	if cnt == 0 {
 		httpErr(w, http.StatusBadRequest, "Выберите раздел")
 		return
 	}
 	topic := models.ForumTopic{SectionID: &p.SectionID, Title: truncRunes(title, 255), AuthorID: &u.ID, CoverURL: p.CoverURL}
-	s.DB.Create(&topic)
+	s.db(r).Create(&topic)
 	s.DB.Create(&models.ForumPost{TopicID: topic.ID, AuthorID: &u.ID, Body: body})
-	full := s.loadTopic(topic.ID)
+	full := s.loadTopic(r, topic.ID)
 	writeJSON(w, http.StatusCreated, topicOut(full, u.ID))
 }
 
-func (s *Server) loadTopic(id int) *models.ForumTopic {
+func (s *Server) loadTopic(r *http.Request, id int) *models.ForumTopic {
 	var t models.ForumTopic
-	s.DB.Preload("Posts", func(d *gorm.DB) *gorm.DB { return d.Order("created_at") }).
+	s.db(r).Preload("Posts", func(d *gorm.DB) *gorm.DB { return d.Order("created_at") }).
 		Preload("Posts.Author").Preload("Posts.Likes").Preload("Posts.Likes.User").
 		Preload("Section").Preload("Author").First(&t, id)
 	return &t
@@ -388,7 +390,7 @@ func (s *Server) getTopic(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.Atoi(chi.URLParam(r, "id"))
 	u := currentUser(r)
 	var exists int64
-	s.DB.Model(&models.ForumTopic{}).Where("id = ?", id).Count(&exists)
+	s.db(r).Model(&models.ForumTopic{}).Where("id = ?", id).Count(&exists)
 	if exists == 0 {
 		httpErr(w, http.StatusNotFound, "Тема не найдена")
 		return
@@ -396,12 +398,12 @@ func (s *Server) getTopic(w http.ResponseWriter, r *http.Request) {
 	count := r.URL.Query().Get("count") != "false"
 	if count {
 		// views++ → в Python onupdate поднимает updated_at, воспроизводим
-		s.DB.Model(&models.ForumTopic{}).Where("id = ?", id).Updates(map[string]any{
+		s.db(r).Model(&models.ForumTopic{}).Where("id = ?", id).Updates(map[string]any{
 			"views": gorm.Expr("views + 1"), "updated_at": gorm.Expr("now()"),
 		})
 	}
 	s.markTopicRead(u.ID, id)
-	t := s.loadTopic(id)
+	t := s.loadTopic(r, id)
 	writeJSON(w, http.StatusOK, topicOut(t, u.ID))
 }
 
@@ -419,7 +421,7 @@ func (s *Server) addForumPost(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.Atoi(chi.URLParam(r, "id"))
 	u := currentUser(r)
 	var cnt int64
-	s.DB.Model(&models.ForumTopic{}).Where("id = ?", id).Count(&cnt)
+	s.db(r).Model(&models.ForumTopic{}).Where("id = ?", id).Count(&cnt)
 	if cnt == 0 {
 		httpErr(w, http.StatusNotFound, "Тема не найдена")
 		return
@@ -435,15 +437,15 @@ func (s *Server) addForumPost(w http.ResponseWriter, r *http.Request) {
 	}
 	post := models.ForumPost{TopicID: id, AuthorID: &u.ID, Body: body}
 	s.DB.Create(&post)
-	s.DB.Model(&models.ForumTopic{}).Where("id = ?", id).Update("updated_at", gorm.Expr("now()"))
+	s.db(r).Model(&models.ForumTopic{}).Where("id = ?", id).Update("updated_at", gorm.Expr("now()"))
 	s.markTopicRead(u.ID, id)
 	var full models.ForumPost
 	s.DB.Preload("Author").Preload("Likes").Preload("Likes.User").First(&full, post.ID)
 	writeJSON(w, http.StatusCreated, postOut(&full, u.ID))
 }
 
-func (s *Server) ownOrMod(u *models.User, p *models.ForumPost, needWindow bool) (int, string) {
-	mod := s.isMod(u.ID)
+func (s *Server) ownOrMod(r *http.Request, u *models.User, p *models.ForumPost, needWindow bool) (int, string) {
+	mod := s.isMod(r, u.ID)
 	if (p.AuthorID == nil || *p.AuthorID != u.ID) && !mod {
 		return http.StatusForbidden, "Можно менять только свои сообщения"
 	}
@@ -462,7 +464,7 @@ func (s *Server) editForumPost(w http.ResponseWriter, r *http.Request) {
 		httpErr(w, http.StatusNotFound, "Сообщение не найдено")
 		return
 	}
-	if code, msg := s.ownOrMod(u, &post, true); code != http.StatusOK {
+	if code, msg := s.ownOrMod(r, u, &post, true); code != http.StatusOK {
 		httpErr(w, code, msg)
 		return
 	}
@@ -536,7 +538,7 @@ func (s *Server) deleteForumPost(w http.ResponseWriter, r *http.Request) {
 		httpErr(w, http.StatusNotFound, "Сообщение не найдено")
 		return
 	}
-	if code, msg := s.ownOrMod(u, &post, true); code != http.StatusOK {
+	if code, msg := s.ownOrMod(r, u, &post, true); code != http.StatusOK {
 		httpErr(w, code, msg)
 		return
 	}
@@ -545,7 +547,7 @@ func (s *Server) deleteForumPost(w http.ResponseWriter, r *http.Request) {
 	var remaining int64
 	s.DB.Model(&models.ForumPost{}).Where("topic_id = ?", topicID).Count(&remaining)
 	if remaining == 0 {
-		s.DB.Delete(&models.ForumTopic{}, topicID)
+		s.db(r).Delete(&models.ForumTopic{}, topicID)
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -555,14 +557,14 @@ func (s *Server) deleteTopic(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.Atoi(chi.URLParam(r, "id"))
 	u := currentUser(r)
 	var t models.ForumTopic
-	if err := s.DB.First(&t, id).Error; err != nil {
+	if err := s.db(r).First(&t, id).Error; err != nil {
 		httpErr(w, http.StatusNotFound, "Тема не найдена")
 		return
 	}
-	if (t.AuthorID == nil || *t.AuthorID != u.ID) && !s.isMod(u.ID) {
+	if (t.AuthorID == nil || *t.AuthorID != u.ID) && !s.isMod(r, u.ID) {
 		httpErr(w, http.StatusForbidden, "Удалять тему может автор или модератор")
 		return
 	}
-	s.DB.Delete(&models.ForumTopic{}, id)
+	s.db(r).Delete(&models.ForumTopic{}, id)
 	w.WriteHeader(http.StatusNoContent)
 }

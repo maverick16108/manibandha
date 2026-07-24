@@ -23,7 +23,7 @@ func (s *Server) getQuestionAgreement(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"enabled": enabled, "text": text, "version": version,
 		"acknowledged": acknowledged,
-		"can_manage":   caps.HasCap(s.DB, u.ID, "questions.agreement_manage"),
+		"can_manage":   caps.HasCapIn(s.DB, u.ID, "questions.agreement_manage", activeSpaceID(r)),
 	})
 }
 

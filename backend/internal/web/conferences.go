@@ -315,7 +315,7 @@ func (s *Server) listConferences(w http.ResponseWriter, r *http.Request) {
 	u := currentUser(r)
 	elevated := s.isSuperadmin(u.ID)
 	var rows []models.Conference
-	s.DB.Preload("Host").
+	s.db(r).Preload("Host").
 		Order("CASE WHEN status='live' THEN 0 WHEN status='scheduled' THEN 1 ELSE 2 END").
 		Order("scheduled_at IS NULL").Order("scheduled_at ASC").Order("created_at DESC").Find(&rows)
 	out := make([]map[string]any, 0, len(rows))
@@ -333,7 +333,7 @@ func (s *Server) createConference(w http.ResponseWriter, r *http.Request) {
 	u := currentUser(r)
 	var p struct {
 		Title         string     `json:"title"`
-		Description    *string    `json:"description"`
+		Description   *string    `json:"description"`
 		Mode          string     `json:"mode"`
 		ScheduledAt   *time.Time `json:"scheduled_at"`
 		MicAllowed    *bool      `json:"mic_allowed"`
@@ -374,8 +374,8 @@ func (s *Server) createConference(w http.ResponseWriter, r *http.Request) {
 			c.Description = &d
 		}
 	}
-	s.DB.Create(&c)
-	s.DB.Preload("Host").First(&c, c.ID)
+	s.db(r).Create(&c)
+	s.db(r).Preload("Host").First(&c, c.ID)
 	writeJSON(w, http.StatusCreated, s.confOut(&c, u.ID, true, nil))
 }
 
@@ -941,8 +941,11 @@ func (s *Server) listRecordings(w http.ResponseWriter, r *http.Request) {
 	u := currentUser(r)
 	s.reconcileRecordings() // добрать статус у зависших/остановленных записей (потерянный webhook)
 	var rows []models.ConferenceRecording
-	s.DB.Preload("Conference").Preload("Recorder").Where("status = ? AND filename IS NOT NULL", "done").
-		Order("started_at DESC").Find(&rows)
+	rq := s.DB.Preload("Conference").Preload("Recorder").Where("status = ? AND filename IS NOT NULL", "done")
+	if sid := activeSpaceID(r); sid != caps.HomeSpaceID {
+		rq = rq.Joins("JOIN conferences ON conferences.id = conference_recordings.conference_id").Where("conferences.space_id = ?", sid)
+	}
+	rq.Order("started_at DESC").Find(&rows)
 	dirty := false
 	for i := range rows {
 		if rows[i].DurationMs == 0 || rows[i].SizeBytes == 0 {

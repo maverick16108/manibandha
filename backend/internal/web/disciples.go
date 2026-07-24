@@ -187,7 +187,7 @@ func (s *Server) listDisciples(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var total int64
-	apply(s.DB.Model(&models.Disciple{})).Count(&total)
+	apply(s.db(r).Model(&models.Disciple{})).Count(&total)
 
 	order := map[string]string{
 		"material_name":     "material_name",
@@ -209,7 +209,7 @@ func (s *Server) listDisciples(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var items []models.Disciple
-	apply(s.DB.Preload("Temple").Preload("Mentor")).Order(order).Offset(skip).Limit(limit).Find(&items)
+	apply(s.db(r).Preload("Temple").Preload("Mentor")).Order(order).Offset(skip).Limit(limit).Find(&items)
 
 	rows := make([]map[string]any, 0, len(items))
 	for i := range items {
@@ -233,34 +233,34 @@ func monthRange(s string) (time.Time, time.Time, bool) {
 	return start, end, true
 }
 
-func (s *Server) discipleFull() *gorm.DB {
-	return s.DB.Preload("Temple").Preload("Mentor").Preload("Checklist")
+func (s *Server) discipleFull(r *http.Request) *gorm.DB {
+	return s.db(r).Preload("Temple").Preload("Mentor").Preload("Checklist")
 }
 
-func (s *Server) getScoped(u *models.User, id int) (*models.Disciple, bool) {
+func (s *Server) getScoped(r *http.Request, u *models.User, id int) (*models.Disciple, bool) {
 	var d models.Disciple
-	if err := scopeDisciples(s.discipleFull(), u).Where("id = ?", id).First(&d).Error; err != nil {
+	if err := scopeDisciples(s.discipleFull(r), u).Where("id = ?", id).First(&d).Error; err != nil {
 		return nil, false
 	}
 	return &d, true
 }
 
 // доступ к карточке: view_all/note видят любого, иначе — по скоупу
-func (s *Server) getViewable(u *models.User, id int) (*models.Disciple, bool) {
-	if caps.HasCap(s.DB, u.ID, "disciples.view_all") || caps.HasCap(s.DB, u.ID, "disciples.note") {
+func (s *Server) getViewable(r *http.Request, u *models.User, id int) (*models.Disciple, bool) {
+	if caps.HasCapIn(s.DB, u.ID, "disciples.view_all", activeSpaceID(r)) || caps.HasCapIn(s.DB, u.ID, "disciples.note", activeSpaceID(r)) {
 		var d models.Disciple
-		if err := s.discipleFull().First(&d, id).Error; err != nil {
+		if err := s.discipleFull(r).First(&d, id).Error; err != nil {
 			return nil, false
 		}
 		return &d, true
 	}
-	return s.getScoped(u, id)
+	return s.getScoped(r, u, id)
 }
 
 // GET /disciples/{id}
 func (s *Server) getDisciple(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.Atoi(chi.URLParam(r, "id"))
-	d, ok := s.getViewable(currentUser(r), id)
+	d, ok := s.getViewable(r, currentUser(r), id)
 	if !ok {
 		httpErr(w, http.StatusNotFound, "Ученик не найден")
 		return
@@ -277,12 +277,12 @@ func (s *Server) createDisciple(w http.ResponseWriter, r *http.Request) {
 	}
 	d := models.Disciple{InitiationStatus: "aspirant", IsApproved: true}
 	in.applyTo(&d)
-	if err := s.DB.Create(&d).Error; err != nil {
+	if err := s.db(r).Create(&d).Error; err != nil {
 		httpErr(w, http.StatusBadRequest, "Не удалось создать анкету")
 		return
 	}
 	var full models.Disciple
-	s.discipleFull().First(&full, d.ID)
+	s.db(r).Preload("Temple").Preload("Mentor").Preload("Checklist").First(&full, d.ID)
 	writeJSON(w, http.StatusCreated, discipleOut(&full))
 }
 
@@ -294,7 +294,7 @@ func (s *Server) updateDisciple(w http.ResponseWriter, r *http.Request) {
 	var d models.Disciple
 	switch u.Role {
 	case "curator":
-		if _, ok := s.getScoped(u, id); !ok {
+		if _, ok := s.getScoped(r, u, id); !ok {
 			httpErr(w, http.StatusNotFound, "Ученик не найден")
 			return
 		}
@@ -309,7 +309,7 @@ func (s *Server) updateDisciple(w http.ResponseWriter, r *http.Request) {
 		httpErr(w, http.StatusForbidden, "Недостаточно прав")
 		return
 	}
-	if err := s.DB.First(&d, id).Error; err != nil {
+	if err := s.db(r).First(&d, id).Error; err != nil {
 		httpErr(w, http.StatusNotFound, "Ученик не найден")
 		return
 	}
@@ -321,9 +321,9 @@ func (s *Server) updateDisciple(w http.ResponseWriter, r *http.Request) {
 	}
 	upd := in.updateMap()
 	if len(upd) > 0 {
-		s.DB.Model(&models.Disciple{}).Where("id = ?", id).Updates(upd)
+		s.db(r).Model(&models.Disciple{}).Where("id = ?", id).Updates(upd)
 	}
-	s.discipleFull().First(&d, id)
+	s.discipleFull(r).First(&d, id)
 
 	// синхронизировать имя связанного пользователя
 	name := d.MaterialName
@@ -340,7 +340,7 @@ func (s *Server) updateDisciple(w http.ResponseWriter, r *http.Request) {
 func (s *Server) approveDisciple(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.Atoi(chi.URLParam(r, "id"))
 	var d models.Disciple
-	if err := s.DB.First(&d, id).Error; err != nil {
+	if err := s.db(r).First(&d, id).Error; err != nil {
 		httpErr(w, http.StatusNotFound, "Ученик не найден")
 		return
 	}
@@ -348,13 +348,13 @@ func (s *Server) approveDisciple(w http.ResponseWriter, r *http.Request) {
 	if d.InitiationStatus == "recommended" {
 		upd["initiation_status"] = "aspirant"
 	}
-	s.DB.Model(&models.Disciple{}).Where("id = ?", id).Updates(upd)
+	s.db(r).Model(&models.Disciple{}).Where("id = ?", id).Updates(upd)
 
 	// выдать роль по умолчанию связанному пользователю
 	var linked models.User
 	if err := s.DB.Where("disciple_id = ?", id).First(&linked).Error; err == nil {
 		var def models.Role
-		if err := s.DB.Where("is_default = ?", true).First(&def).Error; err == nil {
+		if err := s.db(r).Where("is_default = ?", true).First(&def).Error; err == nil {
 			var cnt int64
 			s.DB.Model(&models.UserRole{}).Where("user_id = ? AND role_id = ?", linked.ID, def.ID).Count(&cnt)
 			if cnt == 0 {
@@ -362,7 +362,7 @@ func (s *Server) approveDisciple(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	s.discipleFull().First(&d, id)
+	s.discipleFull(r).First(&d, id)
 	writeJSON(w, http.StatusOK, discipleOut(&d))
 }
 
@@ -370,11 +370,11 @@ func (s *Server) approveDisciple(w http.ResponseWriter, r *http.Request) {
 func (s *Server) deleteDisciple(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.Atoi(chi.URLParam(r, "id"))
 	var d models.Disciple
-	if err := s.DB.First(&d, id).Error; err != nil {
+	if err := s.db(r).First(&d, id).Error; err != nil {
 		httpErr(w, http.StatusNotFound, "Ученик не найден")
 		return
 	}
-	s.DB.Delete(&models.Disciple{}, id)
+	s.db(r).Delete(&models.Disciple{}, id)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -383,7 +383,7 @@ func (s *Server) deleteDisciple(w http.ResponseWriter, r *http.Request) {
 func (s *Server) listNotes(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.Atoi(chi.URLParam(r, "id"))
 	var cnt int64
-	s.DB.Model(&models.Disciple{}).Where("id = ?", id).Count(&cnt)
+	s.db(r).Model(&models.Disciple{}).Where("id = ?", id).Count(&cnt)
 	if cnt == 0 {
 		httpErr(w, http.StatusNotFound, "Ученик не найден")
 		return
@@ -408,7 +408,7 @@ func (s *Server) addNote(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.Atoi(chi.URLParam(r, "id"))
 	u := currentUser(r)
 	var cnt int64
-	s.DB.Model(&models.Disciple{}).Where("id = ?", id).Count(&cnt)
+	s.db(r).Model(&models.Disciple{}).Where("id = ?", id).Count(&cnt)
 	if cnt == 0 {
 		httpErr(w, http.StatusNotFound, "Ученик не найден")
 		return
@@ -438,7 +438,7 @@ func (s *Server) deleteNote(w http.ResponseWriter, r *http.Request) {
 		httpErr(w, http.StatusNotFound, "Заметка не найдена")
 		return
 	}
-	if (n.AuthorID == nil || *n.AuthorID != u.ID) && !caps.HasCap(s.DB, u.ID, "disciples.edit") {
+	if (n.AuthorID == nil || *n.AuthorID != u.ID) && !caps.HasCapIn(s.DB, u.ID, "disciples.edit", activeSpaceID(r)) {
 		httpErr(w, http.StatusForbidden, "Удалять можно свои заметки")
 		return
 	}
@@ -452,7 +452,7 @@ const maxDiscipleFileBytes = 25 * 1024 * 1024
 
 func (s *Server) listFiles(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.Atoi(chi.URLParam(r, "id"))
-	if _, ok := s.getViewable(currentUser(r), id); !ok {
+	if _, ok := s.getViewable(r, currentUser(r), id); !ok {
 		httpErr(w, http.StatusNotFound, "Ученик не найден")
 		return
 	}
@@ -477,7 +477,7 @@ func (s *Server) uploadDiscipleFile(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.Atoi(chi.URLParam(r, "id"))
 	u := currentUser(r)
 	var cnt int64
-	s.DB.Model(&models.Disciple{}).Where("id = ?", id).Count(&cnt)
+	s.db(r).Model(&models.Disciple{}).Where("id = ?", id).Count(&cnt)
 	if cnt == 0 {
 		httpErr(w, http.StatusNotFound, "Ученик не найден")
 		return

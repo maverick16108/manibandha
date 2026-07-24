@@ -75,13 +75,13 @@ func (s StringList) Value() (driver.Value, error) {
 
 // User — таблица users (см. app/models/user.py).
 type User struct {
-	ID             int       `gorm:"primaryKey" json:"id"`
-	Email          string    `gorm:"column:email" json:"email"`
-	Phone          *string   `gorm:"column:phone" json:"phone"`
-	HashedPassword string    `gorm:"column:hashed_password" json:"-"`
-	FullName       string    `gorm:"column:full_name" json:"full_name"`
-	Role           string    `gorm:"column:role" json:"role"`
-	IsActive       bool      `gorm:"column:is_active" json:"is_active"`
+	ID             int     `gorm:"primaryKey" json:"id"`
+	Email          string  `gorm:"column:email" json:"email"`
+	Phone          *string `gorm:"column:phone" json:"phone"`
+	HashedPassword string  `gorm:"column:hashed_password" json:"-"`
+	FullName       string  `gorm:"column:full_name" json:"full_name"`
+	Role           string  `gorm:"column:role" json:"role"`
+	IsActive       bool    `gorm:"column:is_active" json:"is_active"`
 	AvatarURL      *string `gorm:"column:avatar_url" json:"avatar_url"`
 	DiscipleID     *int    `gorm:"column:disciple_id" json:"disciple_id"`
 	IsSuperadmin   bool    `gorm:"column:is_superadmin" json:"is_superadmin"` // глобальный админ платформы (над всеми пространствами)
@@ -125,6 +125,7 @@ func (User) TableName() string { return "users" }
 
 // Disciple — таблица disciples (полный набор колонок из app/models/disciple.py).
 type Disciple struct {
+	SpaceID            int        `gorm:"column:space_id" json:"-"`
 	ID                 int        `gorm:"primaryKey" json:"id"`
 	SpiritualName      *string    `gorm:"column:spiritual_name" json:"spiritual_name"`
 	MaterialName       string     `gorm:"column:material_name" json:"material_name"`
@@ -223,6 +224,7 @@ func (DiscipleFile) TableName() string { return "disciple_files" }
 
 // Role — таблица roles (динамические роли с набором прав).
 type Role struct {
+	SpaceID      int        `gorm:"column:space_id" json:"-"`
 	ID           int        `gorm:"primaryKey" json:"id"`
 	Key          string     `gorm:"column:key" json:"key"`
 	Name         string     `gorm:"column:name" json:"name"`
@@ -290,6 +292,7 @@ type Country struct {
 func (Country) TableName() string { return "countries" }
 
 type Temple struct {
+	SpaceID       int     `gorm:"column:space_id" json:"-"`
 	ID            int     `gorm:"primaryKey" json:"id"`
 	Name          string  `gorm:"column:name" json:"name"`
 	City          *string `gorm:"column:city" json:"city"`
@@ -302,6 +305,7 @@ func (Temple) TableName() string { return "temples" }
 
 // Thread — ветка общения (вопрос/отчёт/approval).
 type Thread struct {
+	SpaceID     int        `gorm:"column:space_id" json:"-"`
 	ID          int        `gorm:"primaryKey" json:"id"`
 	Kind        string     `gorm:"column:kind" json:"kind"`
 	DiscipleID  int        `gorm:"column:disciple_id" json:"disciple_id"`
@@ -359,6 +363,7 @@ func (MessageLike) TableName() string { return "message_likes" }
 // ── минимальные модели для nav-counts (полные — в модулях forum/conferences) ──
 
 type ForumSection struct {
+	SpaceID     int       `gorm:"column:space_id" json:"-"`
 	ID          int       `gorm:"primaryKey" json:"id"`
 	Title       string    `gorm:"column:title" json:"title"`
 	Description *string   `gorm:"column:description" json:"description"`
@@ -375,6 +380,7 @@ type ForumSection struct {
 func (ForumSection) TableName() string { return "forum_sections" }
 
 type ForumTopic struct {
+	SpaceID   int       `gorm:"column:space_id" json:"-"`
 	ID        int       `gorm:"primaryKey" json:"id"`
 	SectionID *int      `gorm:"column:section_id" json:"section_id"`
 	Title     string    `gorm:"column:title" json:"title"`
@@ -429,6 +435,7 @@ type ForumTopicRead struct {
 func (ForumTopicRead) TableName() string { return "forum_topic_reads" }
 
 type Conference struct {
+	SpaceID       int        `gorm:"column:space_id" json:"-"`
 	ID            int        `gorm:"primaryKey" json:"id"`
 	Title         string     `gorm:"column:title" json:"title"`
 	Description   *string    `gorm:"column:description" json:"description"`
@@ -494,6 +501,7 @@ func (ConferenceParticipant) TableName() string { return "conference_participant
 
 // GalleryAlbum — альбом галереи. is_home — предопределённый альбом для главной страницы.
 type GalleryAlbum struct {
+	SpaceID     int       `gorm:"column:space_id" json:"-"`
 	ID          int       `gorm:"primaryKey" json:"id"`
 	Title       string    `gorm:"column:title" json:"title"`
 	Description *string   `gorm:"column:description" json:"description"`
@@ -531,6 +539,7 @@ func (ConferenceRecording) TableName() string { return "conference_recordings" }
 
 // Event — событие календаря.
 type Event struct {
+	SpaceID     int        `gorm:"column:space_id" json:"-"`
 	ID          int        `gorm:"primaryKey" json:"id"`
 	Title       string     `gorm:"column:title" json:"title"`
 	Location    *string    `gorm:"column:location" json:"location"`
@@ -546,11 +555,11 @@ func (Event) TableName() string { return "events" }
 // ── Мессенджер ──────────────────────────────────────────────────────────────
 
 type Chat struct {
-	ID        int       `gorm:"primaryKey" json:"id"`
-	Type      string    `gorm:"column:type" json:"type"`
-	Title     *string   `gorm:"column:title" json:"title"`
-	PhotoURL  *string   `gorm:"column:photo_url" json:"photo_url"`
-	CreatedBy *int      `gorm:"column:created_by" json:"created_by"`
+	ID              int       `gorm:"primaryKey" json:"id"`
+	Type            string    `gorm:"column:type" json:"type"`
+	Title           *string   `gorm:"column:title" json:"title"`
+	PhotoURL        *string   `gorm:"column:photo_url" json:"photo_url"`
+	CreatedBy       *int      `gorm:"column:created_by" json:"created_by"`
 	CreatedAt       time.Time `gorm:"column:created_at" json:"created_at"`
 	UpdatedAt       time.Time `gorm:"column:updated_at" json:"updated_at"`
 	PinnedMessageID *int64    `gorm:"column:pinned_message_id" json:"pinned_message_id"`
@@ -614,6 +623,7 @@ func (ChatMessageReaction) TableName() string { return "chat_message_reactions" 
 
 // Draft — черновик автосохранения текста пользователя.
 type Draft struct {
+	SpaceID   int       `gorm:"column:space_id" json:"-"`
 	ID        int       `gorm:"primaryKey" json:"id"`
 	UserID    int       `gorm:"column:user_id" json:"user_id"`
 	Scope     string    `gorm:"column:scope" json:"scope"`

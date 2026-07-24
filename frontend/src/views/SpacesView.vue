@@ -94,9 +94,12 @@ async function leave(sp) {
           <span v-if="sp.is_owner" class="inline-flex items-center gap-1 font-medium text-ink-700/70"><AppIcon name="key" :size="12" /> Модератор</span>
         </div>
         <div class="mt-auto">
-          <div v-if="sp.my_status === 'active'" class="flex items-center gap-2">
-            <span class="inline-flex items-center gap-1 text-sm font-medium text-green-700"><AppIcon name="check" :size="15" /> Участник</span>
-            <button v-if="!sp.is_owner" class="ml-auto text-sm text-ink-700/50 hover:text-red-600" :disabled="busy.has(sp.id)" @click="leave(sp)">Выйти</button>
+          <div v-if="spaces.activeId === sp.id" class="flex items-center gap-2">
+            <span class="inline-flex items-center gap-1 text-sm font-semibold text-saffron-700"><AppIcon name="check" :size="15" /> Вы здесь</span>
+          </div>
+          <div v-else-if="sp.my_status === 'active'" class="flex items-center gap-2">
+            <button class="btn-outline flex-1" @click="spaces.enter(sp.id)">Войти</button>
+            <button v-if="!sp.is_owner" class="text-sm text-ink-700/50 hover:text-red-600" :disabled="busy.has(sp.id)" @click="leave(sp)">Выйти</button>
           </div>
           <div v-else-if="sp.my_status === 'pending'" class="text-sm text-ink-700/60">Заявка отправлена — ожидает подтверждения</div>
           <button v-else class="btn-outline w-full" :disabled="busy.has(sp.id)" @click="join(sp)">

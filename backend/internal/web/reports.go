@@ -67,7 +67,7 @@ func applyReportFilters(q *gorm.DB, qp map[string]string) *gorm.DB {
 // GET /reports/summary
 func (s *Server) reportSummary(w http.ResponseWriter, r *http.Request) {
 	u := currentUser(r)
-	base := func() *gorm.DB { return scopeDisciples(s.DB.Model(&models.Disciple{}), u) }
+	base := func() *gorm.DB { return scopeDisciples(s.db(r).Model(&models.Disciple{}), u) }
 
 	var total int64
 	base().Count(&total)
@@ -100,7 +100,7 @@ func (s *Server) reportSummary(w http.ResponseWriter, r *http.Request) {
 	}
 	var templeRows []tc
 	base().Select("temple_id as k, count(*) as c").Group("temple_id").Scan(&templeRows)
-	tnames := s.templeNames()
+	tnames := s.templeNames(r)
 	byTemple := make([]map[string]any, 0, len(templeRows))
 	for _, x := range templeRows {
 		name := "—"
@@ -129,9 +129,9 @@ func strOrDash(p *string) string {
 	return *p
 }
 
-func (s *Server) templeNames() map[int]string {
+func (s *Server) templeNames(r *http.Request) map[int]string {
 	var temples []models.Temple
-	s.DB.Find(&temples)
+	s.db(r).Find(&temples)
 	m := map[int]string{}
 	for _, t := range temples {
 		m[t.ID] = t.Name
@@ -139,9 +139,9 @@ func (s *Server) templeNames() map[int]string {
 	return m
 }
 
-func (s *Server) discipleNames() map[int]string {
+func (s *Server) discipleNames(r *http.Request) map[int]string {
 	var ds []models.Disciple
-	s.DB.Select("id, spiritual_name, material_name").Find(&ds)
+	s.db(r).Select("id, spiritual_name, material_name").Find(&ds)
 	m := map[int]string{}
 	for i := range ds {
 		m[ds[i].ID] = ds[i].Name()
@@ -158,7 +158,7 @@ func (s *Server) reportTimeline(w http.ResponseWriter, r *http.Request) {
 		BrahmanDate  *time.Time
 	}
 	var rows []dts
-	scopeDisciples(s.DB.Model(&models.Disciple{}), u).
+	scopeDisciples(s.db(r).Model(&models.Disciple{}), u).
 		Select("pranama_date, harinama_date, brahman_date").Scan(&rows)
 
 	buckets := map[string]map[string]int{}
@@ -206,14 +206,14 @@ func (s *Server) reportGroup(w http.ResponseWriter, r *http.Request) {
 		col = "temple_id"
 	}
 
-	q := scopeDisciples(s.DB.Model(&models.Disciple{}), u)
+	q := scopeDisciples(s.db(r).Model(&models.Disciple{}), u)
 	q = applyReportFilters(q, qp)
 	type row struct {
 		V *string
 		C int64
 	}
 	var rows []row
-	q.Select(col+" as v, count(*) as c").Group(col).Order("count(*) DESC").Scan(&rows)
+	q.Select(col + " as v, count(*) as c").Group(col).Order("count(*) DESC").Scan(&rows)
 
 	var label func(*string) string
 	switch groupBy {
@@ -227,10 +227,10 @@ func (s *Server) reportGroup(w http.ResponseWriter, r *http.Request) {
 	case "country", "region", "city":
 		label = func(v *string) string { return strOrDash(v) }
 	case "mentor":
-		names := s.discipleNames()
+		names := s.discipleNames(r)
 		label = func(v *string) string { return lookupName(v, names) }
 	default: // temple
-		names := s.templeNames()
+		names := s.templeNames(r)
 		label = func(v *string) string { return lookupName(v, names) }
 	}
 	out := make([]map[string]any, 0, len(rows))
@@ -297,8 +297,8 @@ func deref(p *string) string {
 	return *p
 }
 
-func (s *Server) reportRows(u *models.User, qp map[string]string) []models.Disciple {
-	q := scopeDisciples(s.DB.Preload("Temple").Preload("Mentor"), u)
+func (s *Server) reportRows(r *http.Request, u *models.User, qp map[string]string) []models.Disciple {
+	q := scopeDisciples(s.db(r).Preload("Temple").Preload("Mentor"), u)
 	q = applyReportFilters(q, qp)
 	var rows []models.Disciple
 	q.Order("material_name").Find(&rows)
@@ -307,7 +307,7 @@ func (s *Server) reportRows(u *models.User, qp map[string]string) []models.Disci
 
 // GET /reports/disciples.xlsx
 func (s *Server) exportXlsx(w http.ResponseWriter, r *http.Request) {
-	rows := s.reportRows(currentUser(r), queryMap(r))
+	rows := s.reportRows(r, currentUser(r), queryMap(r))
 	f := excelize.NewFile()
 	sheet := "Ученики"
 	f.SetSheetName(f.GetSheetName(0), sheet)
@@ -337,7 +337,7 @@ func (s *Server) exportXlsx(w http.ResponseWriter, r *http.Request) {
 
 // GET /reports/disciples.pdf
 func (s *Server) exportPdf(w http.ResponseWriter, r *http.Request) {
-	rows := s.reportRows(currentUser(r), queryMap(r))
+	rows := s.reportRows(r, currentUser(r), queryMap(r))
 	pdf := fpdf.New("L", "mm", "A4", "")
 	pdf.SetMargins(12, 12, 12)
 	pdf.AddPage()

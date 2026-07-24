@@ -109,7 +109,7 @@ func (s *Server) requireCap(cap string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			u := currentUser(r)
-			if u == nil || !caps.HasCap(s.DB, u.ID, cap) {
+			if u == nil || !caps.HasCapIn(s.DB, u.ID, cap, activeSpaceID(r)) {
 				httpErr(w, http.StatusForbidden, "Недостаточно прав")
 				return
 			}

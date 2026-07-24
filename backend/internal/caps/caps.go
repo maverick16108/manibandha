@@ -85,16 +85,23 @@ func UserRoles(db *gorm.DB, userID int) []models.Role {
 	return roles
 }
 
-// UserCapabilities — объединение прав всех ролей (superadmin → все).
-func UserCapabilities(db *gorm.DB, userID int) []string {
-	roles := UserRoles(db, userID)
-	for _, r := range roles {
-		if r.IsSuperadmin {
-			out := AllCaps()
-			sort.Strings(out)
-			return out
-		}
+// IsSuperadmin — глобальный админ платформы (флаг на пользователе, вне ролевой модели пространств).
+func IsSuperadmin(db *gorm.DB, userID int) bool {
+	var u models.User
+	if err := db.Select("is_superadmin").First(&u, userID).Error; err != nil {
+		return false
 	}
+	return u.IsSuperadmin
+}
+
+// UserCapabilities — объединение прав всех ролей (глобальный супер-админ → все).
+func UserCapabilities(db *gorm.DB, userID int) []string {
+	if IsSuperadmin(db, userID) {
+		out := AllCaps()
+		sort.Strings(out)
+		return out
+	}
+	roles := UserRoles(db, userID)
 	set := map[string]bool{}
 	for _, r := range roles {
 		for _, c := range r.Capabilities {

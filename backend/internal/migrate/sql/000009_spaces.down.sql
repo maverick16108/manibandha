@@ -1,0 +1,13 @@
+ALTER TABLE app_settings   DROP COLUMN IF EXISTS space_id;
+ALTER TABLE temples        DROP COLUMN IF EXISTS space_id;
+ALTER TABLE drafts         DROP COLUMN IF EXISTS space_id;
+ALTER TABLE roles          DROP COLUMN IF EXISTS space_id;
+ALTER TABLE gallery_albums DROP COLUMN IF EXISTS space_id;
+ALTER TABLE conferences    DROP COLUMN IF EXISTS space_id;
+ALTER TABLE forum_topics   DROP COLUMN IF EXISTS space_id;
+ALTER TABLE forum_sections DROP COLUMN IF EXISTS space_id;
+ALTER TABLE threads        DROP COLUMN IF EXISTS space_id;
+ALTER TABLE disciples      DROP COLUMN IF EXISTS space_id;
+ALTER TABLE events         DROP COLUMN IF EXISTS space_id;
+ALTER TABLE users          DROP COLUMN IF EXISTS is_superadmin;
+DROP TABLE IF EXISTS spaces;

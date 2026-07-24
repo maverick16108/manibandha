@@ -33,12 +33,7 @@ func tsPtr(t *time.Time) any {
 }
 
 func (s *Server) isSuperadmin(userID int) bool {
-	for _, r := range caps.UserRoles(s.DB, userID) {
-		if r.IsSuperadmin {
-			return true
-		}
-	}
-	return false
+	return caps.IsSuperadmin(s.DB, userID)
 }
 
 func (s *Server) genCode() string {

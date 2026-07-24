@@ -84,8 +84,23 @@ type User struct {
 	IsActive       bool      `gorm:"column:is_active" json:"is_active"`
 	AvatarURL      *string `gorm:"column:avatar_url" json:"avatar_url"`
 	DiscipleID     *int    `gorm:"column:disciple_id" json:"disciple_id"`
+	IsSuperadmin   bool    `gorm:"column:is_superadmin" json:"is_superadmin"` // глобальный админ платформы (над всеми пространствами)
 	CreatedAt      Time    `gorm:"column:created_at" json:"created_at"`
 }
+
+// Space — пространство (арендатор). Тип задаёт набор фич по умолчанию; владелец = модератор.
+type Space struct {
+	ID           int       `gorm:"primaryKey" json:"id"`
+	Slug         string    `gorm:"column:slug" json:"slug"`
+	Name         string    `gorm:"column:name" json:"name"`
+	Type         string    `gorm:"column:type" json:"type"` // guru | education
+	OwnerUserID  *int      `gorm:"column:owner_user_id" json:"owner_user_id"`
+	JoinMode     string    `gorm:"column:join_mode" json:"join_mode"` // request | open | link
+	CustomDomain *string   `gorm:"column:custom_domain" json:"custom_domain"`
+	CreatedAt    time.Time `gorm:"column:created_at" json:"-"`
+}
+
+func (Space) TableName() string { return "spaces" }
 
 func (User) TableName() string { return "users" }
 

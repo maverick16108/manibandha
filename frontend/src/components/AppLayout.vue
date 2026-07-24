@@ -17,7 +17,7 @@ import { prefetchSections } from '../composables/prefetch'
 const KEEP_ALIVE_VIEWS = [
   'DashboardView', 'CalendarView', 'DisciplesView', 'ThreadsView', 'ForumView', 'ConferenceView',
   'RecordingsArchiveView', 'DictionariesView', 'ReportsView', 'UsersView', 'RolesView', 'SettingsView',
-  'ProfileView', 'ApprovalsView',
+  'ProfileView', 'ApprovalsView', 'SpacesView', 'GalleryView',
 ]
 function viewKey(r) {
   if (r.name === 'chat' || r.name === 'chat-home') return 'chat' // чат — один инстанс, параметр обрабатывает сам
@@ -69,6 +69,7 @@ const nav = [
   { name: 'disciples', label: 'Ученики', icon: 'disciples', caps: ['disciples.view_all', 'disciples.view_own'], feature: 'disciples' },
   { name: 'approvals', label: 'Заявки', icon: 'shield', caps: ['disciples.approve'], feature: 'disciples' },
   { name: 'chat-home', label: 'Чат', icon: 'chat', always: true },
+  { name: 'spaces', label: 'Пространства', icon: 'grid', always: true },
   { name: 'questions', label: 'Вопросы', icon: 'question', caps: ['questions.ask', 'questions.answer', 'questions.view_all'], feature: 'questions' },
   { name: 'service-reports', label: 'Отчёты', icon: 'reports', caps: ['reports.write', 'reports.read_all'], feature: 'reports' },
   { name: 'forum', label: 'Форум', icon: 'forum', caps: ['forum.view'], feature: 'forum' },

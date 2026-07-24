@@ -30,6 +30,7 @@ const routes = [
       { path: 'service-reports/new', name: 'report-new', component: () => import('../views/ThreadComposeView.vue'), meta: { kind: 'report' } },
       { path: 'threads/:id', name: 'thread', component: () => import('../views/ThreadView.vue') },
       { path: 'chat', name: 'chat-home', component: () => import('../views/ChatView.vue') },
+      { path: 'spaces', name: 'spaces', component: () => import('../views/SpacesView.vue') , meta: { keepAlive: true } },
       { path: 'chat/:id', name: 'chat', component: () => import('../views/ChatView.vue') },
       { path: 'join/:token', name: 'join', component: () => import('../views/JoinView.vue') },
       { path: 'gallery', name: 'gallery', component: () => import('../views/GalleryView.vue') , meta: { keepAlive: true } },

@@ -8,8 +8,36 @@ import { usePageTitle } from '../composables/pageTitle'
 import { localCacheStats, wipeLocalChatCache } from '../chat/store'
 import { confirmDialog } from '../composables/confirm'
 import { useAutoRefresh } from '../composables/useAutoRefresh'
+import { useAuthStore } from '../stores/auth'
 
 usePageTitle('Настройки')
+
+const auth = useAuthStore()
+
+// ── Модули пространства (Ф3) — включение/выключение разделов, только для модератора ───────────
+const features = ref([])
+const featuresBusy = ref(new Set())
+const featuresCanManage = ref(false)
+async function loadFeatures() {
+  if (!auth.isModerator) return
+  try {
+    const { data } = await client.get('/space/features')
+    features.value = data.items || []
+    featuresCanManage.value = !!data.can_manage
+  } catch { /* ignore */ }
+}
+async function toggleFeature(f) {
+  if (!featuresCanManage.value || featuresBusy.value.has(f.key)) return
+  const next = !f.enabled
+  featuresBusy.value = new Set(featuresBusy.value).add(f.key)
+  try {
+    await client.put(`/space/features/${f.key}`, { enabled: next })
+    f.enabled = next
+    await auth.fetchMe() // навигация слева обновится сразу
+  } catch { /* ignore */ } finally {
+    const s = new Set(featuresBusy.value); s.delete(f.key); featuresBusy.value = s
+  }
+}
 
 // ── Память устройства / локальный кэш чатов (перенесено из шапки чата) ────────
 function fmtSize(bytes) { if (!bytes) return '0 Б'; if (bytes < 1024) return `${bytes} Б`; if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} КБ`; if (bytes < 1073741824) return `${(bytes / 1048576).toFixed(1)} МБ`; return `${(bytes / 1073741824).toFixed(2)} ГБ` }
@@ -66,6 +94,7 @@ async function load(silent = false) {
   }
 }
 onMounted(load)
+onMounted(loadFeatures)
 useAutoRefresh(load)
 
 function step(key, delta, min) {
@@ -101,6 +130,28 @@ async function save() {
     </div>
 
     <template v-else>
+      <!-- Модули пространства (только модератор) -->
+      <div v-if="auth.isModerator && features.length" class="card mb-4 p-6">
+        <div class="mb-1 flex items-center gap-2">
+          <AppIcon name="settings" :size="18" class="text-saffron-600" />
+          <h2 class="font-display text-lg font-semibold text-ink-900">Модули пространства</h2>
+        </div>
+        <p class="mb-4 text-xs text-ink-700/50">Включайте и выключайте разделы этого пространства. Выключенный модуль скрывается из меню у всех участников.</p>
+        <div class="divide-y divide-parchment-100 overflow-hidden rounded-xl ring-1 ring-parchment-200">
+          <div v-for="f in features" :key="f.key" class="flex items-center justify-between gap-3 px-4 py-3">
+            <div class="text-[15px] text-ink-900">{{ f.label }}</div>
+            <button type="button" role="switch" :aria-checked="f.enabled"
+                    :disabled="!featuresCanManage || featuresBusy.has(f.key)"
+                    class="relative h-6 w-11 shrink-0 rounded-full transition-colors disabled:opacity-50"
+                    :class="f.enabled ? 'bg-saffron-500' : 'bg-parchment-300'"
+                    @click="toggleFeature(f)">
+              <span class="absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all"
+                    :class="f.enabled ? 'left-[22px]' : 'left-0.5'"></span>
+            </button>
+          </div>
+        </div>
+      </div>
+
       <!-- Форум -->
       <div class="card mb-4 p-6">
         <div class="mb-4 flex items-center gap-2">

@@ -9,6 +9,7 @@ import (
 	"gorm.io/gorm"
 
 	"manibandha/internal/caps"
+	"manibandha/internal/feat"
 	"manibandha/internal/models"
 	"manibandha/internal/security"
 )
@@ -222,10 +223,13 @@ func (s *Server) myCapabilities(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"capabilities": caps.UserCapabilities(s.DB, u.ID),
-		"roles":        caps.RoleKeys(s.DB, u.ID),
-		"pending":      pending,
-		"disciple_id":  u.DiscipleID,
+		"capabilities":  caps.UserCapabilities(s.DB, u.ID),
+		"roles":         caps.RoleKeys(s.DB, u.ID),
+		"features":      feat.EnabledList(s.DB, caps.HomeSpaceID),
+		"is_moderator":  caps.IsModerator(s.DB, u.ID, caps.HomeSpaceID),
+		"is_superadmin": caps.IsSuperadmin(s.DB, u.ID),
+		"pending":       pending,
+		"disciple_id":   u.DiscipleID,
 	})
 }
 

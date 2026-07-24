@@ -44,6 +44,7 @@ func (s *Server) Router() http.Handler {
 		pr.Get("/auth/me", s.me)
 		pr.Patch("/auth/me", s.patchMe)
 		pr.Get("/me/capabilities", s.myCapabilities)
+		pr.Get("/space/features", s.listSpaceFeatures)
 		pr.Get("/users/mentors", s.listMentors)
 		pr.Get("/users/{id}/card", s.userCardHandler)
 		// справочники: чтение — любому авторизованному
@@ -102,6 +103,12 @@ func (s *Server) Router() http.Handler {
 	api.Group(func(pr chi.Router) {
 		pr.Use(s.auth, s.requireCap("settings.manage"))
 		pr.Put("/settings", s.updateSettings)
+	})
+
+	// модули пространства: включение/выключение — только модератор пространства
+	api.Group(func(pr chi.Router) {
+		pr.Use(s.auth, s.requireModerator)
+		pr.Put("/space/features/{key}", s.setSpaceFeature)
 	})
 
 	// соглашение в «Вопросах»: изменение — право questions.agreement_manage

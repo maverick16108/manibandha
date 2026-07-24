@@ -107,6 +107,12 @@ func IsSpaceOwner(db *gorm.DB, userID, spaceID int) bool {
 	return sp.OwnerUserID != nil && *sp.OwnerUserID == userID
 }
 
+// IsModerator — модератор пространства: глобальный супер-админ или владелец пространства.
+// Модератор управляет модулями и правами участников пространства.
+func IsModerator(db *gorm.DB, userID, spaceID int) bool {
+	return IsSuperadmin(db, userID) || IsSpaceOwner(db, userID, spaceID)
+}
+
 func userRolesInSpace(db *gorm.DB, userID, spaceID int) []models.Role {
 	var roles []models.Role
 	db.Joins("JOIN user_roles ur ON ur.role_id = roles.id").

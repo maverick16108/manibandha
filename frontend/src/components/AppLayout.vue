@@ -60,18 +60,20 @@ function startNavResize(e) {
 // незаапрувленный кандидат — без левого меню, только экран ожидания
 const showSidebar = computed(() => !auth.isPending)
 
-// caps — любое из перечисленных прав открывает раздел
+// caps — любое из перечисленных прав открывает раздел.
+// feature — раздел-модуль пространства: виден, только если модуль включён модератором (Ф3).
+// Разделы без feature (чат, управление) фичами не гейтятся.
 const nav = [
-  { name: 'dashboard', label: 'Обзор', icon: 'overview', caps: ['dashboard.view'] },
-  { name: 'calendar', label: 'События', icon: 'calendar', caps: ['calendar.view'] },
-  { name: 'disciples', label: 'Ученики', icon: 'disciples', caps: ['disciples.view_all', 'disciples.view_own'] },
-  { name: 'approvals', label: 'Заявки', icon: 'shield', caps: ['disciples.approve'] },
+  { name: 'dashboard', label: 'Обзор', icon: 'overview', caps: ['dashboard.view'], feature: 'dashboard' },
+  { name: 'calendar', label: 'События', icon: 'calendar', caps: ['calendar.view'], feature: 'calendar' },
+  { name: 'disciples', label: 'Ученики', icon: 'disciples', caps: ['disciples.view_all', 'disciples.view_own'], feature: 'disciples' },
+  { name: 'approvals', label: 'Заявки', icon: 'shield', caps: ['disciples.approve'], feature: 'disciples' },
   { name: 'chat-home', label: 'Чат', icon: 'chat', always: true },
-  { name: 'questions', label: 'Вопросы', icon: 'question', caps: ['questions.ask', 'questions.answer', 'questions.view_all'] },
-  { name: 'service-reports', label: 'Отчёты', icon: 'reports', caps: ['reports.write', 'reports.read_all'] },
-  { name: 'forum', label: 'Форум', icon: 'forum', caps: ['forum.view'] },
-  { name: 'conference', label: 'Конференция', icon: 'video', caps: ['conference.view'] },
-  { name: 'gallery', label: 'Галерея', icon: 'image', caps: ['gallery.view'] },
+  { name: 'questions', label: 'Вопросы', icon: 'question', caps: ['questions.ask', 'questions.answer', 'questions.view_all'], feature: 'questions' },
+  { name: 'service-reports', label: 'Отчёты', icon: 'reports', caps: ['reports.write', 'reports.read_all'], feature: 'reports' },
+  { name: 'forum', label: 'Форум', icon: 'forum', caps: ['forum.view'], feature: 'forum' },
+  { name: 'conference', label: 'Конференция', icon: 'video', caps: ['conference.view'], feature: 'conference' },
+  { name: 'gallery', label: 'Галерея', icon: 'image', caps: ['gallery.view'], feature: 'gallery' },
   { name: 'dictionaries', label: 'Справочники', icon: 'pin', caps: ['dictionaries.manage'] },
   { name: 'users', label: 'Пользователи', icon: 'users', caps: ['users.manage'] },
   { name: 'roles', label: 'Роли', icon: 'key', caps: ['roles.manage'] },
@@ -89,6 +91,8 @@ function goBack() {
 
 function canShow(item) {
   if (item.always) return !auth.isPending
+  // модуль выключен в пространстве → скрываем раздел (управление/чат без feature не гейтятся)
+  if (item.feature && !auth.featureOn(item.feature)) return false
   return (item.caps || []).some((c) => auth.can(c))
 }
 // подсветка «Чат» держится и при открытом чате (chat/:id) — это разные роуты

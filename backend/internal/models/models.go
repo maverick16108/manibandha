@@ -112,6 +112,15 @@ type SpaceMember struct {
 
 func (SpaceMember) TableName() string { return "space_members" }
 
+// SpaceFeature — явное включение/выключение модуля пространства (переопределяет дефолт по типу).
+type SpaceFeature struct {
+	SpaceID int    `gorm:"column:space_id;primaryKey" json:"space_id"`
+	Feature string `gorm:"column:feature;primaryKey" json:"feature"`
+	Enabled bool   `gorm:"column:enabled" json:"enabled"`
+}
+
+func (SpaceFeature) TableName() string { return "space_features" }
+
 func (User) TableName() string { return "users" }
 
 // Disciple — таблица disciples (полный набор колонок из app/models/disciple.py).

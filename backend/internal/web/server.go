@@ -115,6 +115,18 @@ func (s *Server) requireCap(cap string) func(http.Handler) http.Handler {
 	}
 }
 
+// requireModerator — гейт для модератора активного пространства (владелец или супер-админ).
+func (s *Server) requireModerator(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		u := currentUser(r)
+		if u == nil || !caps.IsModerator(s.DB, u.ID, caps.HomeSpaceID) {
+			httpErr(w, http.StatusForbidden, "Только модератор пространства")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 // ── токен ───────────────────────────────────────────────────────────────────
 
 func (s *Server) tokenFor(u *models.User) (string, error) {

@@ -102,6 +102,16 @@ type Space struct {
 
 func (Space) TableName() string { return "spaces" }
 
+// SpaceMember — участие пользователя в пространстве (со статусом заявки).
+type SpaceMember struct {
+	SpaceID  int       `gorm:"column:space_id;primaryKey" json:"space_id"`
+	UserID   int       `gorm:"column:user_id;primaryKey" json:"user_id"`
+	Status   string    `gorm:"column:status" json:"status"` // active | pending | rejected
+	JoinedAt time.Time `gorm:"column:joined_at" json:"-"`
+}
+
+func (SpaceMember) TableName() string { return "space_members" }
+
 func (User) TableName() string { return "users" }
 
 // Disciple — таблица disciples (полный набор колонок из app/models/disciple.py).

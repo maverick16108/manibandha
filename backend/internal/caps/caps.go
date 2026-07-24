@@ -94,16 +94,36 @@ func IsSuperadmin(db *gorm.DB, userID int) bool {
 	return u.IsSuperadmin
 }
 
-// UserCapabilities — объединение прав всех ролей (глобальный супер-админ → все).
-func UserCapabilities(db *gorm.DB, userID int) []string {
-	if IsSuperadmin(db, userID) {
+// HomeSpaceID — пространство «Манибандха» (пока единственное активное; в Ф4 активное пространство
+// будет определяться по домену/пути запроса, и эти функции получат spaceID из контекста).
+const HomeSpaceID = 1
+
+// IsSpaceOwner — владелец пространства = его модератор (полный доступ внутри своего пространства).
+func IsSpaceOwner(db *gorm.DB, userID, spaceID int) bool {
+	var sp models.Space
+	if err := db.Select("owner_user_id").First(&sp, spaceID).Error; err != nil {
+		return false
+	}
+	return sp.OwnerUserID != nil && *sp.OwnerUserID == userID
+}
+
+func userRolesInSpace(db *gorm.DB, userID, spaceID int) []models.Role {
+	var roles []models.Role
+	db.Joins("JOIN user_roles ur ON ur.role_id = roles.id").
+		Where("ur.user_id = ? AND roles.space_id = ?", userID, spaceID).Find(&roles)
+	return roles
+}
+
+// UserCapabilitiesIn — права пользователя В КОНТЕКСТЕ пространства. Глобальный супер-админ и владелец
+// пространства получают все права; остальные — объединение прав их ролей в этом пространстве.
+func UserCapabilitiesIn(db *gorm.DB, userID, spaceID int) []string {
+	if IsSuperadmin(db, userID) || IsSpaceOwner(db, userID, spaceID) {
 		out := AllCaps()
 		sort.Strings(out)
 		return out
 	}
-	roles := UserRoles(db, userID)
 	set := map[string]bool{}
-	for _, r := range roles {
+	for _, r := range userRolesInSpace(db, userID, spaceID) {
 		for _, c := range r.Capabilities {
 			if capSet[c] {
 				set[c] = true
@@ -118,14 +138,18 @@ func UserCapabilities(db *gorm.DB, userID int) []string {
 	return out
 }
 
-func HasCap(db *gorm.DB, userID int, cap string) bool {
-	for _, c := range UserCapabilities(db, userID) {
+func HasCapIn(db *gorm.DB, userID int, cap string, spaceID int) bool {
+	for _, c := range UserCapabilitiesIn(db, userID, spaceID) {
 		if c == cap {
 			return true
 		}
 	}
 	return false
 }
+
+// Обёртки для текущего (единственного) активного пространства «Манибандха» — до Ф4.
+func UserCapabilities(db *gorm.DB, userID int) []string { return UserCapabilitiesIn(db, userID, HomeSpaceID) }
+func HasCap(db *gorm.DB, userID int, cap string) bool    { return HasCapIn(db, userID, cap, HomeSpaceID) }
 
 func RoleKeys(db *gorm.DB, userID int) []string {
 	roles := UserRoles(db, userID)

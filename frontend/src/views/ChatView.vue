@@ -2556,7 +2556,7 @@ onBeforeUnmount(() => {
           <!-- встроенная плашка даты между днями (остаётся в ленте); плавающая сверху её дублирует
                только когда встроенная ушла вверх за экран (см. updateFloatingDate) -->
           <div v-if="run.day" :data-daysep="run.dayLabel" class="my-2 flex justify-center first:mt-0">
-            <span class="rounded-full bg-ink-900/55 px-3 py-1 text-xs font-semibold text-white shadow-sm">{{ run.dayLabel }}</span>
+            <span class="select-none rounded-full bg-ink-900/55 px-3 py-1 text-xs font-semibold text-white shadow-sm">{{ run.dayLabel }}</span>
           </div>
           <div v-if="run.unread" class="my-3 flex items-center gap-2 px-2">
             <span class="h-px flex-1 bg-saffron-400/60"></span>
@@ -2893,7 +2893,7 @@ onBeforeUnmount(() => {
         <!-- ОДНА плавающая дата (старая): гаснет по мере приближения следующего дня, «Вчера» встаёт на её место -->
         <!-- бокс плашки === бокс ленты (замеряется в updateFloatingDate) — центр точно совпадает со встроенными -->
         <div class="pointer-events-none absolute top-2 z-[6] flex justify-center" :style="{ left: floatDate.left + 'px', width: floatDate.width + 'px', opacity: floatDate.show ? floatDate.opacity : 0 }">
-          <span class="rounded-full bg-ink-900/55 px-3 py-1 text-xs font-semibold text-white shadow-sm backdrop-blur-sm">{{ floatDate.label }}</span>
+          <span class="select-none rounded-full bg-ink-900/55 px-3 py-1 text-xs font-semibold text-white shadow-sm backdrop-blur-sm">{{ floatDate.label }}</span>
         </div>
         </div>
 
